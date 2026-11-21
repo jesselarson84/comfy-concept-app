@@ -108,7 +108,21 @@ function sanitizeMessages(list) {
           out.action = { action: m.action.action.slice(0, 60), params, image_ref: shortStr(m.action.image_ref, 20) || null };
           if (['run', 'dismissed'].includes(m.actionState)) out.actionState = m.actionState;
         }
+        // Builder card: the proposed blocks + the server's verdict (the graph is
+        // never stored here; the server re-assembles and re-validates on Save/Test).
+        if (m.builder && typeof m.builder === 'object' && Array.isArray(m.builder.blocks)) {
+          const b = m.builder;
+          out.builder = {
+            name: shortStr(b.name, 80) || 'My setup', ok: !!b.ok,
+            blocks: b.blocks.slice(0, 12).map((x) => ({ type: shortStr(x?.type, 30), params: Object.fromEntries(Object.entries(x?.params || {}).slice(0, 12).filter(([, v]) => prim(v))) })),
+            errors: strList(b.errors), notes: strList(b.notes), summary: strList(b.summary),
+            estMB: Number.isFinite(b.estMB) ? b.estMB : undefined, output: shortStr(b.output, 10),
+            state: ['saved', 'discarded', 'tested'].includes(b.state) ? b.state : undefined, presetId: shortStr(b.presetId, 60),
+          };
+        }
       }
       return out;
     });
 }
+
+function strList(a) { return Array.isArray(a) ? a.filter((x) => typeof x === 'string').slice(0, 12).map((x) => x.slice(0, 400)) : []; }

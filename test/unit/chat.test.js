@@ -263,7 +263,7 @@ test('/api/actions lists the shipped actions; a broken action file is listed as 
   assert.equal(actions.find((a) => a.id === 'broken').ok, false);
   // actions/ is a folder: it never shows up as a preset
   const { workflows } = await j(await fetch(s.base + '/api/workflows'));
-  assert.ok(!workflows.some((w) => /actions|upscale|broken/.test(w.id)));
+  assert.ok(!workflows.some((w) => !w.ai && /actions|upscale|broken/.test(w.id)));
 });
 
 test('history keeps action results linked to their parent image (and non-image files)', async () => {

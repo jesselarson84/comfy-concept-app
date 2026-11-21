@@ -2,13 +2,15 @@
 // app opens instantly and installs as a PWA. Images, /api, /comfy, /ollama and /share
 // always go to the network (never cached) - they live on the PC.
 // Bump VERSION when you change app files so phones pick up the new shell.
-const VERSION = 'shell-v7';
+const VERSION = 'shell-v8';
 const SHELL = [
-  '/', '/index.html', '/styles.css', '/manifest.webmanifest',
+  '/', '/index.html', '/styles.css', '/icons.css', '/fonts/inter-latin-normal.woff2', '/manifest.webmanifest',
   '/js/main.js', '/js/api.js', '/js/comfy-client.js', '/js/job-queue.js',
   '/js/lib/workflow-detect.js', '/js/lib/workflow-inject.js', '/js/lib/aspect.js', '/js/lib/seed.js',
   '/js/native.js', '/js/ollama-client.js',
   '/js/lib/chat-reply.js', '/js/lib/chat-context.js', '/js/lib/prompt-diff.js', '/js/lib/actions.js',
+  '/js/lib/presets.js', '/js/lib/builder.js', '/js/lib/outputs.js',
+  '/js/ui/workflow-picker.js', '/js/ui/file-inputs.js',
   '/js/ui/chat-panel.js', '/js/ui/memory-panel.js', '/js/ui/prompt-versions.js',
   '/js/ui/dom.js', '/js/ui/prompt-panel.js', '/js/ui/reference.js', '/js/ui/thumbs.js', '/js/ui/viewer.js', '/js/ui/history-view.js',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png',

@@ -16,12 +16,22 @@
 // * Actions (upscale, 3D...) are only ever ready-made workflows from
 //   workflows/actions/; the model picks one + params, the app clamps them and
 //   shows a confirm chip. Nothing runs until you tap Run.
+// * Setup builder: "make a setup / workflow / pipeline ..." (or /build ...) goes
+//   to the server's guarded builder. The model may only propose TESTED BLOCKS;
+//   the server assembles + validates the graph against ComfyUI's live
+//   /object_info and installed models, then the chat shows a plain summary
+//   card: Test run (reduced size, not saved) / Save as preset / Discard.
+//   Rejected setups show the plain reason. Nothing runs or is saved by itself.
+// * When a reply comes with an action to confirm, its text is rewritten to the
+//   conditional ("I would upscale it"), never "I have increased the resolution".
 // * Chats are saved on the PC in data/chats.json (via /api/chats).
 // -----------------------------------------------------------------------------
 import { h, toast } from './dom.js';
 import { viewUrl } from '../comfy-client.js';
 import * as ollama from '../ollama-client.js';
-import { parseReply, replySchema } from '../lib/chat-reply.js';
+import { parseReply, replySchema, proposalTense, stripPraise } from '../lib/chat-reply.js';
+import { isBuilderRequest } from '../lib/builder.js';
+import * as api from '../api.js';
 import { buildMessages } from '../lib/chat-context.js';
 import { diffWords } from '../lib/prompt-diff.js';
 import { resolveChoice, describeChoice } from '../lib/actions.js';
@@ -46,7 +56,7 @@ export class ChatPanel {
    * @param o.onRunAction(resolved)  queue a workflow action
    */
   constructor(mount, o) {
-    Object.assign(this, { getContext: o.getContext, versions: o.versions, onGenerate: o.onGenerate, onRunAction: o.onRunAction });
+    Object.assign(this, { getContext: o.getContext, versions: o.versions, onGenerate: o.onGenerate, onRunAction: o.onRunAction, onTestRun: o.onTestRun, onSavedPreset: o.onSavedPreset });
     this.messages = []; this.images = {}; this.lastRef = null; this.pending = null;
     this.chatId = localStorage.getItem(CHAT_KEY) || null;
     this.models = []; this.model = localStorage.getItem(MODEL_KEY) || ''; this.vision = false;
@@ -65,11 +75,11 @@ export class ChatPanel {
     this.attach = h('div.chat-attach', { hidden: true });
     this.input = h('textarea.chat-input', { rows: 2, placeholder: 'Describe an idea, or tell it what to change…', enterkeyhint: 'send' });
     this.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.send(); } });
-    this.sendBtn = h('button.btn.primary.chat-send', { type: 'button', onclick: () => this.send() }, 'Send');
+    this.sendBtn = h('button.btn.icon.chat-send', { type: 'button', 'aria-label': 'Send', title: 'Send', onclick: () => this.send() }, h('i.i.i-arrow-up'));
     this.stopBtn = h('button.btn.danger.chat-stop', { type: 'button', hidden: true, onclick: () => this.busy?.abort() }, 'Stop');
     this.root = h('details.chat', {},
-      h('summary', {}, h('span', {}, 'Prompt assistant'), ' ', this.status),
-      h('div.chat-bar', {}, this.modelSel, this.threadSel, h('button.link', { type: 'button', onclick: () => this.newChat() }, 'New chat')),
+      h('summary', {}, h('i.i.i-sparkles'), h('span', {}, 'Prompt assistant'), ' ', this.status, h('i.i.i-chevron-down.chat-chev')),
+      h('div.chat-bar', {}, this.modelSel, this.threadSel, h('button.btn.text', { type: 'button', onclick: () => this.newChat() }, h('i.i.i-plus'), 'New chat')),
       this.offline, this.log, this.attach,
       h('div.chat-compose', {}, this.input, this.sendBtn, this.stopBtn));
     this.root.id = 'chat';
@@ -226,6 +236,7 @@ export class ChatPanel {
   async send(textArg) {
     const text = (textArg ?? this.input.value).trim();
     if (!text || this.busy) return;
+    if (isBuilderRequest(text)) return this.build(text);
     if (!this.online) { await this.refresh(); if (!this.online) return; }
     // Memory profile: refuse a model that would swap to disk; on small GPUs ask
     // ComfyUI to free VRAM first when it is low (server side, see memory.js).
@@ -273,7 +284,8 @@ export class ChatPanel {
     this.busy = null; this.#paintState();
     this.#refreshBadge();
     const p = parseReply(res.content, { prompt: ctx.prompt, negative: ctx.negativeOn ? ctx.negative : '' });
-    const msg = { role: 'assistant', content: p.reply, at: Date.now(), basePrompt: ctx.prompt };
+    // An action still needs the user's Run: the text must not claim it already happened.
+    const msg = { role: 'assistant', content: p.action ? proposalTense(p.reply) : p.reply, at: Date.now(), basePrompt: ctx.prompt };
     if (p.prompt) msg.prompt = p.prompt;
     if (p.negative && ctx.hasNegative) msg.negative = p.negative;
     if (p.action) msg.action = p.action;
@@ -316,6 +328,7 @@ export class ChatPanel {
     if (m.prompt) box.append(this.#proposalEl(m));
     const actionEl = m.action ? this.#actionEl(m, this.messages[i - 1]?.content || '') : null;
     if (actionEl) box.append(actionEl);
+    if (m.builder) box.append(this._builderEl(m));
     // Small models sometimes say "I revised the prompt" but send it back unchanged (seen live).
     if (!m.prompt && !m.negative && !m.action && /\b(?:revised|adjusted|updated|changed|added|modified|rewrote|replaced|removed)\b/i.test(m.content || '')) {
       box.append(h('div.chat-note.muted.chat-unchanged', {}, 'The model sent the prompt back unchanged, so the prompt box was not touched. Ask again, or say exactly what to change.'));
@@ -339,7 +352,7 @@ export class ChatPanel {
       ? [h('span.chat-applied', {}, 'Applied ✓'), h('button.link', { type: 'button', onclick: () => { if (this.versions.undo()) { m.applied = false; this.render(); this.save(); toast('Prompt restored'); } } }, 'Undo')]
       : [
         h('button.btn.primary', { type: 'button', onclick: () => this.apply(m) }, 'Apply'),
-        h('button.btn', { type: 'button', onclick: () => this.apply(m, { generate: true }) }, 'Apply + Generate (new seed)'),
+        h('button.btn', { type: 'button', onclick: () => this.apply(m, { generate: true }) }, 'Apply + Run (new seed)'),
         seed !== undefined && seed !== null ? h('button.btn', { type: 'button', title: 'Re-run the discussed image\'s seed so only the prompt change shows', onclick: () => this.apply(m, { generate: true, seed }) }, `Apply + same seed ${seed}`) : null,
       ];
     return h('div.chat-proposal', {}, h('div.label', {}, m.applied ? 'Prompt (applied)' : 'Proposed prompt - changes vs the box'), diff,
@@ -373,3 +386,85 @@ export class ChatPanel {
     return wrap;
   }
 }
+
+// ---- setup builder ------------------------------------------------------------
+// Kept outside the class body edits above: methods are attached to the prototype.
+Object.assign(ChatPanel.prototype, {
+  /** One builder turn: the server asks the builder model for blocks and validates them. */
+  async build(text) {
+    const userMsg = { role: 'user', content: text, at: Date.now() };
+    const history = this.messages.slice(-6).map((m) => ({ role: m.role, content: m.content }));
+    this.messages.push(userMsg);
+    this.input.value = '';
+    this.render();
+    const ctrl = { abort: () => {} };
+    this.busy = ctrl; this._paint();
+    const el = h('div.chat-msg.assistant.chat-thinking', {}, 'Planning a setup… (the builder model only picks tested blocks; the app checks them against ComfyUI)');
+    this.log.append(el); this.log.scrollTop = this.log.scrollHeight;
+    let r;
+    try { r = await api.proposeSetup({ text: text.replace(/^\/build\s*/i, ''), history }); } catch (e) { r = { ok: false, errors: [e.message], reply: '' }; }
+    el.remove();
+    this.busy = null; this._paint();
+    // A rejected setup must not be described as if it were built: say so, the card lists the reasons.
+    const content = r.ok ? (stripPraise(r.reply || '') || 'Proposed setup below. Nothing has run yet.') : 'That setup cannot be built as asked; the reasons are below. Nothing was run or saved.';
+    this.messages.push({
+      role: 'assistant', content, at: Date.now(),
+      builder: { name: r.name || 'My setup', ok: !!r.ok, blocks: r.blocks || [], errors: r.errors || [], notes: r.notes || [], summary: r.summary || [], estMB: r.estMB, output: r.output },
+    });
+    this.render();
+    await this.save();
+    return r;
+  },
+
+  _paint() { this.sendBtn.disabled = !!this.busy; this.sendBtn.hidden = !!this.busy; },
+
+  _builderEl(m) {
+    const b = m.builder;
+    const state = b.state || (b.ok ? 'proposed' : 'rejected');
+    const card = h('div.setup-card', { dataset: { state } },
+      h('div.ch', {}, h('i.i.i-blocks'), h('span.nm', {}, b.name || 'New setup'), h('span.tag', {}, state)));
+    (b.summary.length ? b.summary : b.blocks.map((x) => x.type)).forEach((line, i) => {
+      const [head, ...rest] = String(line).split(/:\s|,\s(?=\d)/);
+      card.append(h('div.blk', {}, h('span.n', {}, String(i + 1)), h('b', {}, head), rest.length ? h('span', {}, rest.join(', ')) : null));
+    });
+    if (b.ok) {
+      const gb = b.estMB ? `Estimated VRAM ~${(b.estMB / 1024).toFixed(1)} GB (estimate).` : '';
+      card.append(h('div.chk', {}, h('i.i.i-check'), h('span', {}, `Checked against ComfyUI: ${b.blocks.length} blocks, every node and model file found. ${gb}`)));
+    } else {
+      card.append(h('div.chk.bad', {}, h('i.i.i-x'), h('span', {}, b.errors.join(' ') || 'Rejected.')));
+    }
+    if (b.notes.length) card.append(h('div.fine', {}, b.notes.join(' ')));
+    if (b.ok && !b.state) {
+      card.append(h('div.acts', {},
+        h('button.btn.out', { type: 'button', onclick: () => this._testRun(m) }, h('i.i.i-play'), 'Test run'),
+        h('button.btn.out', { type: 'button', onclick: () => this._saveSetup(m) }, h('i.i.i-save'), 'Save as preset'),
+        h('button.btn.ghost', { type: 'button', onclick: () => { b.state = 'discarded'; this.render(); this.save(); } }, h('i.i.i-x'), 'Discard')));
+      card.append(h('div.fine', {}, 'Test run makes one result at reduced size. It is not saved as a preset until you tap Save.'));
+    } else if (b.ok && b.state === 'tested') {
+      card.append(h('div.acts', {},
+        h('button.btn.out', { type: 'button', onclick: () => this._saveSetup(m) }, h('i.i.i-save'), 'Save as preset'),
+        h('button.btn.ghost', { type: 'button', onclick: () => { b.state = 'discarded'; this.render(); this.save(); } }, h('i.i.i-x'), 'Discard')));
+    } else if (b.state === 'saved') card.append(h('div.fine', {}, 'Saved under My presets (rename or delete it in the picker).'));
+    return card;
+  },
+
+  async _testRun(m) {
+    const b = m.builder;
+    try {
+      const r = await api.checkSetup({ blocks: b.blocks, name: b.name, test: true });
+      if (!r.ok) { b.ok = false; b.errors = r.errors; this.render(); this.save(); return; }
+      await this.onTestRun?.({ graph: r.graph, name: b.name, output: r.output });
+      b.state = 'tested'; this.render(); this.save();
+    } catch (e) { toast(e.message, 6000); }
+  },
+
+  async _saveSetup(m) {
+    const b = m.builder;
+    try {
+      const p = await api.saveUserPreset({ name: b.name, blocks: b.blocks });
+      b.state = 'saved'; b.presetId = p.id; b.name = p.name;
+      this.render(); this.save();
+      this.onSavedPreset?.(p.id);
+    } catch (e) { toast(e.message, 8000); }
+  },
+});

@@ -112,5 +112,6 @@ function sanitizeImages(list) {
   if (!Array.isArray(list)) return [];
   return list.filter((i) => i && typeof i.filename === 'string').map((i) => ({
     filename: i.filename, subfolder: String(i.subfolder || ''), type: String(i.type || 'output'),
+    ...(['3d', 'video', 'audio'].includes(i.kind) ? { kind: i.kind } : {}),
   }));
 }

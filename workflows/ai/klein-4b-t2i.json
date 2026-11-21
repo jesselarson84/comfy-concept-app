@@ -1,0 +1,294 @@
+{
+ "preset": {
+  "group": "Image",
+  "label": "FLUX.2 Klein 4B Text to Image",
+  "menuPath": "Image/FLUX.2 Klein 4B Text to Image",
+  "source": "ComfyUI-AIWorkflowMenu image/flux2_klein_4b_text_to_image.json (converted to API format with the ComfyUI 1.59.10 frontend)",
+  "output": "image",
+  "description": "FLUX.2 Klein 4B base model, real negative prompt, cfg 5. Slower than Fast concept, more control.",
+  "size": {
+   "base": [
+    1024,
+    1024
+   ],
+   "min": 512,
+   "max": 1536,
+   "multiple": 16
+  },
+  "params": {
+   "steps": {
+    "node": "75:62",
+    "input": "steps",
+    "type": "int",
+    "min": 8,
+    "max": 30,
+    "default": 20,
+    "label": "Steps"
+   },
+   "cfg": {
+    "node": "75:63",
+    "input": "cfg",
+    "type": "number",
+    "min": 1,
+    "max": 8,
+    "default": 5,
+    "label": "Guidance (cfg)"
+   }
+  },
+  "maxBatch": 8,
+  "vram": {
+   "estMB": 9000,
+   "basis": "weights: 7.8 GB bf16 base UNet + Qwen3-4B encoder (swapped) + activations at 1 MP; cfg 5 doubles the batch"
+  }
+ },
+ "workflow": {
+  "9": {
+   "inputs": {
+    "filename_prefix": "concept-app/klein_t2i",
+    "images": [
+     "75:65",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save Image",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "76": {
+   "inputs": {
+    "value": "A hedgehog wearing a tiny party hat surrounded by confetti, early digital camera style, slight noise, flash photography, candid moment, 2000s digicam aesthetic, festive birthday celebration atmosphere\n"
+   },
+   "class_type": "PrimitiveStringMultiline",
+   "_meta": {
+    "title": "Prompt #prompt",
+    "cnr_id": "comfy-core",
+    "ver": "0.9.1"
+   }
+  },
+  "75:61": {
+   "inputs": {
+    "sampler_name": "euler"
+   },
+   "class_type": "KSamplerSelect",
+   "_meta": {
+    "title": "KSamplerSelect",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:62": {
+   "inputs": {
+    "steps": 20,
+    "width": [
+     "75:68",
+     0
+    ],
+    "height": [
+     "75:69",
+     0
+    ]
+   },
+   "class_type": "Flux2Scheduler",
+   "_meta": {
+    "title": "Flux2Scheduler",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:63": {
+   "inputs": {
+    "cfg": 5,
+    "model": [
+     "75:70",
+     0
+    ],
+    "positive": [
+     "75:74",
+     0
+    ],
+    "negative": [
+     "75:67",
+     0
+    ]
+   },
+   "class_type": "CFGGuider",
+   "_meta": {
+    "title": "CFG Guider",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:64": {
+   "inputs": {
+    "noise": [
+     "75:73",
+     0
+    ],
+    "guider": [
+     "75:63",
+     0
+    ],
+    "sampler": [
+     "75:61",
+     0
+    ],
+    "sigmas": [
+     "75:62",
+     0
+    ],
+    "latent_image": [
+     "75:66",
+     0
+    ]
+   },
+   "class_type": "SamplerCustomAdvanced",
+   "_meta": {
+    "title": "SamplerCustomAdvanced",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:65": {
+   "inputs": {
+    "samples": [
+     "75:64",
+     0
+    ],
+    "vae": [
+     "75:72",
+     0
+    ]
+   },
+   "class_type": "VAEDecode",
+   "_meta": {
+    "title": "VAE Decode",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:66": {
+   "inputs": {
+    "width": [
+     "75:68",
+     0
+    ],
+    "height": [
+     "75:69",
+     0
+    ],
+    "batch_size": 1
+   },
+   "class_type": "EmptyFlux2LatentImage",
+   "_meta": {
+    "title": "Empty Flux 2 Latent",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:67": {
+   "inputs": {
+    "text": "",
+    "clip": [
+     "75:71",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Negative #negative",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:68": {
+   "inputs": {
+    "value": 1024
+   },
+   "class_type": "PrimitiveInt",
+   "_meta": {
+    "title": "Width #width",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:69": {
+   "inputs": {
+    "value": 1024
+   },
+   "class_type": "PrimitiveInt",
+   "_meta": {
+    "title": "Height #height",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:73": {
+   "inputs": {
+    "noise_seed": 0
+   },
+   "class_type": "RandomNoise",
+   "_meta": {
+    "title": "RandomNoise",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:70": {
+   "inputs": {
+    "unet_name": "flux-2-klein-base-4b.safetensors",
+    "weight_dtype": "default"
+   },
+   "class_type": "UNETLoader",
+   "_meta": {
+    "title": "Load Diffusion Model",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:71": {
+   "inputs": {
+    "clip_name": "qwen_3_4b.safetensors",
+    "type": "flux2",
+    "device": "default"
+   },
+   "class_type": "CLIPLoader",
+   "_meta": {
+    "title": "Load CLIP",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:72": {
+   "inputs": {
+    "vae_name": "flux2-vae.safetensors"
+   },
+   "class_type": "VAELoader",
+   "_meta": {
+    "title": "Load VAE",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  },
+  "75:74": {
+   "inputs": {
+    "text": [
+     "76",
+     0
+    ],
+    "clip": [
+     "75:71",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "CLIP Text Encode (Positive Prompt)",
+    "cnr_id": "comfy-core",
+    "ver": "0.8.2"
+   }
+  }
+ }
+}

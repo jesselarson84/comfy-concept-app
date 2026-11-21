@@ -22,9 +22,15 @@ async function open(s) {
   p.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   p.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text() + ' @ ' + (m.location()?.url || '?')); });
   await p.goto(s.base + '/');
-  await p.waitForFunction(() => document.querySelectorAll('#preset option').length >= 2);
+  await p.waitForFunction(() => (window.conceptApp?.workflows?.length || 0) >= 2);
   return p;
 }
+
+
+// Preset picker (top bar): open it and tap a row.
+async function pick(id, pg = page) { await pg.click('#preset-btn'); await pg.click(`#picker .ent[data-preset="${id}"]`); await pg.waitForFunction((x) => window.conceptApp.current?.id === x, id); }
+const currentPreset = (pg = page) => pg.evaluate(() => window.conceptApp.current?.id);
+const hasPreset = (id) => (window.conceptApp?.workflows || []).some((w) => w.id === id);
 
 test('2080 Ti: menu shows GPU, VRAM, RAM and the auto profile; override persists and switches back', async () => {
   const s = await startStack();

@@ -1,4 +1,6 @@
-# Comfy Concept
+# Comfy UI (the Comfy Concept app)
+
+The app shows up as **Comfy UI** on the phone (launcher label, PWA name, page title and share sheet). The repo, folders, package `app.jesse.comfyconcept` and internal names are still "Comfy Concept".
 
 A phone and tablet front-end (an installable PWA) for the ComfyUI on your home PC. It is built for **concepting**: you type a prompt and get a batch of images, with an optional reference image.
 
@@ -49,15 +51,15 @@ The app has no login of its own. Anyone in your tailnet can use it.
 
 Open the HTTPS URL in **Chrome**, then go to the menu and choose **Install app** (or *Add to Home screen*). Once it is installed:
 - It opens full screen like a native app.
-- **Share -> Comfy Concept** appears in the Android share sheet for images. A shared screenshot or photo is uploaded to ComfyUI. The app opens on the *From reference image* preset with that picture already in the slot. Shared text becomes the prompt.
+- **Share -> Comfy UI** appears in the Android share sheet for images. A shared screenshot or photo is uploaded to ComfyUI. The app opens on the *From reference image* preset with that picture already in the slot. Shared text becomes the prompt.
 
 Chrome only offers the share target for an installed PWA served over HTTPS, which is why Tailscale is needed.
 
 ## Using it
 
-- **Preset dropdown** (top): every `.json` file in `workflows/`.
-- **Prompt, Aspect, Batch (1-20), Seed** (Lock = fixed; the dice button picks a new one). The negative prompt toggle appears only if the workflow has a real negative text node. The klein presets do not: their negative is a zeroed copy.
-- **Generate** queues *N separate jobs*. Thumbnails in the bottom strip (phone) or the right-hand grid (tablet) show progress, and each fills in as its job finishes.
+- **Preset picker** (top): the same sections as ComfyUI's right-click *AI Workflow* menu (3D / Image / Video / Audio), with the app's own presets (every `.json` in `workflows/`) on top and **My presets** (setups saved from the chat builder) at the bottom. Each row shows its live availability. **needs download** and **missing node** rows are greyed out; tap one to see why. **slow · RAM offload** and **tight on 11 GB** are hints. See *AI Workflow presets*.
+- **Prompt, Aspect** (1:1 / 4:3 / 3:2 / 16:9 chips plus a portrait/landscape flip; the size is shown and kept inside the preset's range), **Batch (1-20), Seed** (Lock = fixed; the dice button picks a new one). The negative prompt toggle appears only if the workflow has a real negative text node. The klein presets do not: their negative is a zeroed copy.
+- **Run** (the blue button; blue is used only here) queues *N separate jobs*. Thumbnails in the bottom strip (phone) or the right-hand grid (tablet) show progress, and each fills in as its job finishes.
 - **Cancel queue** removes your pending jobs from ComfyUI's queue and interrupts the one that is running.
 - **Tap a thumbnail** to open the full-screen viewer:
   - Swipe left and right between images.
@@ -80,13 +82,13 @@ The prompt box is the single source of truth. The assistant sits right under it 
 - **Create**: "a purple duck at a misty pond" gives a full Flux.2 [klein] style natural-language prompt.
 - **Revise**: "make it moodier, dusk light". The model returns the complete new prompt.
 - **Fix an image**: open it in the viewer and tap **💬 Discuss**. The image is attached (resized to 896 px, JPEG, base64) to your next message for vision models (gemma3:4b "sees images"); non-vision models get only its prompt and seed. Say what is wrong ("looks like a swan, not a duck").
-- Every proposal shows a **word diff** against the box and **Apply**, **Apply + Generate (new seed)** and, after Discuss, **Apply + same seed N** (re-runs the discussed seed so only the prompt change shows). Nothing is written into the box automatically.
+- Every proposal shows a **word diff** against the box and **Apply**, **Apply + Run (new seed)** and, after Discuss, **Apply + same seed N** (re-runs the discussed seed so only the prompt change shows). Nothing is written into the box automatically.
 - **Undo** (under the prompt box) and **Versions (n)** keep the last 30 prompt versions (this device, localStorage).
 - Replies are structured (Ollama `format` = JSON schema: `reply`, `prompt` or null, `negative`, `action`). If a model ignores the schema the app still finds JSON inside prose, a ```prompt block or a "Prompt:" line; truncated output never touches the box.
 - Conversations are saved on the PC in `data/chats.json` (next to `history.json`) and are shared by all devices. The model picker lists `/api/tags`; if Ollama is not running the panel says so and offers Retry.
 - Ollama stays on 127.0.0.1:11434. The app proxies only `GET /api/tags|version|ps` and `POST /api/show|chat` under `/ollama/`; pull, delete, create and so on answer 403.
 
-**Why one-tap Apply and not automatic**: you may have edited the box while the model was thinking; small models sometimes drop details from a long prompt (the diff makes that visible before it costs a render); and the box stays the one source of truth that Generate uses. Apply is one tap, and Undo/Versions make it reversible.
+**Why one-tap Apply and not automatic**: you may have edited the box while the model was thinking; small models sometimes drop details from a long prompt (the diff makes that visible before it costs a render); and the box stays the one source of truth that Run uses. Apply is one tap, and Undo/Versions make it reversible.
 
 ## Workflow actions ("upscale this", "make it 3D")
 
@@ -180,6 +182,23 @@ The full step-by-step explanation is in the comments at the top of `app/js/comfy
 | `scripts/write-presets.py` | generator for the two shipped presets |
 
 History stores only metadata: prompt, seed, preset, size, favourite, and the image's filename/subfolder/type. **Image files stay in ComfyUI's output folder.** Deleting `data/history.json` deletes no images.
+
+## AI Workflow presets (3D / Image / Video / Audio)
+
+`workflows/ai/<id>.json` holds one preset for each of the 16 entries in ComfyUI's *AI Workflow* menu, plus **Chatterbox** and **VibeVoice** text-to-speech. Each file is `{ "preset": manifest, "workflow": API graph }`, and the picker lists it as `ai:<id>`. The manifest sets the group, label, output (image / video / audio / 3d), the size range, the clamped params (`min`/`max`/`default`; enums are filtered to the files that are installed), video input slots, a VRAM estimate and the model files.
+
+- **Availability is computed live, never hard-coded.** The server reads ComfyUI's `/object_info` (node classes and combo lists) and `/models/<folder>`, and caches them for 60 s (`/api/workflows?fresh=1` re-reads them). VibeVoice's files are not listed by `/models/tts`, so they are checked on disk through `/internal/folder_paths`, and only when ComfyUI runs on this PC. A missing node or model file makes the preset **unavailable**, with the reason. Wan 2.2 5B and ACE-Step 1.5 show **needs download** until their models are installed. The app never downloads anything.
+- **VRAM fit.** usable = GPU total - 1.2 GB for the desktop. A preset estimated at up to 85% of usable is ok; up to 100% is **tight**; up to usable + (free RAM - 8 GB) is **slow · RAM offload**; anything more is unavailable.
+- **Memory profiles.** On the small profile (11 GB), Ollama is unloaded before every job. ComfyUI is also asked to `/free` its cached models when you switch to a different workflow and the free VRAM is below what that workflow needs (`freeComfyBeforeQueue: "on-switch"` in `config/memory-profiles.json`). The large profile never does this.
+- Every value is clamped before queueing, and a message lists what changed. All outputs go under `output/concept-app/`. Video, audio and 3D results are download tiles ("Video ↓", "Audio ↓", "3D ↓").
+
+## Setup builder (in the Prompt assistant)
+
+Ask for a setup in the chat, e.g. "make a setup: schnell then upscale 2x", or start with `/build`. The builder model may only pick **tested blocks**: input image, model (FLUX.2 Klein / FLUX.1 schnell / FLUX.1 dev / Z-Image Turbo / Qwen-Image), LoRA, ControlNet (Qwen only), txt2img, img2img, upscale, image to 3D, video, audio (Chatterbox / VibeVoice) and save. Ollama answers with JSON blocks through `format`, and the **server** assembles the graph and validates it against the live `/object_info` and the installed models: class names, required inputs, link types, combo values and ranges. A setup that does not fit is rejected with a plain reason, for example "ControlNet only works with Qwen-Image" or "needs download: wan2.2_ti2v_5B_fp16.safetensors".
+
+The chat shows a summary card with **Test run** (one result at reduced size, never saved), **Save as preset** and **Discard**. A setup becomes a preset only when you tap Save. It then appears under **My presets**, where you can rename or delete it (the ⚙ button on its row). Saved setups are stored as blocks in `data/user-presets.json` (gitignored) and re-validated every time the list loads.
+
+**Builder model:** Menu (⋮) > *Setup builder model* (saved in `data/builder.json`). The default is `gemma3:4b`, which fits next to ComfyUI on the 11 GB card. After the RTX 5080 (16 GB) swap, the recommended model is **gemma3:12b**, or **qwen3:14b** as the alternative; both follow the JSON schema more reliably. They need `ollama pull` first, which the app never does by itself.
 
 ## Tests
 

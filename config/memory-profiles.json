@@ -16,6 +16,7 @@
       "unloadOllamaBeforeQueue": "always",
       "ollamaKeepAlive": "5m",
       "freeComfyBeforeChat": "if-low",
+      "freeComfyBeforeQueue": "on-switch",
       "comfyFree": { "unload_models": true, "free_memory": true },
       "maxChatModelMB": 6500
     },
@@ -26,12 +27,13 @@
       "unloadOllamaBeforeQueue": "if-needed",
       "ollamaKeepAlive": "10m",
       "freeComfyBeforeChat": "never",
+      "freeComfyBeforeQueue": "never",
       "comfyFree": { "unload_models": false, "free_memory": true },
       "maxChatModelMB": 26000
     }
   ],
   "workflowVramNeedMB": {
-    "_readme": "Free VRAM a ComfyUI job wants when it is queued, per preset id or 'action:<id>' (2080 Ti measurements: Flux.2 klein 1 MP peaks ~6.8-7.5 GB total once loaded; upscale ~7.0 GB; Hunyuan3D 2.1 ~9.3 GB). On the 'if-needed' profile Ollama is unloaded only when free VRAM minus headroomMB is below this. ComfyUI itself offloads its own models to RAM when VRAM is short.",
+    "_readme": "Free VRAM a ComfyUI job wants when it is queued, per preset id, 'ai:<id>' (AI Workflow presets; default = the preset's own vram.estMB) or 'action:<id>' (2080 Ti measurements: Flux.2 klein 1 MP peaks ~6.8-7.5 GB total once loaded; upscale ~7.0 GB; Hunyuan3D 2.1 ~9.3 GB). On the 'if-needed' profile Ollama is unloaded only when free VRAM minus headroomMB is below this. ComfyUI itself offloads its own models to RAM when VRAM is short.",
     "default": 3000,
     "fast-concept": 2500,
     "from-reference-image": 3000,

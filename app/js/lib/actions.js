@@ -138,7 +138,7 @@ export function buildActionGraph(action, params, inputName, outputPrefix = '') {
   }
   if (outputPrefix) {
     for (const n of Object.values(out)) {
-      if ((n.class_type === 'SaveImage' || n.class_type === 'SaveGLB') && typeof n.inputs.filename_prefix === 'string') {
+      if (/^Save/.test(n.class_type) && typeof n.inputs.filename_prefix === 'string') {
         n.inputs.filename_prefix = `${outputPrefix}/${n.inputs.filename_prefix.split('/').pop() || 'action'}`;
       }
     }

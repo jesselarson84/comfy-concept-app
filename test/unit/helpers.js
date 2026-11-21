@@ -17,8 +17,8 @@ const listen = (server) => new Promise((r) => server.listen(0, '127.0.0.1', () =
 // ram: { totalMB, freeMB }. env: e.g. { MEMORY_PROFILE: 'large' }. memoryFile: a memory-profiles.json path.
 export const GPU_2080TI = { name: 'NVIDIA GeForce RTX 2080 Ti', totalMB: 11264, freeMB: 4000 };
 export const GPU_5080 = { name: 'NVIDIA GeForce RTX 5080', totalMB: 16303, freeMB: 9000 };
-export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = false, gpu = GPU_2080TI, ram = { totalMB: 98204, freeMB: 60000 }, env = {}, memoryFile, ollamaOptions = {} } = {}) {
-  const mock = createMockComfy({ stepMs });
+export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = false, gpu = GPU_2080TI, ram = { totalMB: 98204, freeMB: 60000 }, env = {}, memoryFile, ollamaOptions = {}, comfyOptions = {} } = {}) {
+  const mock = createMockComfy({ stepMs, ...comfyOptions });
   const mockPort = await listen(mock.server);
   const ollama = createMockOllama(ollamaOptions);
   const ollamaPort = await listen(ollama.server);

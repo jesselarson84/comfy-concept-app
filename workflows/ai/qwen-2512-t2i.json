@@ -1,0 +1,191 @@
+{
+ "preset": {
+  "group": "Image",
+  "label": "Qwen 2512 Text to Image",
+  "menuPath": "Image/Qwen 2512 Text to Image",
+  "source": "ComfyUI-AIWorkflowMenu image/qwen_2512_text_to_image.json (converted to API format with the ComfyUI 1.59.10 frontend)",
+  "output": "image",
+  "description": "Qwen-Image 2512 (fp8) with the 4-step Lightning LoRA. Strong text rendering and layouts.",
+  "size": {
+   "base": [
+    1664,
+    928
+   ],
+   "min": 512,
+   "max": 1664,
+   "multiple": 16
+  },
+  "params": {
+   "steps": {
+    "node": "9",
+    "input": "steps",
+    "type": "int",
+    "min": 2,
+    "max": 8,
+    "default": 4,
+    "label": "Steps"
+   }
+  },
+  "maxBatch": 4,
+  "vram": {
+   "estMB": 21500,
+   "basis": "weights: 20.4 GB fp8 UNet + 7B fp8 text encoder (offloaded after encode) + LoRA; peak while sampling ~20-21 GB"
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "unet_name": "qwen_image_2512_fp8_e4m3fn.safetensors",
+    "weight_dtype": "default"
+   },
+   "class_type": "UNETLoader",
+   "_meta": {
+    "title": "Load Diffusion Model"
+   }
+  },
+  "2": {
+   "inputs": {
+    "lora_name": "Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors",
+    "strength_model": 1,
+    "model": [
+     "1",
+     0
+    ]
+   },
+   "class_type": "LoraLoaderModelOnly",
+   "_meta": {
+    "title": "Load LoRA"
+   }
+  },
+  "3": {
+   "inputs": {
+    "shift": 3.1,
+    "sampling": "flow",
+    "model": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "ModelSamplingAuraFlow",
+   "_meta": {
+    "title": "ModelSamplingAuraFlow"
+   }
+  },
+  "4": {
+   "inputs": {
+    "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+    "type": "qwen_image",
+    "device": "default"
+   },
+   "class_type": "CLIPLoader",
+   "_meta": {
+    "title": "Load CLIP"
+   }
+  },
+  "5": {
+   "inputs": {
+    "vae_name": "qwen_image_vae.safetensors"
+   },
+   "class_type": "VAELoader",
+   "_meta": {
+    "title": "Load VAE"
+   }
+  },
+  "6": {
+   "inputs": {
+    "text": "Describe the image you want here.",
+    "clip": [
+     "4",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Positive prompt #prompt"
+   }
+  },
+  "7": {
+   "inputs": {
+    "text": "",
+    "clip": [
+     "4",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Negative prompt #negative"
+   }
+  },
+  "8": {
+   "inputs": {
+    "width": 1664,
+    "height": 928,
+    "batch_size": 1
+   },
+   "class_type": "EmptySD3LatentImage",
+   "_meta": {
+    "title": "EmptySD3LatentImage"
+   }
+  },
+  "9": {
+   "inputs": {
+    "seed": 0,
+    "steps": 4,
+    "cfg": 1,
+    "sampler_name": "euler",
+    "scheduler": "simple",
+    "denoise": 1,
+    "model": [
+     "3",
+     0
+    ],
+    "positive": [
+     "6",
+     0
+    ],
+    "negative": [
+     "7",
+     0
+    ],
+    "latent_image": [
+     "8",
+     0
+    ]
+   },
+   "class_type": "KSampler",
+   "_meta": {
+    "title": "KSampler"
+   }
+  },
+  "10": {
+   "inputs": {
+    "samples": [
+     "9",
+     0
+    ],
+    "vae": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "VAEDecode",
+   "_meta": {
+    "title": "VAE Decode"
+   }
+  },
+  "11": {
+   "inputs": {
+    "filename_prefix": "concept-app/qwen2512",
+    "images": [
+     "10",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save Image"
+   }
+  }
+ }
+}

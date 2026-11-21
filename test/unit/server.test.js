@@ -20,7 +20,7 @@ test('GET /api/config reports reachable mock', async () => {
 
 test('GET /api/workflows lists shipped presets with controls', async () => {
   const { workflows } = await j(await fetch(s.base + '/api/workflows'));
-  assert.deepEqual(workflows.map((w) => [w.id, w.label, w.ok, w.controls.kind]), [
+  assert.deepEqual(workflows.filter((w) => !w.ai).map((w) => [w.id, w.label, w.ok, w.controls.kind]), [
     ['fast-concept', 'Fast concept', true, 'txt2img'],
     ['from-reference-image', 'From reference image', true, 'img2img'],
   ]);
@@ -200,13 +200,13 @@ test('POST /share with text only -> ?text; with ComfyUI down -> ?shareError', as
 });
 
 test('static: app shell, manifest share_target, SPA fallback, path traversal blocked', async () => {
-  assert.match(await (await fetch(s.base + '/')).text(), /<title>Comfy Concept<\/title>/);
+  assert.match(await (await fetch(s.base + '/')).text(), /<title>Comfy UI<\/title>/);
   const m = await j(await fetch(s.base + '/manifest.webmanifest'));
   assert.equal(m.share_target.action, '/share');
   assert.equal(m.share_target.enctype, 'multipart/form-data');
   assert.equal((await fetch(s.base + '/sw.js')).status, 200);
   assert.equal((await fetch(s.base + '/js/lib/workflow-detect.js')).headers.get('content-type'), 'text/javascript; charset=utf-8');
-  assert.match(await (await fetch(s.base + '/some/deep/link')).text(), /Comfy Concept/);
+  assert.match(await (await fetch(s.base + '/some/deep/link')).text(), /Comfy UI/);
   const trav = await fetch(s.base + '/%2e%2e/config.json');
   assert.notEqual(trav.status, 200);
 });

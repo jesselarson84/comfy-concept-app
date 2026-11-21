@@ -1,0 +1,204 @@
+{
+ "preset": {
+  "group": "3D",
+  "label": "Hunyuan3D 2.1 Image to Model",
+  "menuPath": "3D/Hunyuan3D 2.1 Image to Model",
+  "source": "ComfyUI-AIWorkflowMenu 3d/hunyuan3d_21_image_to_model.json (converted to API format with the ComfyUI 1.59.10 frontend)",
+  "output": "3d",
+  "description": "Untextured mesh (GLB) from one object picture. Same pipeline as the Chat 3D action.",
+  "params": {
+   "steps": {
+    "node": "19:7",
+    "input": "steps",
+    "type": "int",
+    "min": 10,
+    "max": 50,
+    "default": 30,
+    "label": "Steps"
+   },
+   "detail": {
+    "node": "19:8",
+    "input": "octree_resolution",
+    "type": "int",
+    "min": 128,
+    "max": 384,
+    "default": 256,
+    "label": "Detail"
+   }
+  },
+  "maxBatch": 2,
+  "vram": {
+   "estMB": 9000,
+   "basis": "weights: 7.4 GB checkpoint (DiT + VAE + DINO); octree 256 decode ~1-2 GB"
+  }
+ },
+ "workflow": {
+  "2": {
+   "inputs": {
+    "image": "3d_hunyuan3d-v2.1_input_image.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Object image #image",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "10": {
+   "inputs": {
+    "filename_prefix": "concept-app/hunyuan3d",
+    "image": "",
+    "mesh": [
+     "19:9",
+     0
+    ]
+   },
+   "class_type": "SaveGLB",
+   "_meta": {
+    "title": "Save 3D Model",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "19:1": {
+   "inputs": {
+    "ckpt_name": "hunyuan_3d_v2.1.safetensors"
+   },
+   "class_type": "ImageOnlyCheckpointLoader",
+   "_meta": {
+    "title": "Load Checkpoint Image Only (img2vid model)",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "19:3": {
+   "inputs": {
+    "shift": 1,
+    "sampling": "flow",
+    "model": [
+     "19:1",
+     0
+    ]
+   },
+   "class_type": "ModelSamplingAuraFlow",
+   "_meta": {
+    "title": "ModelSamplingAuraFlow",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "19:13": {
+   "inputs": {
+    "crop": "center",
+    "clip_vision": [
+     "19:1",
+     1
+    ],
+    "image": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "CLIPVisionEncode",
+   "_meta": {
+    "title": "CLIP Vision Encode",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "19:6": {
+   "inputs": {
+    "clip_vision_output": [
+     "19:13",
+     0
+    ]
+   },
+   "class_type": "Hunyuan3Dv2Conditioning",
+   "_meta": {
+    "title": "Hunyuan3Dv2Conditioning",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "19:4": {
+   "inputs": {
+    "resolution": 4096,
+    "batch_size": 1
+   },
+   "class_type": "EmptyLatentHunyuan3Dv2",
+   "_meta": {
+    "title": "Empty Hunyuan 3D v2 Latent",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "19:7": {
+   "inputs": {
+    "seed": 952805179515179,
+    "steps": 30,
+    "cfg": 5,
+    "sampler_name": "euler",
+    "scheduler": "normal",
+    "denoise": 1,
+    "model": [
+     "19:3",
+     0
+    ],
+    "positive": [
+     "19:6",
+     0
+    ],
+    "negative": [
+     "19:6",
+     1
+    ],
+    "latent_image": [
+     "19:4",
+     0
+    ]
+   },
+   "class_type": "KSampler",
+   "_meta": {
+    "title": "KSampler",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "19:8": {
+   "inputs": {
+    "num_chunks": 8000,
+    "octree_resolution": 256,
+    "samples": [
+     "19:7",
+     0
+    ],
+    "vae": [
+     "19:1",
+     2
+    ]
+   },
+   "class_type": "VAEDecodeHunyuan3D",
+   "_meta": {
+    "title": "Hunyuan 3D VAE Decode",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "19:9": {
+   "inputs": {
+    "algorithm": "surface net",
+    "threshold": 0.6,
+    "voxel": [
+     "19:8",
+     0
+    ]
+   },
+   "class_type": "VoxelToMesh",
+   "_meta": {
+    "title": "Voxel to Mesh",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  }
+ }
+}

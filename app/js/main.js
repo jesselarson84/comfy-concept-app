@@ -23,11 +23,16 @@ import { ChatPanel } from './ui/chat-panel.js';
 import { prepareComfyQueue } from './ollama-client.js';
 import { MemoryPanel } from './ui/memory-panel.js';
 import { buildActionGraph } from './lib/actions.js';
+import { clampPresetValues, applyPresetParams, formatPrompt } from './lib/presets.js';
+import { detectControls } from './lib/workflow-detect.js';
+import { WorkflowPicker } from './ui/workflow-picker.js';
+import { FileInputs } from './ui/file-inputs.js';
 
 const comfy = new ComfyClient();
 const queue = new JobQueue(comfy);
 const panel = new PromptPanel();
 const refs = new ReferenceSlots($('#refs'), comfy);
+const fileInputs = new FileInputs($('#file-inputs'), comfy);
 let workflows = [];
 let config = {};
 let current = null;
@@ -47,22 +52,32 @@ viewer.onClose = () => paintThumbs();
 const historyView = new HistoryView((getItems, i) => viewer.open(getItems, i));
 
 // ---- presets ---------------------------------------------------------------
-async function loadWorkflows(keepId) {
-  try { workflows = await api.getWorkflows(); } catch (e) { toast('Could not load presets: ' + e.message); return; }
-  const sel = $('#preset');
-  sel.replaceChildren(...workflows.map((w) => new Option(w.ok ? w.label : `${w.label} (invalid)`, w.id)));
+// The picker lists folder presets (App presets), the AI Workflow presets
+// (3D / Image / Video / Audio, availability computed live on the server) and
+// the setups saved from the chat builder (My presets).
+const picker = new WorkflowPicker({
+  onPick: (id) => selectPreset(id),
+  onRename: async (w, name) => { try { await api.renameUserPreset(w.user.id, name); toast('Renamed'); await loadWorkflows(current?.id, { fresh: false }); } catch (e) { toast(e.message, 6000); } },
+  onDelete: async (w) => { try { await api.deleteUserPreset(w.user.id); toast(`Deleted "${w.label}"`); await loadWorkflows(current?.id === w.id ? undefined : current?.id); } catch (e) { toast(e.message, 6000); } },
+});
+const usable = (w) => w?.ok && w.workflow && w.availability?.status !== 'unavailable';
+async function loadWorkflows(keepId, { fresh = false } = {}) {
+  try { workflows = await api.getWorkflows({ fresh }); } catch (e) { toast('Could not load presets: ' + e.message); return; }
+  picker.setItems(workflows);
   const want = keepId || localStorage.getItem('preset') || workflows[0]?.id;
-  selectPreset(workflows.some((w) => w.id === want) ? want : workflows[0]?.id);
+  const pick = workflows.find((w) => w.id === want && w.ok) || workflows.find(usable) || workflows[0];
+  selectPreset(pick?.id);
 }
 
 function selectPreset(id) {
   current = workflows.find((w) => w.id === id) || null;
-  $('#preset').value = id || '';
+  picker.setCurrent(current);
   if (id) localStorage.setItem('preset', id);
   panel.setWorkflow(current);
-  refs.render(current?.ok ? current.controls.images : []);
+  refs.render(current?.ok && current.controls ? current.controls.images : []);
+  fileInputs.render(current?.ok ? current.ai?.inputs || [] : []);
+  $('#btn-generate').classList.toggle('is-unavailable', current?.availability?.status === 'unavailable');
 }
-$('#preset').addEventListener('change', (e) => selectPreset(e.target.value));
 
 // ---- GPU sharing with Ollama ---------------------------------------------------
 // Before ANY ComfyUI queue (batches and workflow actions) the server applies the
@@ -79,28 +94,58 @@ async function beforeComfyQueue(workflowId) {
 
 // ---- generate --------------------------------------------------------------
 async function generate() {
-  if (!current?.ok) return toast('Pick a usable preset first');
+  if (!current?.ok || !current.workflow) return toast(current?.availability?.reason || 'Pick a usable preset first', 6000);
+  if (current.availability?.status === 'unavailable') return toast(`Unavailable: ${current.availability.reason}`, 8000);
   const c = current.controls;
   const v = panel.values();
   const missing = refs.missing();
-  if (missing.length) return toast('Add a reference image first');
+  if (missing.length) return toast(c.images.length > 1 || current.ai ? `Add a picture first (${missing[0].title.replace(/#\w+/g, '').trim() || 'image'})` : 'Add a reference image first');
+  const missingFile = fileInputs.missing();
+  if (missingFile.length) return toast(`Pick a ${missingFile[0].kind} first`);
   if (c.prompt.length && !v.prompt.trim()) return toast('Type a prompt');
-  const size = c.width.length && c.height.length ? sizeFor(v.aspect, c.defaults.width || 1024, c.defaults.height || 1024) : {};
-  const seeds = c.seed.length ? batchSeeds(v.batch, v.seedMode, v.seed) : Array.from({ length: v.batch }, () => undefined);
+  const ai = current.ai;
+  let size = c.width.length && c.height.length ? sizeFor(v.aspect, ...(ai?.size ? ai.size.base : [c.defaults.width || 1024, c.defaults.height || 1024]), ai?.size?.multiple || 16) : {};
+  // AI Workflow presets: every value is clamped to the preset's range (notes say what changed).
+  let params = {}, batch = v.batch;
+  if (ai) {
+    const r = clampPresetValues(ai, { params: v.params, width: size.width, height: size.height, batch: v.batch });
+    params = r.params; batch = r.batch ?? v.batch;
+    if (r.size) size = r.size;
+    if (r.notes.length) toast(r.notes.join('; '), 6000);
+  }
+  const prompt = ai ? formatPrompt(ai, v.prompt) : v.prompt;
+  const seeds = c.seed.length ? batchSeeds(batch, v.seedMode, v.seed) : Array.from({ length: batch }, () => undefined);
   const outputPrefix = config.outputSubfolder || '';
   const jobs = seeds.map((seed) => {
-    const values = { ...v, seed, ...size, images: refs.values, outputPrefix, batchSize: 1 };
+    const values = { ...v, prompt, seed, ...size, images: refs.values, outputPrefix, batchSize: 1 };
+    let workflow = injectParams(current.workflow, c, values);
+    if (ai) { workflow = applyPresetParams(ai, workflow, params); fileInputs.apply(workflow); }
     return {
-      workflow: injectParams(current.workflow, c, values),
+      workflow,
       meta: {
         workflow: current.id, prompt: v.prompt, negative: v.negative || undefined, seed, aspect: v.aspect,
-        width: size.width, height: size.height, steps: v.steps, strength: v.strength,
+        width: size.width, height: size.height, steps: v.steps, strength: v.strength, params: ai ? params : undefined, output: ai?.output,
         reference: c.images.length ? Object.fromEntries(c.images.map((s) => [s.node, refs.values[s.node]])) : undefined,
       },
     };
   });
   await beforeComfyQueue(current.id);
   try { await queue.submit(jobs); } catch (e) { toast(e.message, 8000); }
+}
+
+// ---- chat builder: Test run of a proposed setup (never saved as a preset) ---
+async function runBuilderTest({ graph, name }) {
+  const c = detectControls(graph);
+  const v = panel.values();
+  if (c.images.length) return toast('This setup needs a picture: Save it, then pick it under My presets and add the picture there.', 8000);
+  if (c.prompt.length && !v.prompt.trim()) return toast('Type a prompt in the prompt box first (the test run uses it)');
+  const seed = batchSeeds(1, v.seedMode, v.seed)[0];
+  // VibeVoice reads "[1] text": add the speaker tag to plain text (same rule as the VibeVoice preset).
+  const vv = Object.values(graph).some((n) => n.class_type === 'VibeVoiceTTS');
+  const prompt = vv ? formatPrompt({ promptFormat: { unless: '\\[\\d+\\]|Speaker \\d+:', template: '[1] {text}' } }, v.prompt) : v.prompt;
+  const workflow = injectParams(graph, c, { prompt, negative: v.negative, seed, outputPrefix: '', batchSize: 1 });
+  await beforeComfyQueue('builder:test');
+  try { await queue.submit([{ workflow, meta: { workflow: 'builder:test', prompt: `Test run · ${name} · ${v.prompt}`.slice(0, 400), seed } }]); toast('Test run queued (not saved as a preset)'); } catch (e) { toast(e.message, 8000); }
 }
 
 // ---- workflow actions (from the chat's confirm chip) -------------------------
@@ -143,7 +188,7 @@ function paintThumbs() {
   const active = queue.active.length;
   setKeepAwake(active > 0); // Android app: screen stays on while a batch runs
   $('#btn-cancel').hidden = !active;
-  $('#btn-generate').textContent = active ? `Generate (+${active} running)` : 'Generate';
+  $('#run-label').textContent = active ? `Run (+${active} running)` : 'Run';
   $('#results-count').textContent = queue.items.length ? `${queue.items.filter((i) => i.image).length} / ${queue.items.length}` : '';
   $('#results').classList.toggle('empty', !queue.items.length);
 }
@@ -154,9 +199,9 @@ queue.addEventListener('change', () => {
   raf = requestAnimationFrame(() => { paintThumbs(); viewer.refresh(); });
 });
 
-// A non-image result (3D .glb): download it (the Android app's download
-// handler puts it in Download/Comfy Concept). No 3D viewer: that would need
-// a WebGL library, and the app has no dependencies.
+// A non-image result (3D .glb, video, audio): download it (the Android app's
+// download handler puts it in Download/Comfy Concept). No 3D viewer: that would
+// need a WebGL library, and the app has no dependencies.
 function downloadFile(f) {
   const a = document.createElement('a');
   a.href = viewUrl(f); a.download = f.filename; document.body.append(a); a.click(); a.remove();
@@ -173,9 +218,24 @@ const chat = new ChatPanel($('#chat-mount'), {
   },
   onGenerate: ({ seed } = {}) => { panel.setSeed(seed); return generate(); },
   onRunAction: (r) => runAction(r),
+  onTestRun: (r) => runBuilderTest(r),
+  onSavedPreset: (id) => loadWorkflows(id).then(() => toast('Saved under My presets in the picker')),
 });
 const memory = new MemoryPanel($('#memory-mount'), { onChange: () => chat.refresh() });
-$('details.menu').addEventListener('toggle', (e) => { if (e.target.open) memory.refresh(true); });
+$('details.menu').addEventListener('toggle', (e) => { if (e.target.open) { memory.refresh(true); paintBuilderModel(); } });
+
+// Setup builder model (server: data/builder.json). gemma3:4b now; a 12-14B model after the GPU upgrade.
+async function paintBuilderModel() {
+  const sel = $('#builder-model'), note = $('#builder-model-note');
+  try {
+    const [cfgB, tags] = await Promise.all([api.getBuilderConfig(), fetch('/ollama/api/tags').then((r) => r.json()).catch(() => ({ models: [] }))]);
+    const names = [...new Set([cfgB.model, ...(tags.models || []).map((m) => m.name)])];
+    sel.replaceChildren(...names.map((n) => new Option(n, n)));
+    sel.value = cfgB.model;
+    note.textContent = `Recommended after the 16 GB GPU: ${cfgB.recommended.model} (or ${cfgB.recommended.alt}).`;
+  } catch (e) { note.textContent = 'Builder settings unavailable: ' + e.message; }
+}
+$('#builder-model').addEventListener('change', async (e) => { try { await api.setBuilderModel(e.target.value); toast(`Setup builder uses ${e.target.value}`); } catch (err) { toast(err.message, 6000); } });
 
 // ---- menu: history, advanced (real ComfyUI), import -------------------------
 $('#btn-history').addEventListener('click', () => historyView.open());
@@ -205,7 +265,7 @@ async function handleLaunchParams() {
   const ref = q.get('ref');
   if (ref) {
     // Auto-switch to a preset with a reference slot (prefer the shipped one).
-    const target = workflows.find((w) => w.id === 'from-reference-image' && w.ok) || workflows.find((w) => w.ok && w.controls.images.length);
+    const target = workflows.find((w) => w.id === 'from-reference-image' && w.ok) || workflows.find((w) => usable(w) && w.controls?.images?.length && !w.ai && !w.user);
     if (target) {
       if (current?.id !== target.id) selectPreset(target.id);
       refs.set(target.controls.images[0].node, ref);
@@ -229,4 +289,4 @@ async function start() {
 }
 start();
 // For tests and poking around from DevTools.
-window.conceptApp = { comfy, queue, panel, refs, viewer, chat, versions, memory, get workflows() { return workflows; }, get current() { return current; } };
+window.conceptApp = { comfy, queue, panel, refs, fileInputs, viewer, chat, versions, memory, picker, selectPreset, loadWorkflows, get workflows() { return workflows; }, get current() { return current; } };

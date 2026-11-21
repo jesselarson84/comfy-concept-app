@@ -55,7 +55,8 @@ export function injectParams(wf, controls, v = {}) {
   // Put the app's outputs in their own subfolder of ComfyUI/output.
   if (v.outputPrefix) {
     for (const [, n] of Object.entries(out)) {
-      if (n.class_type === 'SaveImage' && typeof n.inputs.filename_prefix === 'string') {
+      // SaveImage, SaveGLB, Save3DAdvanced, SaveVideo, SaveAudio, SaveAudioAdvanced...
+      if (/^Save/.test(n.class_type) && typeof n.inputs.filename_prefix === 'string') {
         const base = n.inputs.filename_prefix.split('/').pop() || 'concept';
         n.inputs.filename_prefix = `${v.outputPrefix}/${base}`;
       }

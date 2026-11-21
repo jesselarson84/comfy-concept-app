@@ -10,6 +10,7 @@
 // re-renders from `queue.items`.
 // -----------------------------------------------------------------------------
 import { addHistory, patchHistory } from './api.js';
+import { splitOutputs } from './lib/outputs.js';
 
 export class JobQueue extends EventTarget {
   constructor(comfy) {
@@ -34,14 +35,18 @@ export class JobQueue extends EventTarget {
     });
     c.addEventListener('executed', (e) => {
       const it = job(e.detail); if (!it) return;
-      const imgs = e.detail.output?.images || [];
       // A graph may have several Save nodes; the first image is "the" image,
-      // the rest are kept in extraImages.
+      // the rest are kept in extraImages. Non-image outputs (SaveGLB "3d",
+      // SaveAudio "audio", SaveVideo animated images) go to files.
+      const { images: imgs, files } = splitOutputs({ x: e.detail.output || {} });
       for (const img of imgs) {
-        if (!it.image) it.image = img; else it.extraImages.push(img);
+        if (img.type === 'temp' && it.image && it.image.type !== 'temp') continue;
+        if (!it.image) it.image = img;
+        else if (it.image.type === 'temp' && img.type !== 'temp') { it.extraImages.unshift(it.image); it.image = img; } else it.extraImages.push(img);
       }
-      // Non-image outputs (SaveGLB reports {"3d": [...]}) - e.g. the 3D action.
-      for (const f of e.detail.output?.['3d'] || []) it.files.push(f);
+      for (const f of files) it.files.push(f);
+      // A graph that saved a 3D/audio/video file: pass-through previews are not the result.
+      if (it.files.length && it.image?.type === 'temp') { it.image = null; it.extraImages = it.extraImages.filter((x) => x.type !== 'temp'); }
       this.#changed(it);
     });
     // `executing` with node === null is the classic "this prompt is finished"
@@ -68,13 +73,13 @@ export class JobQueue extends EventTarget {
     if (!it.image) {
       // Cached results or missed `executed`: outputs are in /history.
       const h = await this.comfy.history(it.promptId).catch(() => null);
-      const imgs = Object.values(h?.outputs || {}).flatMap((o) => o.images || []);
+      const { images: imgs, files } = splitOutputs(h?.outputs);
       if (imgs.length) { it.image = imgs[0]; it.extraImages = imgs.slice(1); }
-      if (!it.files.length) it.files = Object.values(h?.outputs || {}).flatMap((o) => o['3d'] || []);
+      if (!it.files.length) it.files = files;
     }
     const ok = it.image || it.files.length;
     it.status = ok ? 'done' : 'error';
-    if (!ok) it.error = 'Finished but returned no image (does the graph have a SaveImage node?)';
+    if (!ok) it.error = 'Finished but returned nothing (does the graph have a Save node?)';
     it.progress = 1;
     this.#record(it);
     this.#changed(it);

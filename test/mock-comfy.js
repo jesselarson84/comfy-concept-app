@@ -9,6 +9,10 @@
 //   GET  /history/<id>, /history      GET /view?filename&subfolder&type
 //   POST /upload/image (multipart)    GET/POST /queue   POST /interrupt
 //   GET  /system_stats                GET / (a stub "ComfyUI" page)
+//   GET  /object_info, /models, /models/<folder>  (fixtures trimmed from the
+//        real ComfyUI 0.46.2 on the PC: test/fixtures/object-info.json,
+//        models.json), GET /internal/folder_paths ({} unless given)
+//   SaveImage / SaveGLB / Save3DAdvanced / SaveVideo / SaveAudio outputs
 // Plus test helpers: GET /mock/requests (headers seen), POST /mock/reset.
 // Like real ComfyUI it rejects requests whose Origin does not match Host.
 // Images are generated placeholder PNGs (colour from the seed).
@@ -18,9 +22,12 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { encodePng } from '../scripts/png.js';
+import { readFileSync } from 'node:fs';
 import { readBody, parseMultipart } from '../server/multipart.js';
 
-export function createMockComfy({ stepMs = Number(process.env.MOCK_STEP_MS) || 120, imageScale = 0.25 } = {}) {
+const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
+
+export function createMockComfy({ stepMs = Number(process.env.MOCK_STEP_MS) || 120, imageScale = 0.25, objectInfo = fixture('object-info.json'), models = fixture('models.json'), folderPaths = {} } = {}) {
   const files = new Map();        // "type/subfolder/filename" -> Buffer
   const history = {};             // prompt_id -> history record
   const queue = [];               // pending jobs
@@ -63,7 +70,7 @@ export function createMockComfy({ stepMs = Number(process.env.MOCK_STEP_MS) || 1
     let w = findNum(['width']) || 1024, h = findNum(['height']) || 1024;
     const seed = findNum(['seed', 'noise_seed']) || 0;
     const sampler = ids.find((id) => /Sampler(Custom)?Advanced|KSampler$/.test(wf[id].class_type)) || ids[0];
-    const outputs = ids.filter((id) => ['SaveImage', 'PreviewImage', 'SaveGLB'].includes(wf[id].class_type));
+    const outputs = ids.filter((id) => ['SaveImage', 'PreviewImage', 'SaveGLB', 'Save3DAdvanced', 'SaveVideo', 'SaveAudio'].includes(wf[id].class_type));
     try {
       for (const id of ids) {
         if (job.interrupted) throw new Error('interrupted');
@@ -78,13 +85,15 @@ export function createMockComfy({ stepMs = Number(process.env.MOCK_STEP_MS) || 1
       }
       const out = {};
       for (const id of outputs) {
-        if (wf[id].class_type === 'SaveGLB') {
-          // Like real ComfyUI 0.46: SaveGLB reports { "3d": [{filename, subfolder, type}] }.
-          const prefix = String(wf[id].inputs.filename_prefix || 'mesh');
+        const fileOut = { SaveGLB: ['3d', 'glb', 'glTF\x02\x00\x00\x00mock'], Save3DAdvanced: ['3d', 'glb', 'glTF\x02\x00\x00\x00mock'], SaveVideo: ['images', 'mp4', 'mockmp4'], SaveAudio: ['audio', 'flac', 'fLaCmock'] }[wf[id].class_type];
+        if (fileOut) {
+          // Like real ComfyUI 0.46: SaveGLB -> {"3d": [...]}, SaveVideo -> {images: [...], animated: [true]}, SaveAudio -> {audio: [...]}.
+          const prefix = String(wf[id].inputs.filename_prefix || 'out');
           const subfolder = prefix.includes('/') ? prefix.split('/').slice(0, -1).join('/') : '';
-          const filename = `${prefix.split('/').pop()}_${String(++imgCounter).padStart(5, '0')}_.glb`;
-          files.set(`output/${subfolder}/${filename}`, Buffer.from('glTF\x02\x00\x00\x00mock'));
-          out[id] = { '3d': [{ filename, subfolder, type: 'output' }] };
+          const filename = `${prefix.split('/').pop()}_${String(++imgCounter).padStart(5, '0')}_.${fileOut[1]}`;
+          files.set(`output/${subfolder}/${filename}`, Buffer.from(fileOut[2]));
+          out[id] = { [fileOut[0]]: [{ filename, subfolder, type: 'output' }] };
+          if (fileOut[1] === 'mp4') out[id].animated = [true];
           emit(cid, 'executed', { node: id, display_node: id, output: out[id], prompt_id: pid });
           continue;
         }
@@ -129,7 +138,7 @@ export function createMockComfy({ stepMs = Number(process.env.MOCK_STEP_MS) || 1
       const wf = body.prompt;
       if (!wf || typeof wf !== 'object') return json(res, 400, { error: { type: 'invalid_prompt', message: 'no prompt' }, node_errors: {} });
       for (const [id, n] of Object.entries(wf)) if (!n?.class_type) return json(res, 400, { error: { type: 'invalid_prompt', message: `Cannot execute because node ${id} has no class_type` }, node_errors: {} });
-      if (!Object.values(wf).some((n) => ['SaveImage', 'PreviewImage', 'SaveGLB'].includes(n.class_type))) return json(res, 400, { error: { type: 'prompt_no_outputs', message: 'Prompt has no outputs' }, node_errors: {} });
+      if (!Object.values(wf).some((n) => /^(Save|Preview)/.test(n.class_type))) return json(res, 400, { error: { type: 'prompt_no_outputs', message: 'Prompt has no outputs' }, node_errors: {} });
       const job = { prompt_id: crypto.randomUUID(), number: counter++, prompt: wf, client_id: body.client_id };
       queue.push(job);
       broadcastStatus();
@@ -172,6 +181,11 @@ export function createMockComfy({ stepMs = Number(process.env.MOCK_STEP_MS) || 1
       files.set(`input/${subfolder}/${name}`, img.data);
       return json(res, 200, { name, subfolder, type: 'input' });
     }
+    if (p === '/object_info' && objectInfo) return json(res, 200, objectInfo);
+    if (p.startsWith('/object_info/') && objectInfo) { const c = decodeURIComponent(p.slice(13)); return json(res, 200, objectInfo[c] ? { [c]: objectInfo[c] } : {}); }
+    if (p === '/models' && models) return json(res, 200, ['custom_nodes', 'configs', ...Object.keys(models)]);
+    if (p.startsWith('/models/') && models) return json(res, 200, models[decodeURIComponent(p.slice(8))] || []);
+    if (p === '/internal/folder_paths') return json(res, 200, JSON.stringify(folderPaths));
     if (p === '/free' && req.method === 'POST') { await readBody(req, 1e5).catch(() => {}); return json(res, 200, {}); }
     if (p === '/mock/requests') return json(res, 200, requests);
     if (p === '/mock/state') return json(res, 200, { queue: queue.length, running: running?.prompt_id || null, files: [...files.keys()] });

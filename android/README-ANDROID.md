@@ -1,6 +1,6 @@
-# Comfy Concept for Android
+# Comfy UI for Android (Comfy Concept app)
 
-A real, installable Android app (package `app.jesse.comfyconcept`, phone and tablet) that wraps the Comfy Concept web app served over Tailscale at `https://my-pc.my-tailnet.ts.net`. It has no browser bar. It also does what the PWA cannot:
+A real, installable Android app (package `app.jesse.comfyconcept`, phone and tablet) that wraps the Comfy Concept web app (shown as **Comfy UI**) served over Tailscale at `https://my-pc.my-tailnet.ts.net`. It has no browser bar. It also does what the PWA cannot:
 - receive shared images
 - save images to the gallery
 - share real image files
@@ -59,7 +59,7 @@ A **release** build (**Build > Generate Signed Bundle/APK**, or the `release` va
 
 Only `https://host[:port]` is accepted, with no path. A bare host gets `https://` added.
 
-**Share in.** In Photos (or after taking a screenshot), choose Share and then **Comfy Concept**. The image goes to `POST /share`, which is the same contract as the PWA (`server/share.js`). The app then opens on *From reference image* with the picture in the slot.
+**Share in.** In Photos (or after taking a screenshot), choose Share and then **Comfy UI**. The image goes to `POST /share`, which is the same contract as the PWA (`server/share.js`). The app then opens on *From reference image* with the picture in the slot.
 
 **Save / Share in the viewer.** These buttons use the native side:
 - Save puts the image in **Pictures/Comfy Concept**, where it shows up in the gallery.
@@ -69,12 +69,16 @@ Other downloads go to the same place. Images go to Pictures/Comfy Concept and ev
 
 **Keep awake.** The screen stays on while a batch is queued or running, and is released when the queue is idle.
 
-**Swap the icon.** The adaptive icon is built from these files:
-- `app/src/main/res/drawable/ic_launcher_foreground.xml`: the "C" artwork. It is a vector on the 108x108 adaptive grid; keep the important parts inside the central 66-unit circle.
-- `app/src/main/res/values/colors.xml`: `ic_launcher_background` (#1E1730).
-- `app/src/main/res/drawable/ic_launcher_monochrome.xml`: the themed-icon layer for Android 13+. Only its alpha is used.
+**Swap the icon.** The current icon is a yellow-green "C" mark (#F2FF5A) on a dark plum tile (#201A27). It is drawn from these files:
+- `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` and `ic_launcher_round.xml`: the adaptive icon (Android 8+). Each one stacks three layers: background, foreground and monochrome.
+- `app/src/main/res/values/ic_launcher_background.xml`: the tile colour, `ic_launcher_background` = `#FF201A27`. `drawable/ic_launcher_background.xml` is a plain rectangle in that colour.
+- `app/src/main/res/drawable/ic_launcher_foreground.xml`: the "C" mark as a vector path on the 108x108 adaptive grid, filled with #FFF2FF5A. Keep it inside the central 66-unit safe zone. `values/colors.xml` holds the same colour as `ic_launcher_mark`; change both if you recolour it.
+- `app/src/main/res/drawable/ic_launcher_monochrome.xml`: the same path in white, the themed-icon layer for Android 13+. Only its alpha is used.
+- `app/src/main/res/mipmap-mdpi` through `mipmap-xxxhdpi`: PNG renders (`ic_launcher.png`, `ic_launcher_round.png`, `ic_launcher_foreground.png`). These are fallbacks for launchers that do not use the adaptive icon.
+- `icon-preview.png` (in this folder): a 512x512 render of the current icon, for reference only.
+- The PWA uses the same mark: `app/icons/icon-192.png`, `icon-512.png` and `maskable-512.png` (in the web app, not in `android/`). `scripts/make-icons.js` still draws the old placeholder "spark" icon, so do not run it unless you want that icon back.
 
-To use your own artwork, replace the foreground file, or use **File > New > Image Asset** in Studio with the name `ic_launcher`. Also update or delete the monochrome file. The PNGs in `mipmap-*dpi/` are only fallbacks: Android 8+ always uses the adaptive icon. `icon-preview.png` is a 512x512 render of the current icon.
+To use new artwork, replace the foreground and monochrome paths, or use **File > New > Image Asset** in Android Studio with the name `ic_launcher`. Then re-render the mipmap PNGs, the PWA icons and `icon-preview.png` so they all match. The launcher label is `app_name` in `values/strings.xml` ("Comfy UI"). Changing the icon or the label does not change the package (`app.jesse.comfyconcept`), so the app still updates in place.
 
 **Known limits**
 - From a share, only **one reference image** is used. If you share several images, the app takes the first and shows a message.
@@ -87,8 +91,8 @@ To use your own artwork, replace the foreground file, or use **File > New > Imag
 
 Tick these off on the **phone** and on the **tablet**:
 
-1. **First launch**: the address prompt appears and **Connect** loads the app. There is no browser bar, and the status and navigation bars are dark (#11131A) with nothing covered by them.
-2. **Share from Photos**: share a photo to Comfy Concept. The app opens on *From reference image* with that photo in the slot.
+1. **First launch**: the address prompt appears and **Connect** loads the app. There is no browser bar, and the status and navigation bars are dark (#171718) with nothing covered by them.
+2. **Share from Photos**: share a photo to Comfy UI. The app opens on *From reference image* with that photo in the slot.
 3. **Share a screenshot**, using the screenshot preview's Share button: same result.
 4. **Share 3 images at once**: a message says only the first is used, and the first is in the slot.
 5. **Camera capture**: on *From reference image*, tap **Camera** in the slot. The camera app opens; take a photo and accept it, and it uploads into the slot. Also test **Pick**: the picker offers Photos/Files plus Camera.
@@ -115,7 +119,7 @@ Tick these off on the **phone** and on the **tablet**:
   - This was chosen over `shouldInterceptRequest`, because that runs on a background thread for every sub-resource and cannot tell an iframe from an image.
   - Residual risk: a cross-origin iframe embedded by a server page would also see the object, but it could only save or share images from your own server. The web app has no iframes.
 - **Offline detection.** The PWA's service worker can serve the cached app shell while the server is down. In that case the WebView reports no error and you would just see the web app's "App server not reachable" banner. So the app also checks `GET <server>/api/config` itself after each load. If that fails, or answers 5xx, the native offline screen is shown. Main-frame load errors, HTTP 5xx and TLS errors also show it, and TLS errors are never bypassed.
-- **Edge-to-edge on every Android version** (Android 15 forces it). The root view takes the system-bar, cutout and keyboard insets as padding, and its background (#11131A, the web UI's background) shows behind the bars. The insets are consumed natively, so the page's `env(safe-area-inset-*)` stays 0 and nothing is padded twice.
+- **Edge-to-edge on every Android version** (Android 15 forces it). The root view takes the system-bar, cutout and keyboard insets as padding, and its background (#171718, the web UI's top/bottom bar colour) shows behind the bars. The insets are consumed natively, so the page's `env(safe-area-inset-*)` stays 0 and nothing is padded twice.
 - **Rotation without reload.** The activity handles the config changes itself (`orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode`). `screenOrientation=fullUser` allows every orientation while respecting the rotation lock.
 - **`launchMode=singleTask`.** A share arrives in the running app (`onNewIntent`) instead of stacking a second copy. A restored activity never re-sends a share: the intent is ignored when restored or launched from Recents.
 - **Back** uses the classic `onBackPressed`. Predictive back is not opted in, so it works the same on API 26-35. It follows the WebView history first, so the web viewer's `history.pushState` makes Back close the viewer.

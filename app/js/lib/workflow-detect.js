@@ -59,7 +59,9 @@ const DONT_TRACE = new Set(['model', 'clip', 'vae', 'latent', 'latent_image', 's
 const ZEROING_NODES = new Set(['ConditioningZeroOut']);
 
 // Nodes that write images to disk / back to the client.
-export const OUTPUT_NODES = new Set(['SaveImage', 'PreviewImage', 'SaveAnimatedWEBP', 'SaveAnimatedPNG']);
+export const OUTPUT_NODES = new Set(['SaveImage', 'PreviewImage', 'SaveAnimatedWEBP', 'SaveAnimatedPNG',
+  // non-image outputs (AI Workflow presets): 3D models, video, audio
+  'SaveGLB', 'Save3DAdvanced', 'SaveVideo', 'SaveWEBM', 'SaveAudio', 'SaveAudioMP3', 'SaveAudioOpus', 'SaveAudioAdvanced']);
 
 export const isLink = (v) => Array.isArray(v) && v.length === 2 && (typeof v[0] === 'string' || typeof v[0] === 'number') && typeof v[1] === 'number';
 
@@ -286,7 +288,7 @@ export function detectControls(wf) {
 
   // ---- 6. Kind + friendly messages ---------------------------------------
   const detected = c.prompt.length + c.seed.length + c.images.length + c.width.length + c.expose.length;
-  if (!c.outputs.length) c.warnings.push('No SaveImage/PreviewImage node - ComfyUI will reject it or return no images.');
+  if (!c.outputs.length) c.warnings.push('No SaveImage/PreviewImage (or Save 3D/video/audio) node - ComfyUI will reject it or return nothing.');
   if (!detected) {
     c.kind = 'unknown';
     c.message = 'No controls detected. It will run exactly as saved. Add #prompt / #seed / #image ... to node titles in ComfyUI to expose controls.';
