@@ -3,7 +3,7 @@
 //   /            -> the PWA (static files from app/)
 //   /comfy/*     -> reverse proxy to ComfyUI (HTTP + websocket), see proxy.js
 //   /api/config     GET   app settings + whether ComfyUI answers
-//   /api/workflows  GET   presets with detected controls; POST import (multipart or JSON)
+//   /api/workflows  GET   presets with detected controls + default (fresh-client preset); POST import (multipart or JSON)
 //   /api/history    GET   sessions -> entries; POST add entry
 //   /api/history/:id PATCH favourite / images / status
 //   /api/events     GET   Server-Sent Events ("workflows" when the folder changes)
@@ -51,6 +51,7 @@ import { detectControls } from '../app/js/lib/workflow-detect.js';
 import { vramFit } from '../app/js/lib/presets.js';
 import { splitOutputs } from '../app/js/lib/outputs.js';
 import { isLegacyPreset, migrateHistoryEntry } from '../app/js/lib/legacy-presets.js';
+import { defaultPreset } from '../app/js/lib/preset-choice.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
 
@@ -95,7 +96,9 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
       return { ...base, ok: true, workflow: r.graph, controls: detectControls(r.graph), description: r.summary.join(' · '), output: r.output, ai: { output: r.output, params: {}, size: null, maxBatch: r.output === 'image' ? 8 : 2, vram: { estMB: r.estMB }, promptFormat: r.blocks.some((b) => b.type === 'audio' && b.params.engine === 'vibevoice') ? { unless: '\\[\\d+\\]|Speaker \\d+:', template: '[1] {text}' } : null }, availability: { ...vramFit({ estMB: r.estMB, ...hwOpts, profileId }), estMB: r.estMB } };
     }));
     const folder = workflows.list().filter((w) => !isLegacyPreset(w.id)).map((w) => ({ ...w, group: 'My presets', folder: true }));
-    return { workflows: [...ai, ...mine, ...folder], comfy: { reachable: !!info.objectInfo, error: info.error || null } };
+    const list = [...ai, ...mine, ...folder];
+    // default: what a fresh client opens on (same rule as the browser, lib/preset-choice.js).
+    return { workflows: list, default: defaultPreset(list), comfy: { reachable: !!info.objectInfo, error: info.error || null } };
   }
   async function estMBFor(id) {
     if (id.startsWith('ai:')) { const p = presets.get(id); return p ? (p.manifest.vram.measuredMB || p.manifest.vram.estMB) : undefined; }

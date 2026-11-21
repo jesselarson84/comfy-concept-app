@@ -26,7 +26,8 @@ import { buildActionGraph } from './lib/actions.js';
 import { clampPresetValues, applyPresetParams, formatPrompt } from './lib/presets.js';
 import { detectControls } from './lib/workflow-detect.js';
 import { WorkflowPicker } from './ui/workflow-picker.js';
-import { DEFAULT_PRESET, resolvePresetId, remapReference, isLegacyPreset } from './lib/legacy-presets.js';
+import { resolvePresetId, remapReference, isLegacyPreset } from './lib/legacy-presets.js';
+import { choosePreset, isUsable } from './lib/preset-choice.js';
 import { FileInputs } from './ui/file-inputs.js';
 
 const comfy = new ComfyClient();
@@ -71,20 +72,22 @@ const picker = new WorkflowPicker({
   onRename: async (w, name) => { try { await api.renameUserPreset(w.user.id, name); toast('Renamed'); await loadWorkflows(current?.id, { fresh: false }); } catch (e) { toast(e.message, 6000); } },
   onDelete: async (w) => { try { await api.deleteUserPreset(w.user.id); toast(`Deleted "${w.label}"`); await loadWorkflows(current?.id === w.id ? undefined : current?.id); } catch (e) { toast(e.message, 6000); } },
 });
-const usable = (w) => w?.ok && w.workflow && w.availability?.status !== 'unavailable';
-async function loadWorkflows(keepId, { fresh = false } = {}) {
+const usable = isUsable;
+// remember: true only when keepId is a real user choice (just imported / saved).
+// Otherwise nothing is written: the remembered pick stays what the user last
+// picked, and a fresh client keeps getting the default (lib/preset-choice.js).
+async function loadWorkflows(keepId, { fresh = false, remember = false } = {}) {
   try { workflows = await api.getWorkflows({ fresh }); } catch (e) { toast('Could not load presets: ' + e.message); return; }
   picker.setItems(workflows);
-  // A saved choice of "fast-concept" etc. (localStorage from before) maps to its Klein preset.
-  const want = resolvePresetId(keepId || localStorage.getItem('preset') || DEFAULT_PRESET);
-  const pick = workflows.find((w) => w.id === want && w.ok) || workflows.find((w) => w.id === DEFAULT_PRESET && usable(w)) || workflows.find(usable) || workflows[0];
-  selectPreset(pick?.id);
+  // Last pick (old "fast-concept" etc. map to Klein) -> else Klein 4B T2I -> else first available AI Workflow entry.
+  const pick = choosePreset(workflows, { keep: keepId, saved: localStorage.getItem('preset') });
+  selectPreset(pick.id, { remember: remember && pick.source === 'keep' });
 }
 
-function selectPreset(id) {
+function selectPreset(id, { remember = true } = {}) {
   current = workflows.find((w) => w.id === id) || null;
   picker.setCurrent(current);
-  if (id) localStorage.setItem('preset', id);
+  if (id && current && remember) localStorage.setItem('preset', id);
   panel.setWorkflow(current);
   refs.render(current?.ok && current.controls ? current.controls.images : []);
   fileInputs.render(current?.ok ? current.ai?.inputs || [] : []);
@@ -231,7 +234,7 @@ const chat = new ChatPanel($('#chat-mount'), {
   onGenerate: ({ seed } = {}) => { panel.setSeed(seed); return generate(); },
   onRunAction: (r) => runAction(r),
   onTestRun: (r) => runBuilderTest(r),
-  onSavedPreset: (id) => loadWorkflows(id).then(() => toast('Saved under My presets in the picker')),
+  onSavedPreset: (id) => loadWorkflows(id, { remember: true }).then(() => toast('Saved under My presets in the picker')),
 });
 const memory = new MemoryPanel($('#memory-mount'), { onChange: () => chat.refresh() });
 $('details.menu').addEventListener('toggle', (e) => { if (e.target.open) { memory.refresh(true); paintBuilderModel(); } });
@@ -261,7 +264,7 @@ $('#import-file').addEventListener('change', async (e) => {
   const f = e.target.files[0];
   e.target.value = '';
   if (!f) return;
-  try { const r = await api.importWorkflow(f); toast(`Imported "${r.file}"`); await loadWorkflows(r.id); } catch (err) { toast(err.message, 8000); }
+  try { const r = await api.importWorkflow(f); toast(`Imported "${r.file}"`); await loadWorkflows(r.id, { remember: true }); } catch (err) { toast(err.message, 8000); }
 });
 
 // ---- connection banner -------------------------------------------------------
@@ -304,4 +307,4 @@ async function start() {
 }
 start();
 // For tests and poking around from DevTools.
-window.conceptApp = { isLegacyPreset, comfy, queue, panel, refs, fileInputs, viewer, chat, versions, memory, picker, selectPreset, loadWorkflows, get workflows() { return workflows; }, get current() { return current; } };
+window.conceptApp = { isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, chat, versions, memory, picker, selectPreset, loadWorkflows, get workflows() { return workflows; }, get current() { return current; } };

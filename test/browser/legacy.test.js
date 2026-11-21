@@ -40,7 +40,8 @@ test('saved preset "from-reference-image" opens FLUX.2 Klein 4B Image Edit; old 
   const { ctx, page } = await openWith(oldLocalStorage('from-reference-image'));
   try {
     assert.equal(await page.evaluate(() => window.conceptApp.current.id), 'ai:klein-4b-edit');
-    assert.equal(await page.evaluate(() => localStorage.getItem('preset')), 'ai:klein-4b-edit');
+    // Migration on read: the stored old id is left as it is until the user picks something.
+    assert.equal(await page.evaluate(() => localStorage.getItem('preset')), 'from-reference-image');
     assert.equal(await page.inputValue('#prompt'), 'same castle, winter');
     assert.equal(await page.evaluate(() => window.conceptApp.panel.state.aspect), '3:2-portrait');
     await page.evaluate(() => window.conceptApp.selectPreset('ai:klein-4b-t2i'));

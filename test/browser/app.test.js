@@ -33,8 +33,13 @@ async function pick(id, pg = page) { await pg.click('#preset-btn'); await pg.cli
 const currentPreset = (pg = page) => pg.evaluate(() => window.conceptApp.current?.id);
 const hasPreset = (id) => (window.conceptApp?.workflows || []).some((w) => w.id === id);
 
-test('loads with presets; fast concept shows aspect, hides reference/strength/negative', async () => {
+test('fresh client opens on FLUX.2 Klein 4B Text to Image (not My presets); basic txt2img shows aspect, hides reference/strength/negative', async () => {
   assert.deepEqual(await page.evaluate(() => window.conceptApp.workflows.filter((w) => !w.ai).map((w) => w.label)), ['Basic reference', 'Basic txt2img']);
+  // Start screen as a fresh client sees it (new context: no localStorage, no SW).
+  assert.equal(await currentPreset(), 'ai:klein-4b-t2i');
+  assert.match(await page.textContent('#preset-crumb'), /Image/);
+  assert.equal(await page.evaluate(() => localStorage.getItem('preset')), null, 'the automatic default is not remembered');
+  await page.screenshot({ path: path.join(SHOTS, 'phone-start.png') });
   await pick('basic-txt2img');
   assert.equal(await visible('#aspect-field'), true);
   assert.equal(await visible('#seed-field'), true);
@@ -42,7 +47,7 @@ test('loads with presets; fast concept shows aspect, hides reference/strength/ne
   assert.equal(await visible('#strength-field'), false);
   assert.equal(await visible('#neg-row'), false, 'klein has no negative prompt');
   assert.equal(await visible('#banner'), false);
-  await page.screenshot({ path: path.join(SHOTS, 'phone-start.png') });
+  await page.screenshot({ path: path.join(SHOTS, 'phone-basic-txt2img.png') });
 });
 
 test('batch of 3 portrait: images appear one by one, seeds differ, size injected', async () => {
