@@ -1,0 +1,41 @@
+{
+  "_readme": "GPU/RAM memory profiles for sharing the GPU between ComfyUI and Ollama (chat). The app reads the GPU's total VRAM at startup (nvidia-smi, or ComfyUI /system_stats) and picks the profile with the highest minVramMB that is <= total VRAM. Override: set \"profile\" here, pick one in the app (menu > GPU & memory), or set env MEMORY_PROFILE. Precedence: env > app setting > this file > auto. Edits here are picked up without a restart. All sizes are MiB.",
+  "profile": "auto",
+  "headroomMB": 768,
+  "desktopReserveMB": 1200,
+  "modelOverheadFactor": 1.2,
+  "ram": {
+    "_readme": "System RAM is spill/cache room (models offloaded from VRAM). A chat model is refused if it would not fit in free VRAM + (free RAM - reserveMB), so nothing is pushed to the page file.",
+    "reserveMB": 8192
+  },
+  "profiles": [
+    {
+      "id": "small",
+      "label": "Under 12 GB VRAM (e.g. RTX 2080 Ti 11 GB)",
+      "minVramMB": 0,
+      "unloadOllamaBeforeQueue": "always",
+      "ollamaKeepAlive": "5m",
+      "freeComfyBeforeChat": "if-low",
+      "comfyFree": { "unload_models": true, "free_memory": true },
+      "maxChatModelMB": 6500
+    },
+    {
+      "id": "large",
+      "label": "16 GB+ VRAM (e.g. RTX 5080 16 GB)",
+      "minVramMB": 15000,
+      "unloadOllamaBeforeQueue": "if-needed",
+      "ollamaKeepAlive": "10m",
+      "freeComfyBeforeChat": "never",
+      "comfyFree": { "unload_models": false, "free_memory": true },
+      "maxChatModelMB": 26000
+    }
+  ],
+  "workflowVramNeedMB": {
+    "_readme": "Free VRAM a ComfyUI job wants when it is queued, per preset id or 'action:<id>' (2080 Ti measurements: Flux.2 klein 1 MP peaks ~6.8-7.5 GB total once loaded; upscale ~7.0 GB; Hunyuan3D 2.1 ~9.3 GB). On the 'if-needed' profile Ollama is unloaded only when free VRAM minus headroomMB is below this. ComfyUI itself offloads its own models to RAM when VRAM is short.",
+    "default": 3000,
+    "fast-concept": 2500,
+    "from-reference-image": 3000,
+    "action:upscale": 2500,
+    "action:image-to-3d": 8000
+  }
+}

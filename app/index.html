@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- viewport-fit=cover lets us use env(safe-area-inset-*) around notches -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#11131a">
+  <title>Comfy Concept</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/js/main.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <select id="preset" aria-label="Workflow preset"></select>
+      <button id="btn-history" class="btn">History</button>
+      <details class="menu">
+        <summary class="btn" aria-label="More">&#8942;</summary>
+        <div class="menu-pop">
+          <button id="btn-advanced" class="btn">Advanced (ComfyUI)</button>
+          <button id="btn-import" class="btn">Import workflow&hellip;</button>
+          <div id="memory-mount"></div>
+        </div>
+      </details>
+    </header>
+    <div id="banner" class="banner" hidden></div>
+
+    <section id="panel" class="panel">
+      <div id="preset-msg" class="msg" hidden></div>
+      <label class="field prompt-field">
+        <span class="label">Prompt</span>
+        <textarea id="prompt" rows="5" placeholder="Describe the concept&hellip;" enterkeyhint="done"></textarea>
+      </label>
+      <div id="neg-row" class="field inline" hidden>
+        <label class="switch"><input type="checkbox" id="neg-toggle"> <span>Negative prompt</span></label>
+      </div>
+      <textarea id="negative" rows="2" placeholder="What to avoid&hellip;" hidden></textarea>
+      <!-- Undo / Versions for the prompt box, and the Prompt assistant (Ollama chat) -->
+      <div id="prompt-tools"></div>
+      <div id="chat-mount"></div>
+
+      <div id="refs" class="refs" hidden></div>
+
+      <div id="strength-field" class="field" hidden>
+        <span class="label">Strength <output id="strength-out"></output></span>
+        <input type="range" id="strength" min="0.05" max="1" step="0.05">
+        <small class="muted">Low = stay close to the reference, 1 = reimagine it.</small>
+      </div>
+
+      <div id="aspect-field" class="field" hidden>
+        <span class="label">Aspect</span>
+        <div class="segmented" role="radiogroup">
+          <label><input type="radio" name="aspect" value="portrait"><span>Portrait</span></label>
+          <label><input type="radio" name="aspect" value="square"><span>Square</span></label>
+          <label><input type="radio" name="aspect" value="landscape"><span>Landscape</span></label>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <span class="label">Batch</span>
+          <div class="stepper">
+            <button id="batch-minus" class="btn" aria-label="Fewer">&minus;</button>
+            <input id="batch" type="number" min="1" max="20" inputmode="numeric" aria-label="Batch count">
+            <button id="batch-plus" class="btn" aria-label="More">+</button>
+          </div>
+        </div>
+        <div id="seed-field" class="field" hidden>
+          <span class="label">Seed</span>
+          <div class="seed">
+            <label class="switch"><input type="checkbox" id="seed-lock"> <span>Lock</span></label>
+            <input id="seed" type="number" min="0" inputmode="numeric" aria-label="Seed">
+            <button id="seed-dice" class="btn" aria-label="New random seed" title="New random seed">New</button>
+          </div>
+        </div>
+      </div>
+
+      <details id="more" class="more" hidden>
+        <summary>More settings</summary>
+        <label id="steps-field" class="field" hidden><span class="label">Steps</span><input id="steps" type="number" min="1" max="200" inputmode="numeric"></label>
+        <div id="expose"></div>
+      </details>
+    </section>
+
+    <section id="results" class="results empty">
+      <div class="results-head">
+        <span>This session <span id="results-count" class="muted"></span></span>
+        <button id="btn-clear" class="link">clear finished</button>
+      </div>
+      <div id="thumbs" class="thumbs"></div>
+      <p class="results-empty muted">Generated images appear here as each one finishes.</p>
+    </section>
+
+    <footer class="actionbar">
+      <button id="btn-cancel" class="btn danger" hidden>Cancel queue</button>
+      <button id="btn-generate" class="btn primary">Generate</button>
+    </footer>
+  </div>
+  <input type="file" id="import-file" accept=".json,application/json" hidden>
+</body>
+</html>

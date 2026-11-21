@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_address"
+        android:shortcutId="change_address"
+        android:shortcutLongLabel="@string/shortcut_address_long"
+        android:shortcutShortLabel="@string/shortcut_address_short">
+        <intent
+            android:action="app.jesse.comfyconcept.action.CHANGE_ADDRESS"
+            android:targetClass="app.jesse.comfyconcept.MainActivity"
+            android:targetPackage="app.jesse.comfyconcept" />
+    </shortcut>
+</shortcuts>

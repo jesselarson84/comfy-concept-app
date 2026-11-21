@@ -1,0 +1,5 @@
+// Root build file. The only plugin is the Android application plugin.
+// No AndroidX, no Kotlin, no third-party libraries: plain framework APIs only.
+plugins {
+    id 'com.android.application' version '9.3.3' apply false
+}

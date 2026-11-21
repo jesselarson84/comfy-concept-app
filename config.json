@@ -1,0 +1,10 @@
+{
+  "comfyUrl": "http://127.0.0.1:8188",
+  "comfyUrlFallbacks": ["http://127.0.0.1:8188", "http://127.0.0.1:8000"],
+  "host": "127.0.0.1",
+  "port": 3100,
+  "workflowsDir": "workflows",
+  "dataDir": "data",
+  "sessionGapMinutes": 90,
+  "outputSubfolder": "concept-app"
+}

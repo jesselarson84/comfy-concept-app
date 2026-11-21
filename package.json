@@ -1,0 +1,21 @@
+{
+  "name": "comfy-concept-app",
+  "version": "0.1.0",
+  "description": "Phone/tablet PWA front-end for a local ComfyUI, for concepting (prompt -> images).",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server/index.js",
+    "mock": "node test/mock-comfy.js",
+    "dev:mock": "node scripts/dev-with-mock.js",
+    "test": "node --test \"test/unit/*.test.js\"",
+    "test:browser": "node --test \"test/browser/*.test.js\"",
+    "icons": "node scripts/make-icons.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "playwright-core": "^1.50.0",
+    "@sparticuz/chromium": "*"
+  }
+}

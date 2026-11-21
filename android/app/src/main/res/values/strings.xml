@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Comfy Concept</string>
+
+    <!-- Error / offline screen -->
+    <string name="err_title">Can\'t reach Comfy Concept</string>
+    <string name="err_hint">Check that Tailscale is connected on this device, and that the PC is on with Comfy Concept running.</string>
+    <string name="err_server">The server answered HTTP %1$d.</string>
+    <string name="err_ssl">The server\'s HTTPS certificate was not accepted.</string>
+    <string name="btn_retry">Retry</string>
+    <string name="btn_tailscale">Open Tailscale</string>
+    <string name="btn_change_address">Change address</string>
+
+    <!-- Address dialog -->
+    <string name="address_title_first">Server address</string>
+    <string name="address_title">Change address</string>
+    <string name="address_message">The https:// address of Comfy Concept in your tailnet.</string>
+    <string name="address_save">Save</string>
+    <string name="address_connect">Connect</string>
+    <string name="address_default">Default</string>
+    <string name="address_invalid">Enter an https:// address with no path, e.g. https://pc.tailnet.ts.net</string>
+    <string name="address_saved">Address saved</string>
+
+    <!-- Launcher shortcut -->
+    <string name="shortcut_address_short">Change address</string>
+    <string name="shortcut_address_long">Change server address</string>
+
+    <!-- Share in -->
+    <string name="share_uploading">Sending the image to Comfy Concept…</string>
+    <string name="share_multiple">Several images shared: only the first one is used.</string>
+    <string name="share_no_image">No image was found in what you shared.</string>
+    <string name="share_failed">Share failed: %1$s</string>
+
+    <!-- Save / share out / downloads -->
+    <string name="saving">Saving…</string>
+    <string name="saved_to">Saved to %1$s</string>
+    <string name="save_failed">Save failed: %1$s</string>
+    <string name="save_permission_denied">Storage permission is needed to save images on this Android version.</string>
+    <string name="save_blocked">Only images from the Comfy Concept server can be saved.</string>
+    <string name="share_title">Share image</string>
+    <string name="share_out_failed">Share failed: %1$s</string>
+    <string name="no_app">No app can open this.</string>
+    <string name="file_chooser_title">Choose an image</string>
+    <string name="file_chooser_failed">Could not open the file picker.</string>
+</resources>

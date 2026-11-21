@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Root gets the system-bar insets as padding (see MainActivity.setupSystemBars),
+     so its background shows behind the transparent/edge-to-edge bars. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/app_bg">
+
+    <android.webkit.WebView
+        android:id="@+id/web"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/app_bg" />
+
+    <!-- Native fallback when the server cannot be reached. -->
+    <ScrollView
+        android:id="@+id/error"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/app_bg"
+        android:clickable="true"
+        android:fillViewport="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp">
+
+            <ImageView
+                android:layout_width="96dp"
+                android:layout_height="96dp"
+                android:layout_marginBottom="16dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_launcher_foreground" />
+
+            <TextView
+                android:id="@+id/error_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="@string/err_title"
+                android:textColor="@color/text_primary"
+                android:textSize="22sp" />
+
+            <TextView
+                android:id="@+id/error_detail"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:maxWidth="420dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/error_address"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:textColor="@color/accent"
+                android:textIsSelectable="true"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btn_retry"
+                android:layout_width="260dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:text="@string/btn_retry" />
+
+            <Button
+                android:id="@+id/btn_tailscale"
+                android:layout_width="260dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/btn_tailscale" />
+
+            <Button
+                android:id="@+id/btn_address"
+                android:layout_width="260dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/btn_change_address" />
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>

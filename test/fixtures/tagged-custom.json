@@ -1,0 +1,8 @@
+{
+  "1": {"class_type": "SomeCustomLoader", "inputs": {"name": "x"}},
+  "2": {"class_type": "MyFancyTextNode", "inputs": {"words": "hello", "model": ["1", 0]}, "_meta": {"title": "Words #prompt"}},
+  "3": {"class_type": "PrimitiveInt", "inputs": {"value": 7}, "_meta": {"title": "My seed #seed"}},
+  "4": {"class_type": "MyRenderer", "inputs": {"cond": ["2", 0], "seed": ["3", 0], "size_w": 640, "size_h": 480, "glow": 0.5, "mode": "fast"}, "_meta": {"title": "Renderer #expose"}},
+  "5": {"class_type": "PrimitiveInt", "inputs": {"value": 640}, "_meta": {"title": "W #width"}},
+  "6": {"class_type": "PreviewImage", "inputs": {"images": ["4", 0]}}
+}
