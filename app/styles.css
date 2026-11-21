@@ -261,13 +261,20 @@ input[type=range], .switch input { accent-color: var(--c-node-fg); }
 .menu-pop { background: var(--c-bg); border-color: var(--c-border); box-shadow: var(--c-shadow); border-radius: var(--r-lg); }
 .builder-model { padding: 4px; border-top: 1px solid var(--c-border); }
 
-/* aspect chips + orientation flip */
+/* aspect: ratio dropdown + orientation flip */
 .aspect-row { display: flex; gap: 8px; align-items: center; }
-.chips { display: flex; gap: 6px; flex: 1; }
-.chip { flex: 1; height: 38px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-lg); background: var(--c-card); color: var(--c-muted); font: 500 14px/1 Inter, sans-serif; border: 1px solid transparent; font-variant-numeric: tabular-nums; cursor: pointer; }
 .seg { display: flex; background: var(--c-card); border-radius: var(--r-lg); padding: 2px; gap: 2px; }
 .seg > button { width: 38px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-md); color: var(--c-muted); border: 1px solid transparent; background: transparent; cursor: pointer; }
-.chip.on, .seg > button.on, .toggle.on { background: var(--c-selected); color: var(--c-fg); border-color: var(--c-node-border); }
+/* Ratio dropdown: native <select> (the system picker on Android) in the ComfyUI
+   dropdown look: card fill, no accent colour, chevron on the right. */
+.ratio-select { position: relative; flex: 1; display: flex; min-width: 0; }
+.ratio-select select { -webkit-appearance: none; appearance: none; flex: 1; width: 100%; height: 38px; min-height: 38px; padding: 0 34px 0 12px; border-radius: var(--r-lg); background: var(--c-card); color: var(--c-fg); border: 1px solid transparent; font: 500 14px/1 Inter, sans-serif; font-variant-numeric: tabular-nums; cursor: pointer; }
+.ratio-select select:hover { background: var(--c-selected); }
+.ratio-select select:focus-visible, .ratio-select select:focus { outline: none; border-color: var(--c-node-border); background: var(--c-selected); }
+.ratio-select select option { background: var(--c-bg); color: var(--c-fg); }
+.ratio-select select option:checked { background: var(--c-selected); }
+.ratio-select .i-chevron-down { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--c-muted); }
+.seg > button.on, .toggle.on { background: var(--c-selected); color: var(--c-fg); border-color: var(--c-node-border); }
 .rect { border: 2px solid currentColor; border-radius: 2px; display: block; }
 
 /* batch + seed */

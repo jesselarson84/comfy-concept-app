@@ -141,7 +141,7 @@ test('user presets: Save stores blocks (re-validated), listed under My presets; 
   assert.equal((await post(s, `/api/user-presets/${encodeURIComponent(saved.id)}`, { name: 'Renamed' }, 'PATCH')).status, 200);
   assert.equal((await fetch(`${s.base}/api/user-presets/${encodeURIComponent(again.id)}`, { method: 'DELETE' })).status, 200);
   ({ workflows } = await j(await fetch(s.base + '/api/workflows')));
-  assert.deepEqual(workflows.filter((w) => w.group === 'My presets').map((w) => w.label), ['Renamed']);
+  assert.deepEqual(workflows.filter((w) => w.group === 'My presets' && w.user).map((w) => w.label), ['Renamed']);
   assert.ok(fs.existsSync(path.join(s.dataDir, 'user-presets.json')));
   // data/ is gitignored
   assert.match(fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8'), /^\/?data\/?$/m);

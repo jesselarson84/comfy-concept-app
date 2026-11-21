@@ -18,13 +18,15 @@ test('GET /api/config reports reachable mock', async () => {
   assert.equal(c.outputSubfolder, 'concept-app');
 });
 
-test('GET /api/workflows lists shipped presets with controls', async () => {
+test('GET /api/workflows: AI presets first, folder workflows under My presets with controls', async () => {
   const { workflows } = await j(await fetch(s.base + '/api/workflows'));
-  assert.deepEqual(workflows.filter((w) => !w.ai).map((w) => [w.id, w.label, w.ok, w.controls.kind]), [
-    ['fast-concept', 'Fast concept', true, 'txt2img'],
-    ['from-reference-image', 'From reference image', true, 'img2img'],
+  assert.deepEqual(workflows.filter((w) => !w.ai).map((w) => [w.id, w.label, w.ok, w.controls.kind, w.group, w.folder]), [
+    ['basic-reference', 'Basic reference', true, 'img2img', 'My presets', true],
+    ['basic-txt2img', 'Basic txt2img', true, 'txt2img', 'My presets', true],
   ]);
-  assert.ok(workflows[0].workflow['40']);
+  assert.ok(workflows[0].ai, 'AI Workflow presets come first');
+  assert.ok(workflows.find((w) => w.id === 'basic-txt2img').workflow['40']);
+  assert.ok(!workflows.some((w) => w.id === 'fast-concept' || w.id === 'from-reference-image'), 'retired presets are not listed');
 });
 
 test('POST /api/workflows imports API JSON (multipart), never overwrites, rejects UI format', async () => {
@@ -67,7 +69,7 @@ test('dropping a file into workflows/ -> SSE "workflows" event and it lists (als
 });
 
 test('history API: POST, PATCH favorite, GET grouped; persisted to data/history.json', async () => {
-  const e = await j(await fetch(s.base + '/api/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: 'fox', seed: 3, workflow: 'fast-concept', width: 1024, height: 1024, images: [{ filename: 'x.png', subfolder: 'concept-app', type: 'output' }] }) }));
+  const e = await j(await fetch(s.base + '/api/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: 'fox', seed: 3, workflow: 'basic-txt2img', width: 1024, height: 1024, images: [{ filename: 'x.png', subfolder: 'concept-app', type: 'output' }] }) }));
   assert.ok(e.id && e.sessionId);
   const p = await j(await fetch(`${s.base}/api/history/${e.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ favorite: true }) }));
   assert.equal(p.favorite, true);
@@ -108,7 +110,7 @@ test('proxy WS + full job flow: queue via /comfy/prompt, progress/executed/execu
   const { ws, msgs } = await openWs(`ws://127.0.0.1:${s.port}/comfy/ws?clientId=test-client`);
   await waitFor(() => msgs.find((m) => m.type === 'status'));
   const { workflows } = await j(await fetch(s.base + '/api/workflows'));
-  const wf = workflows.find((w) => w.id === 'fast-concept').workflow;
+  const wf = workflows.find((w) => w.id === 'basic-txt2img').workflow;
   const q = await j(await fetch(s.base + '/comfy/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: wf, client_id: 'test-client' }) }));
   assert.ok(q.prompt_id);
   const done = await waitFor(() => msgs.find((m) => m.type === 'executing' && m.data.node === null && m.data.prompt_id === q.prompt_id));
@@ -137,7 +139,7 @@ test('cancel: /comfy/queue delete removes pending, /comfy/interrupt stops runnin
   try {
     const { ws, msgs } = await openWs(`ws://127.0.0.1:${slow.port}/comfy/ws?clientId=c`);
     const { workflows } = await j(await fetch(slow.base + '/api/workflows'));
-    const wf = workflows.find((w) => w.id === 'fast-concept').workflow;
+    const wf = workflows.find((w) => w.id === 'basic-txt2img').workflow;
     const post = async () => j(await fetch(slow.base + '/comfy/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: wf, client_id: 'c' }) }));
     const a = await post(), b = await post(), c = await post();
     await waitFor(() => msgs.find((m) => m.type === 'progress' && m.data.prompt_id === a.prompt_id));
@@ -154,7 +156,7 @@ test('cancel: /comfy/queue delete removes pending, /comfy/interrupt stops runnin
 
 test('history entry queued without images is filled from ComfyUI /history on GET', async () => {
   const { workflows } = await j(await fetch(s.base + '/api/workflows'));
-  const wf = workflows.find((w) => w.id === 'fast-concept').workflow;
+  const wf = workflows.find((w) => w.id === 'basic-txt2img').workflow;
   const q = await j(await fetch(s.base + '/comfy/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: wf, client_id: 'nobody' }) }));
   const e = await j(await fetch(s.base + '/api/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: 'lost', promptId: q.prompt_id }) }));
   assert.equal(e.status, 'queued');

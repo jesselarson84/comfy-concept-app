@@ -1,20 +1,21 @@
 // workflow-picker.js - the preset picker in the top bar.
 // Sections follow ComfyUI's right-click "AI Workflow" menu (3D / Image / Video /
-// Audio), with the app's own presets on top and the setups saved from the chat
-// builder ("My presets", rename / delete inline) at the bottom. Each row shows
+// Audio), with "My presets" at the bottom: setups saved from the chat builder
+// (rename / delete inline) and workflows imported or dropped into workflows/.
+// (The old "App presets" section is gone; see lib/legacy-presets.js.) Each row shows
 // its live availability: "needs download" / "missing node" rows are disabled
 // with the reason; "slow · RAM offload" and "tight on 11 GB" are hints.
 import { h, toast } from './dom.js';
 
 export const SECTIONS = [
-  { key: 'App', label: 'App presets', icon: 'i-sparkles' },
   { key: '3D', label: '3D', icon: 'i-box' },
   { key: 'Image', label: 'Image', icon: 'i-image' },
   { key: 'Video', label: 'Video', icon: 'i-video' },
   { key: 'Audio', label: 'Audio', icon: 'i-audio-lines' },
   { key: 'My presets', label: 'My presets', icon: 'i-save' },
 ];
-export const sectionOf = (w) => (w.group && SECTIONS.some((s) => s.key === w.group) ? w.group : 'App');
+// Anything without a known group (an imported folder workflow) is the user's own.
+export const sectionOf = (w) => (w.group && SECTIONS.some((s) => s.key === w.group) ? w.group : 'My presets');
 
 export class WorkflowPicker {
   /** @param o.onPick(id)  @param o.onRename(w, name)  @param o.onDelete(w) */
@@ -36,7 +37,7 @@ export class WorkflowPicker {
   setCurrent(w) {
     this.current = w?.id || null;
     const sec = w ? SECTIONS.find((s) => s.key === sectionOf(w)) : null;
-    this.crumb.textContent = sec && sec.key !== 'App' ? `${sec.label} ›` : '';
+    this.crumb.textContent = sec ? `${sec.label} ›` : '';
     this.name.textContent = w ? w.label : 'No presets';
     this.btn.title = w ? `${sec?.label || ''} › ${w.label}` : '';
   }

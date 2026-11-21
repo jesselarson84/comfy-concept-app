@@ -34,8 +34,8 @@ const currentPreset = (pg = page) => pg.evaluate(() => window.conceptApp.current
 const hasPreset = (id) => (window.conceptApp?.workflows || []).some((w) => w.id === id);
 
 test('loads with presets; fast concept shows aspect, hides reference/strength/negative', async () => {
-  assert.deepEqual(await page.evaluate(() => window.conceptApp.workflows.filter((w) => !w.ai).map((w) => w.label)), ['Fast concept', 'From reference image']);
-  await pick('fast-concept');
+  assert.deepEqual(await page.evaluate(() => window.conceptApp.workflows.filter((w) => !w.ai).map((w) => w.label)), ['Basic reference', 'Basic txt2img']);
+  await pick('basic-txt2img');
   assert.equal(await visible('#aspect-field'), true);
   assert.equal(await visible('#seed-field'), true);
   assert.equal(await visible('#refs'), false);
@@ -49,7 +49,7 @@ test('batch of 3 portrait: images appear one by one, seeds differ, size injected
   const before = (await mockPrompts()).length;
   await page.fill('#prompt', 'a brass airship over a canyon');
   await page.fill('#batch', '3'); await page.locator('#batch').dispatchEvent('change');
-  await page.click('#aspect-field .chip[data-ratio="3:2"]'); await page.click('#aspect-field .seg [data-orient="portrait"]');
+  await page.selectOption('#aspect-ratio', '3:2'); await page.click('#aspect-field .seg [data-orient="portrait"]');
   await page.click('#btn-generate');
   // While the batch runs there must be a moment with >=1 done and >=1 pending.
   await page.waitForFunction(() => {
@@ -159,7 +159,7 @@ test('cancel queue: pending removed from ComfyUI queue and running interrupted',
 });
 
 test('reference preset: pick file uploads to ComfyUI, strength + image injected', async () => {
-  await pick('from-reference-image');
+  await pick('basic-reference');
   assert.equal(await visible('#refs'), true);
   assert.equal(await visible('#strength-field'), true);
   assert.equal(await visible('#aspect-field'), false, 'size follows the reference');
@@ -192,14 +192,15 @@ test('paste an image into the reference slot', async () => {
   await page.waitForFunction(() => window.conceptApp.refs.values['10'] === 'pasted.png');
 });
 
-test('Android share target flow: POST /share -> redirect -> reference preset preselected', async () => {
-  await pick('fast-concept');
+test('Android share target flow: POST /share -> redirect -> FLUX.2 Klein 4B Image Edit preselected', async () => {
+  await pick('basic-txt2img');
   const fd = new FormData();
   fd.append('image', new Blob([pngBytes()], { type: 'image/png' }), 'Screenshot_share.png');
   const r = await fetch(s.base + '/share', { method: 'POST', body: fd, redirect: 'manual' });
   await page.goto(s.base + r.headers.get('location'));
-  await page.waitForFunction(() => window.conceptApp?.current?.id === 'from-reference-image');
-  await page.waitForFunction(() => window.conceptApp.refs.values['10'] === 'Screenshot_share.png');
+  // From reference image is retired: a share lands in the Klein 4B Image Edit slot (node 76).
+  await page.waitForFunction(() => window.conceptApp?.current?.id === 'ai:klein-4b-edit');
+  await page.waitForFunction(() => window.conceptApp.refs.values['76'] === 'Screenshot_share.png');
   await page.waitForFunction(() => document.querySelector('.ref-preview')?.naturalWidth > 0);
   assert.equal(new URL(page.url()).search, '', 'URL cleaned');
   // Also: a real form POST navigation from the page (what Chrome does) lands in the app.
@@ -301,7 +302,7 @@ const bridgeCalls = () => page.evaluate(() => window.__bridgeCalls);
 
 test('Android bridge: keepAwake(true) while a batch runs, keepAwake(false) when idle', async () => {
   await installBridgeStub();
-  await pick('fast-concept');
+  await pick('basic-txt2img');
   await page.uncheck('#seed-lock', { force: true });
   await page.fill('#prompt', 'bridge batch');
   await page.fill('#batch', '2'); await page.locator('#batch').dispatchEvent('change');
@@ -357,8 +358,9 @@ test('without the bridge: Save is a browser download again and keepAwake is neve
   assert.deepEqual(await bridgeCalls(), []);
 });
 
-test('Advanced opens the proxied ComfyUI UI in the same tab', async () => {
+test('ComfyUI canvas (menu) opens the proxied ComfyUI UI in the same tab', async () => {
   await page.click('.menu summary');
+  assert.equal((await page.textContent('#btn-advanced')).trim(), 'ComfyUI canvas');
   await page.click('#btn-advanced');
   await page.waitForURL(/\/comfy\/$/);
   assert.match(await page.textContent('h1'), /Mock ComfyUI/);

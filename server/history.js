@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { migrateHistoryEntry } from '../app/js/lib/legacy-presets.js';
 
 export class HistoryStore {
   constructor(dataDir, { sessionGapMinutes = 90 } = {}) {
@@ -95,12 +96,13 @@ export class HistoryStore {
     return e;
   }
 
-  /** Newest session first, entries newest first. */
+  /** Newest session first, entries newest first. Entries made with a retired
+   *  preset id come back mapped (copies; the stored data is never rewritten). */
   list({ favoritesOnly = false } = {}) {
     const bySession = new Map(this.data.sessions.map((s) => [s.id, { ...s, entries: [] }]));
     for (const e of this.data.entries) {
       if (favoritesOnly && !e.favorite) continue;
-      bySession.get(e.sessionId)?.entries.push(e);
+      bySession.get(e.sessionId)?.entries.push(migrateHistoryEntry(e));
     }
     return [...bySession.values()].filter((s) => s.entries.length).reverse().map((s) => ({ ...s, entries: s.entries.reverse() }));
   }

@@ -164,7 +164,7 @@ test('5080 (16 GB): klein / Pixal3D fit; Qwen stays slow RAM offload; ComfyUI do
     const { workflows, comfy } = await j(await fetch(d.base + '/api/workflows'));
     assert.equal(comfy.reachable, false);
     assert.equal(avail(workflows, 'klein-4b-t2i').status, 'unknown');
-    assert.ok(workflows.some((w) => w.id === 'fast-concept' && w.ok));
+    assert.ok(workflows.some((w) => w.id === 'basic-txt2img' && w.ok));
   } finally { await d.close(); }
 });
 

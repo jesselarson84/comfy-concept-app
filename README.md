@@ -51,13 +51,14 @@ The app has no login of its own. Anyone in your tailnet can use it.
 
 Open the HTTPS URL in **Chrome**, then go to the menu and choose **Install app** (or *Add to Home screen*). Once it is installed:
 - It opens full screen like a native app.
-- **Share -> Comfy UI** appears in the Android share sheet for images. A shared screenshot or photo is uploaded to ComfyUI. The app opens on the *From reference image* preset with that picture already in the slot. Shared text becomes the prompt.
+- **Share -> Comfy UI** appears in the Android share sheet for images. A shared screenshot or photo is uploaded to ComfyUI. The app opens on the *FLUX.2 Klein 4B Image Edit* preset with that picture already in the slot. Shared text becomes the prompt.
 
 Chrome only offers the share target for an installed PWA served over HTTPS, which is why Tailscale is needed.
 
 ## Using it
 
-- **Preset picker** (top): the same sections as ComfyUI's right-click *AI Workflow* menu (3D / Image / Video / Audio), with the app's own presets (every `.json` in `workflows/`) on top and **My presets** (setups saved from the chat builder) at the bottom. Each row shows its live availability. **needs download** and **missing node** rows are greyed out; tap one to see why. **slow · RAM offload** and **tight on 11 GB** are hints. See *AI Workflow presets*.
+- **Preset picker** (top): the same sections as ComfyUI's right-click *AI Workflow* menu (3D / Image / Video / Audio), and **My presets** at the bottom: setups saved from the chat builder, plus any workflow you import or drop into `workflows/`. The default preset is **FLUX.2 Klein 4B Text to Image**.
+  - The old built-in presets *Fast concept* and *From reference image* (the "App presets" section) are retired. Anything saved with them still works: the chosen preset in the browser, history entries (Reuse) and chat images map *Fast concept* to **FLUX.2 Klein 4B Text to Image** and *From reference image* to **FLUX.2 Klein 4B Image Edit**, and an old reference image lands in the Image Edit slot. The mapping happens when the app reads the data (`app/js/lib/legacy-presets.js`); `data/history.json`, `data/chats.json` and settings are not rewritten. Each row shows its live availability. **needs download** and **missing node** rows are greyed out; tap one to see why. **slow · RAM offload** and **tight on 11 GB** are hints. See *AI Workflow presets*.
 - **Prompt, Aspect** (1:1 / 4:3 / 3:2 / 16:9 chips plus a portrait/landscape flip; the size is shown and kept inside the preset's range), **Batch (1-20), Seed** (Lock = fixed; the dice button picks a new one). The negative prompt toggle appears only if the workflow has a real negative text node. The klein presets do not: their negative is a zeroed copy.
 - **Run** (the blue button; blue is used only here) queues *N separate jobs*. Thumbnails in the bottom strip (phone) or the right-hand grid (tablet) show progress, and each fills in as its job finishes.
 - **Cancel queue** removes your pending jobs from ComfyUI's queue and interrupts the one that is running.
@@ -70,7 +71,7 @@ Chrome only offers the share target for an installed PWA served over HTTPS, whic
   - Share opens the Android share sheet.
   - Reuse loads that image's prompt and seed (locked).
 - **History**: everything you have generated, from any device, grouped into sessions. A new session starts after 90 minutes with no generations. The star filter shows favourites only.
-- **Menu (⋮) > Advanced** opens the real ComfyUI UI at `/comfy/` in the same window. Use Back to return.
+- **Menu (⋮) > ComfyUI canvas** opens the real ComfyUI UI at `/comfy/` in the same window. Use Back to return.
 - **Menu (⋮) > Import workflow** uploads an API-format `.json` into `workflows/`.
 - **Menu (⋮) > GPU & memory** shows the detected GPU (name, total and free VRAM), system RAM, the active memory profile with a manual override, and which chat model is loaded (see *GPU & memory profiles*).
 - **Prompt assistant** (under the prompt box) and **💬 Discuss** in the viewer: see below.
@@ -122,7 +123,7 @@ The app reads the GPU's name, total and free VRAM (`nvidia-smi`, falling back to
 
 ## Adding workflows
 
-1. Build the graph in ComfyUI. You can do this on the PC, or on the phone through **Advanced**.
+1. Build the graph in ComfyUI. You can do this on the PC, or on the phone through **ComfyUI canvas**.
 2. Use **Workflow > Export (API)**. Only API format can be queued. The normal "Save" writes UI format, and the app rejects that with a message.
 3. Either save the file into `comfy-concept-app/workflows/`, or use **Import workflow** in the app. The server watches the folder, so open apps refresh their dropdown on their own.
    (ComfyUI's own "Save" stores files in its user folder, not here. That is why Export/Import is the route.)
@@ -218,7 +219,7 @@ npm run dev:mock       # app + fake ComfyUI, http://127.0.0.1:3100 (no GPU neede
 - **One detection module** (`workflow-detect.js`) is used by both the server and the browser, so the controls listed and the values injected always agree.
 - **Batch = N separate ComfyUI jobs**, each with batch_size 1, so images arrive one at a time. **Random seeds**: each job gets a new one. **Locked seed**: job *i* uses seed+i, so job 1 reproduces the locked seed exactly.
 - **Aspect**: portrait 2:3, square 1:1, landscape 3:2. The preset's pixel count is kept and sizes are rounded to multiples of 16 (1024² becomes 832x1248 / 1248x832). Width and height are written into *every* target. In Flux.2 that means EmptyFlux2LatentImage *and* Flux2Scheduler.
-- **"From reference image" preset**: built from your klein_ref workflows. The pipeline is LoadImage -> ImageScaleToTotalPixels (1MP) -> VAEEncode -> ReferenceLatent on the positive and on the zeroed negative.
+- **"From reference image" preset (retired in batch 1, now the test fixture `test/fixtures/workflows/basic-reference.json`)**: built from your klein_ref workflows. The pipeline is LoadImage -> ImageScaleToTotalPixels (1MP) -> VAEEncode -> ReferenceLatent on the positive and on the zeroed negative.
   - **Strength**: klein's sampler has no `denoise`, so strength is a `SplitSigmasDenoise` node. Its `low_sigmas` (output 1) feed SamplerCustomAdvanced, and the reference latent is the starting latent.
   - Strength 1.0 is a full re-generation that is still guided by ReferenceLatent; lower values stay closer to the reference. At 4 steps the effective steps are 1-4, so the slider moves in quarter steps.
   - Output size follows the reference image, so the aspect control is hidden for this preset.
@@ -228,7 +229,7 @@ npm run dev:mock       # app + fake ComfyUI, http://127.0.0.1:3100 (no GPU neede
 - **Extra endpoints beyond the spec**: `PATCH /api/history/:id` (favourite, images, status) and `GET /api/events` (Server-Sent Events; tells open apps when `workflows/` changed).
 - **Imports never overwrite**: a name clash becomes `name-2.json`. UI-format files are rejected with an explanation.
 - **Several LoadImage nodes** (as in klein_ref, which has three): each gets its own slot with Pick, Camera and Paste.
-- **Advanced** opens `/comfy/` in the same window (it also works inside the installed PWA). Back returns to the app, and presets reload when the app becomes visible again.
+- **ComfyUI canvas** opens `/comfy/` in the same window (it also works inside the installed PWA). Back returns to the app, and presets reload when the app becomes visible again.
 - **Tablet layout** starts at a width of 820px.
 - **Service worker**: network-first for the app shell, with the cache as the offline fallback. API calls, images and `/comfy` are never cached. Bump `VERSION` in `app/sw.js` after changing app files.
 - **Live preview frames** (binary websocket messages) are ignored.
@@ -237,22 +238,20 @@ npm run dev:mock       # app + fake ComfyUI, http://127.0.0.1:3100 (no GPU neede
 
 Everything was built and tested against the mock only. The dev VM cannot reach your PC's localhost. Check these on the PC, roughly in this order:
 
-1. `start.bat` prints `ComfyUI target: http://127.0.0.1:8188 (reachable)`. In a browser on the PC, open http://127.0.0.1:3100/: there is no orange "not reachable" banner, and the dropdown shows *Fast concept* and *From reference image*.
-2. **Origin rewrite**: a Generate on *Fast concept* gets no 403 from `/comfy/prompt` or the websocket. If it does, note the ComfyUI log line.
-3. **Fast concept** with klein 4B: the image appears, and the file lands in `ComfyUI/output/concept-app/concept_XXXXX_.png`. Portrait and landscape give 832x1248 and 1248x832.
+1. `start.bat` prints `ComfyUI target: http://127.0.0.1:8188 (reachable)`. In a browser on the PC, open http://127.0.0.1:3100/: there is no orange "not reachable" banner, and the picker opens on *FLUX.2 Klein 4B Text to Image* (Image section).
+2. **Origin rewrite**: a Run on *FLUX.2 Klein 4B Text to Image* gets no 403 from `/comfy/prompt` or the websocket. If it does, note the ComfyUI log line.
+3. **FLUX.2 Klein 4B Text to Image**: the image appears, and the file lands in `ComfyUI/output/concept-app/`. The 3:2 chip gives 1248x832, and the flip gives 832x1248.
 4. **Batch 4**: thumbnails show progress (from `progress` events) and fill in one by one. You can swipe image 1 while 2-4 are still rendering.
 5. **Cancel queue** during a batch: the remaining jobs disappear from ComfyUI's queue panel and the running one stops.
-6. **From reference image**: pick a photo. Check:
+6. **FLUX.2 Klein 4B Image Edit**: pick a photo. Check:
    - it uploads into `ComfyUI/input/`
-   - the job runs, with no validation error on `SplitSigmasDenoise` or `ImageScaleToTotalPixels.resolution_steps`
-   - strength 0.25 looks close to the reference and 1.0 looks freer
-   - **Confirm that SplitSigmasDenoise output 1 is `low_sigmas`.** If the results look wrong, swap the link in node 56 to `["60", 0]`.
+   - the job runs, and the result follows the picture's shape (scaled to about 1 MP)
 7. **Same prompt with the same locked seed twice**: ComfyUI may serve it from cache. An image should still appear, via the `/history` fallback.
 8. **Thumbnails**: `/comfy/view?...&preview=webp;70` returns a webp. If your build ignores it, the full PNG loads instead, which is fine but slower.
-9. **Advanced**: the ComfyUI frontend loads under `/comfy/`. Check that the graph canvas, the node library, queueing from it and its websocket all work. If the frontend refuses to run under a sub-path, open http://127.0.0.1:8188 on the PC instead and report it. That would mean switching to a separate port for the proxy.
+9. **ComfyUI canvas**: the ComfyUI frontend loads under `/comfy/`. Check that the graph canvas, the node library, queueing from it and its websocket all work. If the frontend refuses to run under a sub-path, open http://127.0.0.1:8188 on the PC instead and report it. That would mean switching to a separate port for the proxy.
 10. **Export (API)** a graph from ComfyUI into `workflows/`: it appears in the open app's dropdown within a second or two, without a reload. Also test **Import workflow** with the same file.
 11. **Tailscale**: `tailscale serve --bg 3100`, then the phone opens `https://<pc>.<tailnet>.ts.net/` and Generate works there. The websocket must work through `serve`; you'll know because progress bars move.
-12. **Install the PWA** on the phone, then share a screenshot to "Comfy Concept". The app should open on *From reference image* with the screenshot in the slot.
+12. **Install the PWA** on the phone, then share a screenshot to "Comfy UI". The app should open on *FLUX.2 Klein 4B Image Edit* with the screenshot in the slot.
 13. **On the phone and on the tablet**, test real touch:
     - swipe
     - pinch

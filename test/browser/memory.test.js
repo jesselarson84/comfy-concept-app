@@ -63,6 +63,9 @@ test('5080: chat model stays loaded through a batch; 12B listed; partial-offload
     await p.waitForSelector('.chat-proposal');
     const chatReq = (await (await fetch(s.ollamaBase + '/mock/requests')).json()).filter((r) => r.path === '/api/chat').at(-1);
     assert.equal(chatReq.body.keep_alive, '10m');
+    // A light workflow (the old Fast concept graph, imported): the default Klein 4B T2I
+    // preset needs ~9 GB, which really would unload the chat model at 9 GB free.
+    await p.evaluate(() => window.conceptApp.selectPreset('basic-txt2img'));
     await p.fill('#prompt', 'a purple duck');
     await p.fill('#batch', '2'); await p.locator('#batch').dispatchEvent('change');
     await p.click('#btn-generate');

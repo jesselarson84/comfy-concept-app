@@ -11,6 +11,7 @@
 // referred to by their img id in text, to keep requests small.
 // -----------------------------------------------------------------------------
 import { actionsForPrompt } from './actions.js';
+import { presetLabel } from './legacy-presets.js';
 
 const STYLE = {
   flux2: `The image model is FLUX.2 [klein] 4B. It understands plain natural language, so write prompts as 1-3 clear descriptive sentences: subject first, then key details (shape, colour, material, pose), setting, lighting, camera/framing and style or medium. No tag soup, no weights like (word:1.3), no "masterpiece/best quality", no negative-prompt words inside the prompt. It has NO negative prompt, so describe what you DO want ("an empty, quiet street at dawn") instead of what to avoid ("no people, no cars").`,
@@ -33,7 +34,7 @@ export function styleFor(workflow) {
  */
 export function buildMessages(o) {
   const c = o.current || {};
-  const imgLines = Object.entries(o.images || {}).map(([ref, i]) => `- ${ref}: generated with prompt "${i.prompt || '?'}"${i.seed !== undefined && i.seed !== null ? `, seed ${i.seed}` : ''}${i.preset ? `, preset ${i.preset}` : ''}`);
+  const imgLines = Object.entries(o.images || {}).map(([ref, i]) => `- ${ref}: generated with prompt "${i.prompt || '?'}"${i.seed !== undefined && i.seed !== null ? `, seed ${i.seed}` : ''}${i.preset ? `, preset ${presetLabel(i.preset)}` : ''}`);
   const sys = [
     'You are a concept-art prompt assistant inside the "Comfy UI" app. You help the user develop image ideas and write or revise the prompt that goes to ComfyUI.',
     'TONE: plain and factual. In "reply", say only what you changed in the prompt (or which action you propose) and why, in one or two short sentences. No compliments or praise, no opinions on how good the image or the idea is, no exclamation marks, no apologies, no filler like "Great!" or "Got it!". When describing an image, state what it shows, neutrally.',

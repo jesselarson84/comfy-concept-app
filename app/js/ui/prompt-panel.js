@@ -14,7 +14,7 @@ export class PromptPanel {
     this.el = {
       prompt: $('#prompt'), negToggle: $('#neg-toggle'), negRow: $('#neg-row'), negative: $('#negative'),
       msg: $('#preset-msg'), strengthField: $('#strength-field'), strength: $('#strength'), strengthOut: $('#strength-out'),
-      aspectField: $('#aspect-field'), aspectSize: $('#aspect-size'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
+      aspectField: $('#aspect-field'), aspectSize: $('#aspect-size'), ratio: $('#aspect-ratio'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
       seedField: $('#seed-field'), seedLock: $('#seed-lock'), seed: $('#seed'), seedDice: $('#seed-dice'),
       stepsField: $('#steps-field'), steps: $('#steps'), expose: $('#expose'), params: $('#params'), more: $('#more'),
     };
@@ -35,7 +35,8 @@ export class PromptPanel {
     e.negative.addEventListener('input', () => { s.negative = e.negative.value; this.save(); });
     e.negToggle.addEventListener('change', () => { s.negOn = e.negToggle.checked; e.negative.hidden = !s.negOn; this.save(); });
     e.strength.addEventListener('input', () => { s.strength = Number(e.strength.value); e.strengthOut.textContent = s.strength.toFixed(2); this.save(); });
-    document.querySelectorAll('[data-ratio]').forEach((b) => b.addEventListener('click', () => { const a = parseAspect(s.aspect); this.setAspect(aspectKey({ ...a, ratio: b.dataset.ratio })); }));
+    // Ratio dropdown (1:1 / 4:3 / 3:2 / 16:9); the orientation toggle beside it is separate.
+    e.ratio.addEventListener('change', () => { const a = parseAspect(s.aspect); this.setAspect(aspectKey({ ...a, ratio: e.ratio.value })); });
     document.querySelectorAll('[data-orient]').forEach((b) => b.addEventListener('click', () => {
       const a = parseAspect(s.aspect);
       // Flipping orientation on 1:1 picks the most common non-square ratio.
@@ -73,7 +74,7 @@ export class PromptPanel {
 
   #paintAspect() {
     const a = parseAspect(this.state.aspect);
-    document.querySelectorAll('[data-ratio]').forEach((b) => { const on = b.dataset.ratio === a.ratio; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+    this.el.ratio.value = a.ratio;
     document.querySelectorAll('[data-orient]').forEach((b) => { const on = a.ratio !== '1:1' && b.dataset.orient === a.orient; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
     const [bw, bh] = this.baseSize();
     const sz = this.clampSize(sizeFor(this.state.aspect, bw, bh, this.wf?.ai?.size?.multiple || 16));

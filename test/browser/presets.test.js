@@ -19,7 +19,8 @@ before(async () => {
   const tts = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-tts-'));
   const d = path.join(tts, 'VibeVoice', 'VibeVoice-1.5B'); fs.mkdirSync(d, { recursive: true });
   for (let i = 1; i <= 3; i++) fs.writeFileSync(path.join(d, `model-0000${i}-of-00003.safetensors`), 'x');
-  s = await startStack({ stepMs: 30, comfyOptions: { folderPaths: { tts: [[tts], ['.safetensors']] } } });
+  // folderWorkflows: false = like the live folder (no imported workflows): AI presets only.
+  s = await startStack({ stepMs: 30, folderWorkflows: false, comfyOptions: { folderPaths: { tts: [[tts], ['.safetensors']] } } });
   browser = await launch();
   ctx = await browser.newContext({ viewport: { width: 412, height: 860 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
   page = await ctx.newPage();
@@ -53,11 +54,22 @@ test('header says Comfy UI; Run button is the only blue element; picker has 3D /
   const run = await page.$eval('#btn-generate', (b) => getComputedStyle(b).backgroundColor);
   assert.equal(run, 'rgb(11, 140, 233)');
   assert.ok(await page.locator('#btn-generate .i-play').count());
-  const chip = await page.$eval('#aspect-field .chip.on', (b) => getComputedStyle(b).backgroundColor);
-  assert.equal(chip, 'rgb(60, 61, 66)', 'selected = gray, not blue');
+  // Ratio is a dropdown now (no chips), in the gray ComfyUI look; the orientation toggle stays.
+  assert.equal(await page.locator('#aspect-field .chip').count(), 0);
+  assert.deepEqual(await page.$$eval('#aspect-ratio option', (o) => o.map((x) => x.value)), ['1:1', '4:3', '3:2', '16:9']);
+  const dd = await page.$eval('#aspect-ratio', (b) => { const c = getComputedStyle(b); return [c.backgroundColor, c.color, c.borderTopColor]; });
+  assert.deepEqual(dd, ['rgb(38, 39, 41)', 'rgb(255, 255, 255)', 'rgba(0, 0, 0, 0)'], 'dropdown = ComfyUI card gray, never blue');
+  await page.click('#aspect-field .seg [data-orient="landscape"]');
+  const seg = await page.$eval('#aspect-field .seg button.on', (b) => getComputedStyle(b).backgroundColor);
+  assert.equal(seg, 'rgb(60, 61, 66)', 'selected = gray, not blue');
+  await page.selectOption('#aspect-ratio', '1:1');
+  // Default preset (no saved choice): FLUX.2 Klein 4B Text to Image.
+  assert.equal(await page.evaluate(() => window.conceptApp.current.id), 'ai:klein-4b-t2i');
+  assert.match(await page.textContent('#preset-crumb'), /Image/);
   await page.click('#preset-btn');
   const sections = await page.$$eval('#picker .grp', (els) => els.map((e) => e.dataset.section));
-  assert.deepEqual(sections, ['App', '3D', 'Image', 'Video', 'Audio']);
+  assert.deepEqual(sections, ['3D', 'Image', 'Video', 'Audio'], 'no App presets section');
+  assert.doesNotMatch(await page.textContent('#picker'), /App presets|Fast concept|From reference image/);
   const wan = page.locator('#picker .ent[data-preset="ai:wan22-5b-ti2v"]');
   assert.match(await wan.textContent(), /needs download/);
   assert.equal(await wan.getAttribute('aria-disabled'), 'true');
@@ -69,16 +81,18 @@ test('header says Comfy UI; Run button is the only blue element; picker has 3D /
   await page.keyboard.press('Escape');
 });
 
-test('AI preset: params shown with ranges; out-of-range values are clamped before queueing; ratio chips + orientation flip', async () => {
+test('AI preset: params shown with ranges; out-of-range values are clamped before queueing; ratio dropdown + orientation flip', async () => {
   await pick('ai:klein-4b-t2i');
   assert.match(await page.textContent('#preset-name'), /FLUX\.2 Klein 4B Text to Image/);
   assert.match(await page.textContent('#preset-crumb'), /Image/);
   await page.click('#more > summary');
   const steps = page.locator('#params [data-param="steps"]');
   await steps.fill('99');
-  await page.click('#aspect-field .chip[data-ratio="16:9"]');
+  await page.selectOption('#aspect-ratio', '16:9');
   await page.click('#aspect-field .seg [data-orient="portrait"]');
   assert.match(await page.textContent('#aspect-size'), /^\d+ × \d+$/);
+  assert.equal(await page.evaluate(() => window.conceptApp.panel.state.aspect), '16:9-portrait');
+  assert.equal(await page.inputValue('#aspect-ratio'), '16:9');
   await page.fill('#prompt', 'a lighthouse at dusk');
   await page.fill('#batch', '1'); await page.locator('#batch').dispatchEvent('change');
   await page.screenshot({ path: path.join(SHOTS, 'b1-klein-params.png') });
@@ -115,7 +129,7 @@ test('VibeVoice preset: voice-sample slot uses verify-voice.flac by default; pla
 });
 
 test('builder: proposal -> summary card; Test run queues a reduced graph without saving; Save adds it under My presets', async () => {
-  await pick('fast-concept');
+  await pick('ai:klein-4b-t2i');
   await page.fill('#prompt', 'a red fox');
   if ((await page.locator('#chat').getAttribute('open')) === null) await page.click('#chat > summary');
   await send('make a setup: schnell then upscale 2x');

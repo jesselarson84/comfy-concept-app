@@ -38,8 +38,8 @@ test('real klein_faces_s0: two image slots, node 43 defined last still traced', 
   assert.deepEqual(c.negative, []);
 });
 
-test('shipped preset fast-concept: txt2img, width/height in latent AND scheduler', () => {
-  const c = detectControls(load('workflows/fast-concept.json'));
+test('basic-txt2img fixture (old fast-concept preset): txt2img, width/height in latent AND scheduler', () => {
+  const c = detectControls(load('test/fixtures/workflows/basic-txt2img.json'));
   assert.equal(c.kind, 'txt2img');
   assert.deepEqual(c.prompt, [T('40', 'text')]);
   assert.deepEqual(c.width, [T('51', 'width'), T('52', 'width')]);
@@ -51,8 +51,8 @@ test('shipped preset fast-concept: txt2img, width/height in latent AND scheduler
   assert.deepEqual(c.warnings, []);
 });
 
-test('shipped preset from-reference-image: image slot + strength via #strength', () => {
-  const c = detectControls(load('workflows/from-reference-image.json'));
+test('basic-reference fixture (old from-reference-image preset): image slot + strength via #strength', () => {
+  const c = detectControls(load('test/fixtures/workflows/basic-reference.json'));
   assert.equal(c.kind, 'img2img');
   assert.deepEqual(c.images.map((i) => [i.node, i.title]), [['10', 'Reference']]);
   assert.deepEqual(c.strength, [T('60', 'denoise')]);

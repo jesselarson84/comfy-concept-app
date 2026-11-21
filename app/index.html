@@ -24,7 +24,7 @@
       <details class="menu">
         <summary class="btn icon" aria-label="More" title="More"><i class="i i-more-vertical"></i></summary>
         <div class="menu-pop">
-          <button id="btn-advanced" class="btn"><i class="i i-workflow"></i>Advanced (ComfyUI)</button>
+          <button id="btn-advanced" class="btn"><i class="i i-workflow"></i>ComfyUI canvas</button>
           <button id="btn-import" class="btn"><i class="i i-folder"></i>Import workflow&hellip;</button>
           <label class="field builder-model"><span class="label">Setup builder model</span><select id="builder-model" aria-label="Setup builder model"></select><small id="builder-model-note" class="muted"></small></label>
           <div id="memory-mount"></div>
@@ -61,12 +61,15 @@
       <div id="aspect-field" class="field" hidden>
         <span class="label">Aspect <span id="aspect-size" class="val"></span></span>
         <div class="aspect-row">
-          <div class="chips" role="radiogroup" aria-label="Aspect ratio">
-            <button type="button" class="chip" data-ratio="1:1" role="radio">1:1</button>
-            <button type="button" class="chip" data-ratio="4:3" role="radio">4:3</button>
-            <button type="button" class="chip" data-ratio="3:2" role="radio">3:2</button>
-            <button type="button" class="chip" data-ratio="16:9" role="radio">16:9</button>
-          </div>
+          <label class="ratio-select" title="Aspect ratio">
+            <select id="aspect-ratio" aria-label="Aspect ratio">
+              <option value="1:1">1:1</option>
+              <option value="4:3">4:3</option>
+              <option value="3:2">3:2</option>
+              <option value="16:9">16:9</option>
+            </select>
+            <i class="i i-chevron-down" aria-hidden="true"></i>
+          </label>
           <div class="seg" role="radiogroup" aria-label="Orientation">
             <button type="button" data-orient="portrait" role="radio" title="Portrait" aria-label="Portrait"><i class="rect" style="width:10px;height:15px"></i></button>
             <button type="button" data-orient="landscape" role="radio" title="Landscape" aria-label="Landscape"><i class="rect" style="width:15px;height:10px"></i></button>

@@ -59,13 +59,13 @@ A **release** build (**Build > Generate Signed Bundle/APK**, or the `release` va
 
 Only `https://host[:port]` is accepted, with no path. A bare host gets `https://` added.
 
-**Share in.** In Photos (or after taking a screenshot), choose Share and then **Comfy UI**. The image goes to `POST /share`, which is the same contract as the PWA (`server/share.js`). The app then opens on *From reference image* with the picture in the slot.
+**Share in.** In Photos (or after taking a screenshot), choose Share and then **Comfy UI**. The image goes to `POST /share`, which is the same contract as the PWA (`server/share.js`). The app then opens on *FLUX.2 Klein 4B Image Edit* with the picture in the slot.
 
 **Save / Share in the viewer.** These buttons use the native side:
-- Save puts the image in **Pictures/Comfy Concept**, where it shows up in the gallery.
+- Save puts the image in **Pictures/Comfy UI**, where it shows up in the gallery. (Builds before batch 1 saved to Pictures/Comfy Concept; those files stay there.)
 - Share opens the Android share sheet with the real PNG.
 
-Other downloads go to the same place. Images go to Pictures/Comfy Concept and everything else goes to Download/Comfy Concept; this includes a workflow `.json` exported from *Advanced* (ComfyUI).
+Other downloads go to the same place. Images go to Pictures/Comfy UI and everything else goes to Download/Comfy UI; this includes a workflow `.json` exported from the *ComfyUI canvas*.
 
 **Keep awake.** The screen stays on while a batch is queued or running, and is released when the queue is idle.
 
@@ -92,22 +92,22 @@ To use new artwork, replace the foreground and monochrome paths, or use **File >
 Tick these off on the **phone** and on the **tablet**:
 
 1. **First launch**: the address prompt appears and **Connect** loads the app. There is no browser bar, and the status and navigation bars are dark (#171718) with nothing covered by them.
-2. **Share from Photos**: share a photo to Comfy UI. The app opens on *From reference image* with that photo in the slot.
+2. **Share from Photos**: share a photo to Comfy UI. The app opens on *FLUX.2 Klein 4B Image Edit* with that photo in the slot.
 3. **Share a screenshot**, using the screenshot preview's Share button: same result.
 4. **Share 3 images at once**: a message says only the first is used, and the first is in the slot.
-5. **Camera capture**: on *From reference image*, tap **Camera** in the slot. The camera app opens; take a photo and accept it, and it uploads into the slot. Also test **Pick**: the picker offers Photos/Files plus Camera.
+5. **Camera capture**: on *FLUX.2 Klein 4B Image Edit*, tap **Camera** in the slot. The camera app opens; take a photo and accept it, and it uploads into the slot. Also test **Pick**: the picker offers Photos/Files plus Camera.
 6. **Import workflow** (menu): the file picker lets you choose a `.json` from Downloads.
-7. **Save to gallery**: in the viewer, tap Save. A "Saved to Pictures/Comfy Concept" message appears and the image is in the gallery. On an Android 8/9 device, the first Save asks for storage permission.
+7. **Save to gallery**: in the viewer, tap Save. A "Saved to Pictures/Comfy UI" message appears and the image is in the gallery. On an Android 8/9 device, the first Save asks for storage permission.
 8. **Share out**: in the viewer, tap Share. The share sheet opens, and sending to e.g. Messages or Drive delivers the real image.
 9. **Keep awake during a batch**: set the screen timeout to 30 s, then start a batch of 10. The screen stays on until the batch finishes, then times out normally.
 10. **Rotation**: rotate during a batch. The page does **not** reload, progress continues, and the open viewer stays open.
 11. **Tablet layout**: the panel and the grid sit side by side in landscape. Split-screen and freeform resizing work.
 12. **Keyboard**: typing a prompt pushes the content up, and the Generate button is not hidden behind the keyboard.
-13. **Back button**: in the viewer, Back closes the viewer. In *Advanced*, Back returns to the app. On the main screen, Back exits.
+13. **Back button**: in the viewer, Back closes the viewer. In the *ComfyUI canvas*, Back returns to the app. On the main screen, Back exits.
 14. **Tailscale off**: disconnect Tailscale and reopen the app. The offline screen shows the address and the three buttons. **Open Tailscale** opens the Tailscale app. Reconnect, tap **Retry**, and the app loads.
 15. **Change address**: long-press the launcher icon and choose **Change address**. An invalid entry (e.g. `http://x` or `https://x/path`) shows an error and is not saved. **Default** restores the stock address.
 16. **External links**: a link to another site opens in the browser, not inside the app.
-17. **Advanced, Export (API)**: the exported `.json` lands in Download/Comfy Concept. If it says "Save failed", that ComfyUI build revokes its blob URL too early; this is a known edge (see Decisions).
+17. **ComfyUI canvas, Export (API)**: the exported `.json` lands in Download/Comfy UI. If it says "Save failed", that ComfyUI build revokes its blob URL too early; this is a known edge (see Decisions).
 
 ## Decisions
 
@@ -123,7 +123,7 @@ Tick these off on the **phone** and on the **tablet**:
 - **Rotation without reload.** The activity handles the config changes itself (`orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode`). `screenOrientation=fullUser` allows every orientation while respecting the rotation lock.
 - **`launchMode=singleTask`.** A share arrives in the running app (`onNewIntent`) instead of stacking a second copy. A restored activity never re-sends a share: the intent is ignored when restored or launched from Recents.
 - **Back** uses the classic `onBackPressed`. Predictive back is not opted in, so it works the same on API 26-35. It follows the WebView history first, so the web viewer's `history.pushState` makes Back close the viewer.
-- **Downloads.** Images go to Pictures/Comfy Concept and other files to Download/Comfy Concept: MediaStore on Android 10+, and a file plus a media scan on 8-9.
+- **Downloads.** Images go to Pictures/Comfy UI and other files to Download/Comfy UI (the old Comfy Concept folders are left as they are): MediaStore on Android 10+, and a file plus a media scan on 8-9.
   - `blob:` downloads, such as ComfyUI's export, are read by injected JS and handed over as a `data:` URL (the bridge's internal `saveDataUrl`).
   - Downloads from other sites open in the browser.
 - **File chooser.**

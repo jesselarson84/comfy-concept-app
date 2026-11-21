@@ -2,12 +2,12 @@
 // We keep the preset's pixel count (e.g. 1024x1024 = ~1MP) and change only the
 // shape, rounding to a multiple of 16 (Flux-family VAEs/latents want /16).
 // Aspect values:
-//   ratio chips + orientation: "1:1", "4:3-landscape", "3:2-portrait", "16:9-landscape" ...
+//   ratio dropdown + orientation: "1:1", "4:3-landscape", "3:2-portrait", "16:9-landscape" ...
 //   legacy names (saved state / history before batch1): portrait, square, landscape
 export const RATIOS = { '1:1': [1, 1], '4:3': [4, 3], '3:2': [3, 2], '16:9': [16, 9] };
 export const ASPECTS = { portrait: [2, 3], square: [1, 1], landscape: [3, 2] };
 
-/** "3:2-portrait" -> { ratio: '3:2', orient: 'portrait' }; legacy names map to the same chips. */
+/** "3:2-portrait" -> { ratio: '3:2', orient: 'portrait' }; legacy names map to the same ratios. */
 export function parseAspect(a) {
   if (a && typeof a === 'object') return { ratio: RATIOS[a.ratio] ? a.ratio : '1:1', orient: a.orient === 'portrait' ? 'portrait' : 'landscape' };
   const s = String(a || '');

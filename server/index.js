@@ -50,6 +50,7 @@ import { createBuilder } from './builder.js';
 import { detectControls } from '../app/js/lib/workflow-detect.js';
 import { vramFit } from '../app/js/lib/presets.js';
 import { splitOutputs } from '../app/js/lib/outputs.js';
+import { isLegacyPreset, migrateHistoryEntry } from '../app/js/lib/legacy-presets.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
 
@@ -75,8 +76,11 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
   const builder = createBuilder({ cfg, comfyInfo, presets, memory, hardware });
   const sseClients = new Set();
 
-  // Everything the preset picker shows: folder presets, AI Workflow presets
-  // (live availability) and saved builder setups (re-validated live).
+  // Everything the preset picker shows: AI Workflow presets (live
+  // availability), saved builder setups (re-validated live) and workflows
+  // imported/dropped into workflows/ (both under My presets). A leftover
+  // fast-concept.json / from-reference-image.json is not listed: those ids
+  // are retired and resolve to the Klein 4B presets (lib/legacy-presets.js).
   async function allWorkflows({ fresh = false } = {}) {
     const info = await comfyInfo.get({ fresh });
     const hw = await hardware.detect();
@@ -90,7 +94,8 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
       if (!r.ok) return { ...base, ok: true, workflow: null, availability: { status: 'unavailable', label: 'unavailable', reason: r.errors.join(' ') } };
       return { ...base, ok: true, workflow: r.graph, controls: detectControls(r.graph), description: r.summary.join(' · '), output: r.output, ai: { output: r.output, params: {}, size: null, maxBatch: r.output === 'image' ? 8 : 2, vram: { estMB: r.estMB }, promptFormat: r.blocks.some((b) => b.type === 'audio' && b.params.engine === 'vibevoice') ? { unless: '\\[\\d+\\]|Speaker \\d+:', template: '[1] {text}' } : null }, availability: { ...vramFit({ estMB: r.estMB, ...hwOpts, profileId }), estMB: r.estMB } };
     }));
-    return { workflows: [...workflows.list(), ...ai, ...mine], comfy: { reachable: !!info.objectInfo, error: info.error || null } };
+    const folder = workflows.list().filter((w) => !isLegacyPreset(w.id)).map((w) => ({ ...w, group: 'My presets', folder: true }));
+    return { workflows: [...ai, ...mine, ...folder], comfy: { reachable: !!info.objectInfo, error: info.error || null } };
   }
   async function estMBFor(id) {
     if (id.startsWith('ai:')) { const p = presets.get(id); return p ? (p.manifest.vram.measuredMB || p.manifest.vram.estMB) : undefined; }
@@ -174,7 +179,7 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
       let body;
       try { body = JSON.parse((await readBody(req, 1024 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
       const e = await history.update(m[1], body);
-      return e ? json(res, 200, e) : json(res, 404, { error: 'Not found' });
+      return e ? json(res, 200, migrateHistoryEntry(e)) : json(res, 404, { error: 'Not found' });
     }
     // ---- Chat tab ----
     if (p === '/api/chats' && req.method === 'GET') return json(res, 200, { chats: chats.list() });

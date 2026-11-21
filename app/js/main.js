@@ -26,6 +26,7 @@ import { buildActionGraph } from './lib/actions.js';
 import { clampPresetValues, applyPresetParams, formatPrompt } from './lib/presets.js';
 import { detectControls } from './lib/workflow-detect.js';
 import { WorkflowPicker } from './ui/workflow-picker.js';
+import { DEFAULT_PRESET, resolvePresetId, remapReference, isLegacyPreset } from './lib/legacy-presets.js';
 import { FileInputs } from './ui/file-inputs.js';
 
 const comfy = new ComfyClient();
@@ -40,9 +41,17 @@ let current = null;
 const viewer = new Viewer({
   onFavorite: (it) => (it.historyId ? api.patchHistory(it.historyId, { favorite: it.favorite }) : Promise.reject(new Error('not saved yet'))),
   onReuse: (it) => {
-    // Switch back to the preset that made it (if it still exists).
-    if (it.meta?.workflow && workflows.some((w) => w.id === it.meta.workflow)) selectPreset(it.meta.workflow);
-    if (it.meta?.reference) for (const [node, ref] of Object.entries(it.meta.reference)) refs.set(node, ref);
+    // Switch back to the preset that made it (if it still exists). Results made
+    // with the retired Fast concept / From reference image presets map to the
+    // Klein 4B presets (lib/legacy-presets.js; history.json is not rewritten).
+    const wid = resolvePresetId(it.meta?.legacyWorkflow || it.meta?.workflow);
+    if (wid && workflows.some((w) => w.id === wid)) selectPreset(wid);
+    if (it.meta?.reference && typeof it.meta.reference === 'object') {
+      const slots = current?.ok ? current.controls?.images || [] : [];
+      // Old reference node ids (e.g. "10") point at the new preset's image slot.
+      const refMap = slots.length ? remapReference(it.meta.reference, slots) : {};
+      for (const [node, ref] of Object.entries(refMap)) refs.set(node, ref);
+    }
     panel.reuse(it.meta || {});
     toast(`Prompt + seed ${it.meta?.seed ?? ''} loaded`);
   },
@@ -52,9 +61,11 @@ viewer.onClose = () => paintThumbs();
 const historyView = new HistoryView((getItems, i) => viewer.open(getItems, i));
 
 // ---- presets ---------------------------------------------------------------
-// The picker lists folder presets (App presets), the AI Workflow presets
-// (3D / Image / Video / Audio, availability computed live on the server) and
-// the setups saved from the chat builder (My presets).
+// The picker lists the AI Workflow presets (3D / Image / Video / Audio,
+// availability computed live on the server) and My presets: setups saved from
+// the chat builder plus any workflow imported or dropped into workflows/.
+// The old built-in "App presets" are retired; their ids still resolve (see
+// lib/legacy-presets.js). Default preset: FLUX.2 Klein 4B Text to Image.
 const picker = new WorkflowPicker({
   onPick: (id) => selectPreset(id),
   onRename: async (w, name) => { try { await api.renameUserPreset(w.user.id, name); toast('Renamed'); await loadWorkflows(current?.id, { fresh: false }); } catch (e) { toast(e.message, 6000); } },
@@ -64,8 +75,9 @@ const usable = (w) => w?.ok && w.workflow && w.availability?.status !== 'unavail
 async function loadWorkflows(keepId, { fresh = false } = {}) {
   try { workflows = await api.getWorkflows({ fresh }); } catch (e) { toast('Could not load presets: ' + e.message); return; }
   picker.setItems(workflows);
-  const want = keepId || localStorage.getItem('preset') || workflows[0]?.id;
-  const pick = workflows.find((w) => w.id === want && w.ok) || workflows.find(usable) || workflows[0];
+  // A saved choice of "fast-concept" etc. (localStorage from before) maps to its Klein preset.
+  const want = resolvePresetId(keepId || localStorage.getItem('preset') || DEFAULT_PRESET);
+  const pick = workflows.find((w) => w.id === want && w.ok) || workflows.find((w) => w.id === DEFAULT_PRESET && usable(w)) || workflows.find(usable) || workflows[0];
   selectPreset(pick?.id);
 }
 
@@ -200,7 +212,7 @@ queue.addEventListener('change', () => {
 });
 
 // A non-image result (3D .glb, video, audio): download it (the Android app's
-// download handler puts it in Download/Comfy Concept). No 3D viewer: that would
+// download handler puts it in Download/Comfy UI). No 3D viewer: that would
 // need a WebGL library, and the app has no dependencies.
 function downloadFile(f) {
   const a = document.createElement('a');
@@ -264,8 +276,11 @@ async function handleLaunchParams() {
   if (q.get('text') && !q.get('ref')) panel.setPrompt(q.get('text'));
   const ref = q.get('ref');
   if (ref) {
-    // Auto-switch to a preset with a reference slot (prefer the shipped one).
-    const target = workflows.find((w) => w.id === 'from-reference-image' && w.ok) || workflows.find((w) => usable(w) && w.controls?.images?.length && !w.ai && !w.user);
+    // Auto-switch to a preset with a reference slot: FLUX.2 Klein 4B Image Edit
+    // (it replaced "From reference image"), else any usable preset with one.
+    const editId = resolvePresetId('from-reference-image');
+    const hasSlot = (w) => usable(w) && w.controls?.images?.length;
+    const target = workflows.find((w) => w.id === editId && hasSlot(w)) || workflows.find((w) => hasSlot(w) && !w.user) || workflows.find(hasSlot);
     if (target) {
       if (current?.id !== target.id) selectPreset(target.id);
       refs.set(target.controls.images[0].node, ref);
@@ -289,4 +304,4 @@ async function start() {
 }
 start();
 // For tests and poking around from DevTools.
-window.conceptApp = { comfy, queue, panel, refs, fileInputs, viewer, chat, versions, memory, picker, selectPreset, loadWorkflows, get workflows() { return workflows; }, get current() { return current; } };
+window.conceptApp = { isLegacyPreset, comfy, queue, panel, refs, fileInputs, viewer, chat, versions, memory, picker, selectPreset, loadWorkflows, get workflows() { return workflows; }, get current() { return current; } };

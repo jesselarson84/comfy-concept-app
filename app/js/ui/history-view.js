@@ -42,7 +42,7 @@ export class HistoryView {
       // Turn history entries into the same item shape the viewer uses.
       const items = s.entries.filter((e) => e.images.length).map((e) => ({
         key: e.id, historyId: e.id, image: e.images[0], favorite: e.favorite, status: 'done',
-        meta: { prompt: e.prompt, negative: e.negative, seed: e.seed, workflow: e.workflow, width: e.width, height: e.height, strength: e.strength, reference: e.reference, action: e.action, parent: e.parent },
+        meta: { prompt: e.prompt, negative: e.negative, seed: e.seed, workflow: e.workflow, legacyWorkflow: e.legacyWorkflow, width: e.width, height: e.height, strength: e.strength, reference: e.reference, action: e.action, parent: e.parent },
       }));
       // Non-image results (the 3D action's .glb) are download tiles.
       const files = s.entries.filter((e) => !e.images.length && e.files?.length);

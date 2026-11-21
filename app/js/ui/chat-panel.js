@@ -212,7 +212,7 @@ export class ChatPanel {
     let ref = Object.keys(this.images).find((k) => this.images[k].filename === item.image.filename && this.images[k].subfolder === (item.image.subfolder || ''));
     if (!ref) {
       ref = 'img' + (Object.keys(this.images).length + 1);
-      this.images[ref] = { ref, filename: item.image.filename, subfolder: item.image.subfolder || '', type: item.image.type || 'output', prompt: item.meta?.prompt, seed: item.meta?.seed, preset: item.meta?.workflow, historyId: item.historyId };
+      this.images[ref] = { ref, filename: item.image.filename, subfolder: item.image.subfolder || '', type: item.image.type || 'output', prompt: item.meta?.prompt, seed: item.meta?.seed, preset: item.meta?.legacyWorkflow || item.meta?.workflow, historyId: item.historyId };
     }
     this.pending = ref; this.lastRef = ref;
     this.open();
