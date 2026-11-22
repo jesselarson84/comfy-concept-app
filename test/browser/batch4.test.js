@@ -266,3 +266,22 @@ test('E: "Use as reference" chooser shows the same sub sections', async () => {
   await app(() => window.conceptApp.presetChooser.close());
   await page.waitForTimeout(300);
 });
+
+// ---- F. ComfyUI page: Agent button and Agent toasts hidden ---------------------------
+test('F: on the proxied ComfyUI page the Agent button and the Comfy Agent toast are hidden; other toasts and buttons stay', async () => {
+  const p2 = await ctx.newPage();
+  try {
+    await p2.goto(s.base + '/comfy/');
+    await p2.waitForFunction(() => document.querySelectorAll('.p-toast-message').length === 2);
+    await p2.waitForFunction(() => document.querySelector('.p-toast-message-error')?.getAttribute('data-concept-hidden') === 'agent-toast');
+    const st = await p2.evaluate(() => ({
+      agentBtn: getComputedStyle([...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Agent')).display,
+      queueBtn: getComputedStyle(document.querySelector('button[aria-label="Queue"]')).display === 'none' ? 'none' : 'inline-block',
+      agentToast: getComputedStyle(document.querySelector('.p-toast-message-error')).display,
+      infoToast: getComputedStyle(document.querySelector('.p-toast-message-info')).display,
+      stack: getComputedStyle(document.querySelector('#toasts')).display,
+      embedded: document.documentElement.classList.contains('concept-embedded'),
+    }));
+    assert.deepEqual(st, { agentBtn: 'none', queueBtn: 'inline-block', agentToast: 'none', infoToast: 'block', stack: 'block', embedded: false });
+  } finally { await p2.close(); }
+});

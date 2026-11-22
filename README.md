@@ -43,6 +43,8 @@ If none of these works, a delete answers *"ComfyUI output folder is unknown, not
 
 ComfyUI stays bound to **localhost only**. **You do not need `--listen`**. The app server runs on the same PC and reverse-proxies `/comfy/*` (HTTP and the websocket) to `127.0.0.1:8188`. Your phone never talks to ComfyUI directly. Leave Comfy Desktop's network settings at their defaults.
 
+The proxy adds one small snippet to ComfyUI's own page at `/comfy/` (and only to that page): `app/comfy-tweaks.css` and `app/js/comfy-tweaks.js`. It hides ComfyUI's **Agent** button and removes the red *Comfy Agent error / Comfy Agent hit a server error* toasts. They are found by their text ("Agent", "Comfy Agent"), because ComfyUI's class names change between versions. If injecting fails for any reason, the page is served unmodified. The proxy also relaxes `X-Frame-Options` / CSP `frame-ancestors` from ComfyUI to same-origin so the app can show ComfyUI as its node view.
+
 The proxy also rewrites the `Origin`/`Host` headers to ComfyUI's own address. Recent ComfyUI refuses requests whose Origin doesn't match its host. That is its protection against random web pages talking to a localhost ComfyUI.
 
 ## Remote access with Tailscale

@@ -60,6 +60,7 @@ import { FolderStore } from './folders.js';
 import { saveToDrive } from './drive.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
+const COMFY_SNIPPET = '<link rel="stylesheet" href="/comfy-tweaks.css" data-concept-tweaks><script src="/js/comfy-tweaks.js" data-concept-tweaks></script>';
 
 // Written to stdout/stderr, which start-background.vbs sends to data\server.log.
 const log = (...a) => console.error(new Date().toISOString(), ...a);
@@ -75,7 +76,9 @@ export function createApp(cfg, opts = {}) {
   const workflows = new WorkflowStore(cfg.workflowsDir);
   const history = new HistoryStore(cfg.dataDir, { sessionGapMinutes: cfg.sessionGapMinutes });
   const folders = new FolderStore(cfg.dataDir);
-  const proxy = createComfyProxy(() => cfg.comfyUrl);
+  // /comfy/ page: + app/comfy-tweaks.css and app/js/comfy-tweaks.js (hide the Agent
+  // button / toasts, node-view mode); framing allowed for the app's node view.
+  const proxy = createComfyProxy(() => cfg.comfyUrl, '/comfy', { injectHtml: COMFY_SNIPPET, frameable: true });
   // Some ComfyUI custom-node extensions import "/scripts/app.js" or call
   // "/api/<their-route>" from the ComfyUI root instead of relative to the page,
   // which under /comfy/ would hit this app. Forward those unchanged.

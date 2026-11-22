@@ -8,8 +8,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { startStack } from './helpers.js';
 import http from 'node:http';
+import zlib from 'node:zlib';
 import { deleteAppFile, unlinkWithRetry, IN_USE, outputDirFromArgv, comfyOutputDir, createOutputDirCache } from '../../server/outputs.js';
-import { createComfyProxy } from '../../server/proxy.js';
+import { createComfyProxy, injectIntoHtml, isPagePath, allowSameOriginFrame } from '../../server/proxy.js';
 import { ConnectionBanner, GRACE_MS } from '../../app/js/lib/conn-banner.js';
 import { exposedControls, infoFor, GLOSSARY } from '../../app/js/lib/setting-info.js';
 import { validatePreset, menuParts, SUBGROUPS } from '../../app/js/lib/presets.js';
@@ -339,5 +340,86 @@ test('Image presets are split into Text to Image / Image Edit / Inpainting / Ups
     const img = lay.find((x) => x.sec.key === 'Image');
     assert.deepEqual(img.subs.map((x) => x.name), ['Text to Image', 'Image Edit', 'Inpainting', 'Upscale'], 'Upscale last');
     assert.equal(img.rows.length, 0); assert.equal(img.count, 11);
+  } finally { await st.close(); }
+});
+
+// ---- F. ComfyUI page snippet (Agent button / toasts) ------------------------------
+
+test('page snippet: inserted before </head>, once; only the page path; framing headers relaxed', () => {
+  assert.equal(injectIntoHtml('<html><head><title>x</title></head><body></body></html>', '<i data-concept-tweaks></i>'), '<html><head><title>x</title><i data-concept-tweaks></i></head><body></body></html>');
+  assert.equal(injectIntoHtml('<body class="a">x</body>', '<i data-concept-tweaks></i>'), '<body class="a"><i data-concept-tweaks></i>x</body>');
+  assert.equal(injectIntoHtml('{"not":"html"}', 'S'), null);
+  assert.equal(injectIntoHtml('<head data-concept-tweaks></head>', 'S'), '<head data-concept-tweaks></head>', 'never twice');
+  for (const p of ['/', '/index.html', '/?x=1']) assert.ok(isPagePath(p), p);
+  for (const p of ['/view?filename=a.png', '/assets/index.js', '/api/prompt', '/index.htm']) assert.ok(!isPagePath(p), p);
+  assert.deepEqual(allowSameOriginFrame({ 'x-frame-options': 'DENY', 'content-security-policy': "default-src 'self'; frame-ancestors 'none'" }), { 'x-frame-options': 'SAMEORIGIN', 'content-security-policy': "default-src 'self'; frame-ancestors 'self'" });
+});
+
+async function upstreamPage(handler, fn) {
+  const comfy = http.createServer(handler);
+  const cport = await listen(comfy);
+  const proxy = createComfyProxy(() => `http://127.0.0.1:${cport}`, '/comfy', { injectHtml: '<script data-concept-tweaks src="/js/comfy-tweaks.js"></script>', frameable: true });
+  const app = http.createServer((req, res) => proxy.web(req, res));
+  const aport = await listen(app);
+  try { await fn(`http://127.0.0.1:${aport}`); } finally { comfy.closeAllConnections(); app.closeAllConnections(); await new Promise((r) => comfy.close(r)); await new Promise((r) => app.close(r)); }
+}
+const PAGE = '<!doctype html><html><head><title>ComfyUI</title></head><body>app</body></html>';
+
+test('page snippet: gzip, br and deflate pages are decoded, injected, sent with the right Content-Length; asks for identity', async () => {
+  for (const [enc, fn] of [['gzip', zlib.gzipSync], ['br', zlib.brotliCompressSync], ['deflate', zlib.deflateSync], [null, (b) => b]]) {
+    let askedFor;
+    await upstreamPage((req, res) => {
+      askedFor = req.headers['accept-encoding'];
+      const body = fn(Buffer.from(PAGE));
+      res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Length': body.length, ETag: '"abc"', ...(enc ? { 'Content-Encoding': enc } : {}) });
+      res.end(body);
+    }, async (base) => {
+      const r = await fetch(base + '/comfy/', { headers: { 'Accept-Encoding': 'gzip, br' } });
+      const raw = Buffer.from(await r.arrayBuffer());
+      assert.equal(r.status, 200);
+      assert.equal(askedFor, 'identity');
+      assert.equal(r.headers.get('content-encoding'), null, enc);
+      assert.equal(Number(r.headers.get('content-length')), raw.length, enc);
+      assert.equal(r.headers.get('etag'), null);
+      assert.match(raw.toString(), /<title>ComfyUI<\/title><script data-concept-tweaks src="\/js\/comfy-tweaks.js"><\/script><\/head>/, enc);
+    });
+  }
+});
+
+test('page snippet: fails open (broken gzip, not HTML, no head/body), and leaves every other response untouched', async () => {
+  const bodies = {
+    '/': [{ 'Content-Type': 'text/html', 'Content-Encoding': 'gzip' }, Buffer.from('this is not gzip')],
+    '/index.html': [{ 'Content-Type': 'text/html' }, Buffer.from('plain words, no tags')],
+    '/view': [{ 'Content-Type': 'text/html', 'Content-Encoding': 'gzip' }, zlib.gzipSync(PAGE)],
+    '/api/x': [{ 'Content-Type': 'application/json' }, Buffer.from('{"a":1}')],
+  };
+  await upstreamPage((req, res) => { const [h, b] = bodies[new URL(req.url, 'http://x').pathname]; res.writeHead(200, { ...h, 'Content-Length': b.length }); res.end(b); }, async (base) => {
+    const raw = async (p) => { const r = await fetch(base + '/comfy' + p, { headers: { 'Accept-Encoding': 'identity' } }); return { r, b: Buffer.from(await r.arrayBuffer()) }; };
+    // node's fetch decodes gzip itself, so look at the raw bytes with http.get
+    const get = (p) => new Promise((ok) => http.get(base + '/comfy' + p, (r) => { const c = []; r.on('data', (x) => c.push(x)); r.on('end', () => ok({ headers: r.headers, body: Buffer.concat(c) })); }));
+    const broken = await get('/');
+    assert.equal(broken.headers['content-encoding'], 'gzip'); assert.equal(broken.body.toString(), 'this is not gzip', 'unmodified');
+    const words = await raw('/index.html');
+    assert.equal(words.b.toString(), 'plain words, no tags');
+    const view = await get('/view');
+    assert.equal(view.headers['content-encoding'], 'gzip', 'not the page: streamed through as is');
+    assert.deepEqual(view.body, bodies['/view'][1]);
+    const api = await raw('/api/x');
+    assert.equal(api.b.toString(), '{"a":1}');
+  });
+});
+
+test('page snippet: wired into the app server for /comfy/ (mock ComfyUI page, gzip, X-Frame-Options)', async () => {
+  const st = await startStack({});
+  try {
+    const r = await fetch(st.base + '/comfy/');
+    const html = await r.text();
+    assert.match(html, /<link rel="stylesheet" href="\/comfy-tweaks.css" data-concept-tweaks><script src="\/js\/comfy-tweaks.js" data-concept-tweaks><\/script><\/head>/);
+    assert.equal(r.headers.get('x-frame-options'), 'SAMEORIGIN');
+    const js = await fetch(st.base + '/js/comfy-tweaks.js');
+    assert.equal(js.status, 200); assert.match(js.headers.get('content-type'), /javascript/);
+    assert.equal((await fetch(st.base + '/comfy-tweaks.css')).status, 200);
+    const sys = await fetch(st.base + '/comfy/system_stats');
+    assert.ok(!(await sys.text()).includes('data-concept-tweaks'));
   } finally { await st.close(); }
 });
