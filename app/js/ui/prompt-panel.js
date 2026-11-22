@@ -2,7 +2,8 @@
 // preset actually has (from detectControls on the server) and remembers what
 // you typed in localStorage, so reopening the app keeps your prompt.
 // AI Workflow presets also bring their own clamped settings (manifest params:
-// steps, scale, detail...), shown under More settings with their allowed range.
+// steps, scale, detail...). Steps sits next to Batch and Seed; the other
+// settings follow directly on the main screen (no collapsible).
 import { h, $ } from './dom.js';
 import { randomSeed } from '../lib/seed.js';
 import { parseAspect, aspectKey, sizeFor } from '../lib/aspect.js';
@@ -16,7 +17,7 @@ export class PromptPanel {
       msg: $('#preset-msg'), strengthField: $('#strength-field'), strength: $('#strength'), strengthOut: $('#strength-out'),
       aspectField: $('#aspect-field'), aspectSize: $('#aspect-size'), ratio: $('#aspect-ratio'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
       seedField: $('#seed-field'), seedLock: $('#seed-lock'), seed: $('#seed'), seedDice: $('#seed-dice'),
-      stepsField: $('#steps-field'), steps: $('#steps'), expose: $('#expose'), params: $('#params'), more: $('#more'),
+      stepsField: $('#steps-field'), steps: $('#steps'), expose: $('#expose'), params: $('#params'),
     };
     this.state = { prompt: '', negative: '', negOn: false, batch: 4, aspect: '1:1', seedMode: 'random', seed: 0, strength: null, steps: {}, expose: {}, params: {}, ...this.#load() };
     // Saved state from before the ratio chips: square/portrait/landscape -> chips.
@@ -50,7 +51,14 @@ export class PromptPanel {
     e.seedLock.addEventListener('change', () => { s.seedMode = e.seedLock.checked ? 'locked' : 'random'; this.#paintSeed(); this.save(); });
     e.seed.addEventListener('input', () => { s.seed = Number(e.seed.value) || 0; this.save(); });
     e.seedDice.addEventListener('click', () => { s.seed = randomSeed(); s.seedMode = 'locked'; this.#paint(); this.save(); });
-    e.steps.addEventListener('input', () => { if (this.wf) { s.steps[this.wf.id] = Number(e.steps.value); this.save(); } });
+    // Steps is either the preset's "steps" param (AI Workflow presets) or the
+    // detected sampler steps of an imported workflow.
+    e.steps.addEventListener('input', () => {
+      if (!this.wf) return;
+      if (this.stepsParam) (s.params[this.wf.id] ||= {}).steps = Number(e.steps.value);
+      else s.steps[this.wf.id] = Number(e.steps.value);
+      this.save();
+    });
   }
 
   maxBatch() { return Math.min(20, this.wf?.ai?.maxBatch || 20); }
@@ -104,20 +112,19 @@ export class PromptPanel {
     this.wf = wf;
     const e = this.el, s = this.state, c = wf?.ok ? wf.controls : null;
     const show = (el, on) => { el.hidden = !on; };
+    // No description box: only real problems with the selected preset show here
+    // (an unusable file, a missing model/node, an imported graph with no controls).
     const msgs = [];
-    if (!wf) msgs.push('No presets found. Put API-format .json files in the workflows folder.');
-    else if (!wf.ok) msgs.push(`This file can't be used: ${wf.error}`);
-    else {
+    if (wf && !wf.ok) msgs.push(`This file can't be used: ${wf.error}`);
+    else if (wf) {
       const av = wf.availability;
       if (av?.status === 'unavailable') msgs.push(`Unavailable: ${av.reason}`);
-      else if (av?.status === 'offload' || av?.status === 'tight') msgs.push(`${av.label}${av.reason ? `: ${av.reason}` : ''}.`);
-      if (wf.ai?.description) msgs.push(wf.ai.description);
       if (c?.message && !wf.ai) msgs.push(c.message);
-      if (c) msgs.push(...c.warnings.filter((w) => !wf.ai || !/No prompt text node/.test(w)));
+      if (c && !wf.ai && !wf.user) msgs.push(...c.warnings);
     }
     e.msg.textContent = msgs.join(' ');
     e.msg.hidden = !msgs.length;
-    e.msg.classList.toggle('warn', wf?.availability?.status === 'unavailable' || wf?.availability?.status === 'offload');
+    e.msg.classList.toggle('warn', !!msgs.length);
     show(e.prompt.closest('.field'), !!c?.prompt.length || !c);
     show(e.negRow, !!c?.negative.length);
     e.negative.hidden = !(c?.negative.length && s.negOn);
@@ -129,13 +136,23 @@ export class PromptPanel {
     show(e.aspectField, !!(c?.width.length && c?.height.length));
     this.#paintAspect();
     show(e.seedField, !!c?.seed.length);
-    show(e.stepsField, !!c?.steps.length);
-    if (c?.steps.length) e.steps.value = s.steps[wf.id] ?? c.defaults.steps ?? 4;
+    const sp = wf?.ok ? wf.ai?.params?.steps : null;
+    this.stepsParam = sp && sp.type !== 'enum' && sp.type !== 'text' ? sp : null;
+    show(e.stepsField, !!(this.stepsParam || c?.steps.length));
+    if (this.stepsParam) {
+      e.steps.min = this.stepsParam.min ?? 1; e.steps.max = this.stepsParam.max ?? 200;
+      e.steps.value = s.params[wf.id]?.steps ?? this.stepsParam.default;
+      e.steps.dataset.param = 'steps';
+    } else {
+      e.steps.min = 1; e.steps.max = 200; delete e.steps.dataset.param;
+      if (c?.steps.length) e.steps.value = s.steps[wf.id] ?? c.defaults.steps ?? 4;
+    }
     if (s.batch > this.maxBatch()) { s.batch = this.maxBatch(); e.batch.value = s.batch; }
     e.batch.max = this.maxBatch();
     // Preset settings with their allowed ranges.
     e.params.replaceChildren();
     for (const [key, p] of Object.entries(wf?.ai?.params || {})) {
+      if (key === 'steps' && this.stepsParam) continue; // shown next to Batch and Seed
       const val = s.params[wf.id]?.[key] ?? p.default;
       let input;
       if (p.type === 'enum') {
@@ -148,8 +165,7 @@ export class PromptPanel {
         const v = p.type === 'enum' ? (p.options.find((o) => String(o) === input.value) ?? input.value) : p.type === 'text' ? input.value : Number(input.value);
         (s.params[wf.id] ||= {})[key] = v; this.save();
       });
-      const range = p.type === 'int' || p.type === 'number' ? h('small.muted', {}, `${p.min}–${p.max}`) : null;
-      e.params.append(h('label.field', {}, h('span.label', {}, p.label, range), input));
+      e.params.append(h('label.field', {}, h('span.label', {}, p.label), input));
     }
     // Generic "#expose" controls.
     e.expose.replaceChildren();
@@ -165,7 +181,8 @@ export class PromptPanel {
       });
       e.expose.append(h('label.field', {}, h('span.label', {}, x.label), input));
     }
-    show(e.more, !!(c?.steps.length || c?.expose.length || e.params.children.length));
+    show(e.params, !!e.params.children.length);
+    show(e.expose, !!e.expose.children.length);
   }
 
   /** Values the user chose, for this preset. */
@@ -175,7 +192,7 @@ export class PromptPanel {
       prompt: s.prompt, negative: c?.negative.length && s.negOn ? s.negative : (c?.negative.length ? '' : undefined),
       batch: Math.min(s.batch, this.maxBatch()), aspect: s.aspect, seedMode: s.seedMode, seed: s.seed,
       strength: c?.strength.length ? Number(this.el.strength.value) : undefined,
-      steps: c?.steps.length ? Number(this.el.steps.value) : undefined,
+      steps: c?.steps.length && !this.stepsParam ? Number(this.el.steps.value) : undefined,
       expose: s.expose[this.wf?.id] || {},
       params: { ...(s.params[this.wf?.id] || {}) },
     };

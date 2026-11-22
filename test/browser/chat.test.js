@@ -182,12 +182,12 @@ test('action: "upscale" -> confirm chip with clamp note; Run wires the image int
   assert.ok(e && e.parent?.image?.filename === img.filename && e.images.length === 1);
 });
 
-test('action: "make it 3d" -> GLB result is a "3D ↓" download tile; unknown action is refused', async () => {
+test('action: "make it 3d" -> GLB result is a "3D" tile; unknown action is refused', async () => {
   const n = await page.locator('#thumbs .thumb').count();
   await send('make it 3d');
   await lastAssistant().locator('.chat-action button:has-text("Run")').click();
   await page.waitForFunction((n) => document.querySelectorAll('#thumbs .thumb.is-file.s-done').length >= 1 && document.querySelectorAll('#thumbs .thumb').length > n, n, { timeout: 10000 });
-  assert.match(await page.textContent('#thumbs .thumb.is-file'), /3D ↓/);
+  assert.match(await page.textContent('#thumbs .thumb.is-file'), /3D/);
   const it = await page.evaluate(() => window.conceptApp.queue.items.at(-1));
   assert.match(it.files[0].filename, /^mesh_\d+_\.glb$/);
   const r = await fetch(`${s.base}/comfy/view?filename=${it.files[0].filename}&subfolder=${it.files[0].subfolder}&type=output`);
@@ -230,7 +230,7 @@ test('Ollama offline: clear message + Retry, Send disabled, rest of the app stil
     await p.evaluate(() => localStorage.setItem('conceptChat.open', '1'));
     await p.reload(); await p.waitForFunction(() => (window.conceptApp?.workflows?.length || 0) >= 2);
     await p.waitForSelector('.chat-offline:not([hidden])', { timeout: 8000 });
-    assert.match(await p.textContent('.chat-offline'), /Start Ollama on the PC/);
+    assert.match(await p.textContent('.chat-offline'), /^Ollama is offline\. Not running on the PC \(127\.0\.0\.1:11434\)\./);
     assert.equal(await p.isDisabled('.chat-send'), true);
     assert.equal(await p.isVisible('#banner'), false);
     await p.screenshot({ path: path.join(SHOTS, 'chat-offline.png') });

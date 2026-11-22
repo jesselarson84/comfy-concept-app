@@ -1,6 +1,6 @@
-// GPU & memory in the UI: detected hardware + profile in the ⋮ menu, manual
-// override, the 5080 profile keeping the chat model loaded across a batch,
-// model-fit labels in the picker and the "partly in RAM" badge.
+// GPU & memory: the ⋮ menu has no memory section (always Auto, chosen silently
+// from the detected VRAM), the 5080 profile keeping the chat model loaded
+// across a batch, and model-fit in the chat model list.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -32,20 +32,19 @@ async function pick(id, pg = page) { await pg.click('#preset-btn'); await pg.cli
 const currentPreset = (pg = page) => pg.evaluate(() => window.conceptApp.current?.id);
 const hasPreset = (id) => (window.conceptApp?.workflows || []).some((w) => w.id === id);
 
-test('2080 Ti: menu shows GPU, VRAM, RAM and the auto profile; override persists and switches back', async () => {
-  const s = await startStack();
+test('menu has no GPU & memory section or profile setting (always Auto); an old saved choice is ignored', async () => {
+  const s = await startStack({ data: { 'memory-profile.json': { profile: 'large' } } });
   const p = await open(s);
   try {
     await p.click('details.menu > summary');
-    await p.waitForFunction(() => /2080 Ti/.test(document.querySelector('.memory-line')?.textContent || ''));
-    assert.equal(await p.textContent('.memory-line'), 'NVIDIA GeForce RTX 2080 Ti · 11.0 GB VRAM (3.9 GB free) · RAM 95.9 GB (58.6 GB free)');
-    assert.match(await p.textContent('.memory-profile-line'), /Under 12 GB VRAM .*\(auto-detected\)/);
+    await p.waitForTimeout(300);
+    assert.equal(await p.locator('.memory, .memory-select, #memory, #memory-mount').count(), 0);
+    assert.doesNotMatch(await p.textContent('.menu-pop'), /GPU & memory|Profile|Auto|Under 12 GB|16 GB\+|Refresh/);
+    assert.deepEqual(await p.$$eval('.menu-pop > *', (els) => els.map((e) => e.id || e.className)), ['btn-advanced', 'btn-import', 'field builder-model']);
+    assert.equal(await p.locator('.builder-model small, #builder-model-note').count(), 0, 'builder model is a plain picker');
     await p.screenshot({ path: path.join(SHOTS, 'memory-menu.png') });
-    await p.selectOption('.memory-select', 'large');
-    await p.waitForFunction(() => /chosen here/.test(document.querySelector('.memory-profile-line').textContent));
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(s.dataDir, 'memory-profile.json'), 'utf8')), { profile: 'large' });
-    await p.selectOption('.memory-select', 'auto');
-    await p.waitForFunction(() => /auto-detected/.test(document.querySelector('.memory-profile-line').textContent));
+    const m = await (await fetch(s.base + '/api/memory')).json();
+    assert.deepEqual([m.profile.id, m.profile.source], ['small', 'auto'], '2080 Ti -> small, the stale "large" is ignored');
   } finally { await p.close(); await s.close(); }
 });
 
@@ -55,8 +54,9 @@ test('5080: chat model stays loaded through a batch; 12B listed; partial-offload
   try {
     await p.click('#chat > summary');
     await p.waitForFunction(() => document.querySelector('.chat-model')?.options.length === 4);
+    await p.waitForFunction(() => [...document.querySelector('.chat-model').options].some((o) => o.disabled)); // fit is filled in after the list
     const opts = await p.$$eval('.chat-model option', (o) => o.map((x) => [x.value, x.textContent, x.disabled]));
-    assert.deepEqual(opts.find((o) => o[0] === 'gemma3:12b'), ['gemma3:12b', 'gemma3:12b - slower, partly in RAM', false]);
+    assert.deepEqual(opts.find((o) => o[0] === 'gemma3:12b'), ['gemma3:12b', 'gemma3:12b', false]);
     assert.deepEqual(opts.find((o) => o[0] === 'huge:70b'), ['huge:70b', "huge:70b - won't fit", true]);
     await p.selectOption('.chat-model', 'gemma3:4b');
     await p.fill('.chat-input', 'a purple duck'); await p.click('.chat-send');

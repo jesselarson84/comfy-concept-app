@@ -11,10 +11,6 @@ import { vramFit } from '../app/js/lib/presets.js';
 import { stripPraise, proposalTense, firstJsonObject } from '../app/js/lib/chat-reply.js';
 
 export const DEFAULT_BUILDER_MODEL = 'gemma3:4b';
-// After the RTX 5080 (16 GB) swap: a 12-14B model follows the block schema far
-// more reliably. gemma3:12b (~8.1 GB Q4_K_M) leaves room for ComfyUI's text
-// encoders; qwen3:14b (~9.3 GB) is the stronger planner if VRAM allows.
-export const RECOMMENDED_BUILDER_MODEL = { model: 'gemma3:12b', alt: 'qwen3:14b', when: 'after the RTX 5080 16 GB swap' };
 
 export function createBuilder({ cfg, comfyInfo, presets, memory, hardware, fetchImpl = fetch }) {
   const file = path.join(cfg.dataDir, 'builder.json');
@@ -26,7 +22,7 @@ export function createBuilder({ cfg, comfyInfo, presets, memory, hardware, fetch
     fs.writeFileSync(file + '.tmp', JSON.stringify({ model: v }, null, 2)); fs.renameSync(file + '.tmp', file);
     return config();
   }
-  const config = () => ({ model: model(), default: cfg.builderModel || DEFAULT_BUILDER_MODEL, recommended: RECOMMENDED_BUILDER_MODEL });
+  const config = () => ({ model: model(), default: cfg.builderModel || DEFAULT_BUILDER_MODEL });
 
   async function context() {
     const info = presets.withFs(await comfyInfo.get());
@@ -52,7 +48,6 @@ export function createBuilder({ cfg, comfyInfo, presets, memory, hardware, fetch
     const fit = vramFit({ estMB: r.estMB, gpuTotalMB: hw.gpu?.totalMB, ramFreeMB: hw.ram?.freeMB, profileId });
     r.vram = fit;
     if (fit.status === 'unavailable') return { ...r, ok: false, stage: 'memory', errors: [`Not enough memory: ${fit.reason}.`] };
-    if (fit.status === 'offload') r.notes = [...r.notes, `Slow on this GPU: ${fit.reason}.`];
     if (test) { const t = testRunGraph(r.graph); r.graph = t.graph; r.notes = [...r.notes, ...t.notes]; r.test = true; }
     return r;
   }

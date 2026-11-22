@@ -27,3 +27,6 @@ export function importWorkflow(file) {
 export const getHistory = (favoritesOnly) => req('GET', '/api/history' + (favoritesOnly ? '?favorites=1' : '')).then((d) => d.sessions);
 export const addHistory = (entry) => req('POST', '/api/history', entry);
 export const patchHistory = (id, patch) => req('PATCH', `/api/history/${encodeURIComponent(id)}`, patch);
+// The app's results on the PC ("From Comfy UI") and Save to Drive.
+export const getOutputs = ({ kind, offset = 0, limit = 60 } = {}) => req('GET', `/api/outputs?${new URLSearchParams({ ...(kind ? { kind } : {}), offset, limit })}`);
+export const saveToDrive = (f, kind) => req('POST', '/api/drive/save', { filename: f.filename, subfolder: f.subfolder || '', type: f.type || 'output', ...(kind ? { kind } : {}) });

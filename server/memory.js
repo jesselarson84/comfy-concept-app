@@ -2,7 +2,10 @@
 // live numbers: detected VRAM/RAM (hardware.js), Ollama's /api/ps and /api/tags.
 //
 //   status()            hardware + active profile + chat models with a fit note
-//   setSetting(id)      the app's override ('auto' | profile id) -> data/memory-profile.json
+//
+// The profile is ALWAYS chosen automatically from the detected total VRAM.
+// There is no override any more: an old data/memory-profile.json, a "profile"
+// in config/memory-profiles.json and MEMORY_PROFILE are all ignored.
 //   beforeQueue(wf)     unload Ollama or keep it, per profile and free VRAM
 //   beforeChat(model)   refuse models that would swap; maybe ComfyUI /free first
 //   freeForChat()       the out-of-memory fallback: ComfyUI /free (API call, ComfyUI keeps running)
@@ -20,16 +23,14 @@ export function loadMemoryConfig(file) {
   return normalizeMemoryConfig(raw);
 }
 
-export function createMemory({ cfg, hardware, ollama, getComfyUrl, env = process.env }) {
+export function createMemory({ cfg, hardware, ollama, getComfyUrl }) {
   const file = cfg.memoryProfilesFile;
-  const settingFile = path.join(cfg.dataDir, 'memory-profile.json');
   let cached = { mtime: -1, value: null };
   const config = () => {
     let m = 0; try { m = fs.statSync(file).mtimeMs; } catch {}
     if (m !== cached.mtime || !cached.value) cached = { mtime: m, value: loadMemoryConfig(file) };
     return cached.value;
   };
-  const setting = () => { try { return JSON.parse(fs.readFileSync(settingFile, 'utf8')).profile; } catch { return undefined; } };
   const getJson = async (p, opts = {}) => {
     const r = await fetch(cfg.ollamaUrl + p, { ...opts, signal: AbortSignal.timeout(4000) });
     if (!r.ok) throw new Error(`Ollama ${p} ${r.status}`);
@@ -40,7 +41,7 @@ export function createMemory({ cfg, hardware, ollama, getComfyUrl, env = process
   async function active({ fresh = false } = {}) {
     const { config: c, warnings } = config();
     const hw = await hardware.detect({ fresh });
-    const sel = selectProfile(hw.gpu?.totalMB, c, { env: env.MEMORY_PROFILE, setting: setting() });
+    const sel = selectProfile(hw.gpu?.totalMB, { ...c, profile: 'auto' });
     return { c, hw, sel, warnings: [...warnings, ...sel.warnings] };
   }
 
@@ -58,21 +59,11 @@ export function createMemory({ cfg, hardware, ollama, getComfyUrl, env = process
     return {
       hardware: hw,
       profile: { ...sel.profile, source: sel.source },
-      setting: setting() || 'auto', env: env.MEMORY_PROFILE || null, configProfile: c.profile,
       profiles: c.profiles.map((p) => ({ id: p.id, label: p.label, minVramMB: p.minVramMB })),
       headroomMB: c.headroomMB, workflowVramNeedMB: c.workflowVramNeedMB,
       ollama: { reachable: loaded !== null, loaded: (loaded || []).map((m) => ({ name: m.name, size: m.size, size_vram: m.size_vram, badge: offloadBadge(m) })) },
       models, warnings,
     };
-  }
-
-  function setSetting(id) {
-    const { config: c } = config();
-    if (id !== 'auto' && !c.profiles.some((p) => p.id === id)) throw Object.assign(new Error(`Unknown profile "${id}"`), { status: 400 });
-    fs.mkdirSync(cfg.dataDir, { recursive: true });
-    const tmp = settingFile + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify({ profile: id }, null, 2));
-    fs.renameSync(tmp, settingFile);
   }
 
   let lastWorkflow = null;
@@ -116,5 +107,5 @@ export function createMemory({ cfg, hardware, ollama, getComfyUrl, env = process
     const { sel } = await active();
     return comfyFree(sel.profile.comfyFree);
   }
-  return { status, setSetting, beforeQueue, beforeChat, freeForChat, config };
+  return { status, beforeQueue, beforeChat, freeForChat, config };
 }

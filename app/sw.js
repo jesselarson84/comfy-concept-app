@@ -1,8 +1,10 @@
 // sw.js - service worker. Caches ONLY the app shell (HTML/CSS/JS/icons) so the
 // app opens instantly and installs as a PWA. Images, /api, /comfy, /ollama and /share
-// always go to the network (never cached) - they live on the PC.
+// always go to the network (never cached) - they live on the PC. The vendored
+// three.js (/vendor/, only used by the 3D viewer) is cached the first time it
+// is fetched, so the 3D viewer also opens without a network round trip later.
 // Bump VERSION when you change app files so phones pick up the new shell.
-const VERSION = 'shell-v10';
+const VERSION = 'shell-v13';
 const SHELL = [
   '/', '/index.html', '/styles.css', '/icons.css', '/fonts/inter-latin-normal.woff2', '/manifest.webmanifest',
   '/js/main.js', '/js/api.js', '/js/comfy-client.js', '/js/job-queue.js',
@@ -11,7 +13,8 @@ const SHELL = [
   '/js/lib/chat-reply.js', '/js/lib/chat-context.js', '/js/lib/prompt-diff.js', '/js/lib/actions.js',
   '/js/lib/presets.js', '/js/lib/builder.js', '/js/lib/outputs.js', '/js/lib/legacy-presets.js', '/js/lib/preset-choice.js',
   '/js/ui/workflow-picker.js', '/js/ui/file-inputs.js',
-  '/js/ui/chat-panel.js', '/js/ui/memory-panel.js', '/js/ui/prompt-versions.js',
+  '/js/ui/chat-panel.js', '/js/ui/prompt-versions.js',
+  '/js/ui/overlay.js', '/js/ui/model-viewer.js', '/js/ui/audio-player.js', '/js/ui/video-player.js', '/js/ui/file-sheet.js', '/js/ui/output-picker.js', '/js/ui/preset-chooser.js',
   '/js/ui/dom.js', '/js/ui/prompt-panel.js', '/js/ui/reference.js', '/js/ui/thumbs.js', '/js/ui/viewer.js', '/js/ui/history-view.js',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png',
 ];
@@ -36,7 +39,7 @@ self.addEventListener('fetch', (e) => {
   }
   // Shell files: network first (fresh code while developing), cache fallback.
   e.respondWith(fetch(e.request).then((r) => {
-    if (r.ok && SHELL.includes(url.pathname)) { const copy = r.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); }
+    if (r.ok && (SHELL.includes(url.pathname) || url.pathname.startsWith('/vendor/'))) { const copy = r.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); }
     return r;
   }).catch(() => caches.match(e.request)));
 });

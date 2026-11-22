@@ -32,5 +32,5 @@ export function fileKind(f) {
   return VIDEO_EXT.test(n) ? 'video' : AUDIO_EXT.test(n) ? 'audio' : MODEL3D_EXT.test(n) ? '3d' : 'file';
 }
 
-/** Short tile label for a non-image result. */
-export function fileLabel(f) { return { '3d': '3D ↓', video: 'Video ↓', audio: 'Audio ↓' }[fileKind(f)] || 'File ↓'; }
+/** Short tile label for a non-image result (tapping it opens the 3D viewer / audio player). */
+export function fileLabel(f) { return { '3d': '3D', video: 'Video', audio: 'Audio' }[fileKind(f)] || 'File'; }

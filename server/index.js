@@ -11,8 +11,7 @@
 //   /ollama/*       -> allow-listed proxy to a local Ollama (Chat tab), see ollama.js
 //   /api/chats      GET list, POST create; /api/chats/:id GET, PUT/PATCH, DELETE
 //   /api/ollama/unload POST  unload Ollama models (keep_alive 0) now
-//   /api/memory     GET   detected GPU/RAM, active memory profile, chat model fit (?fresh=1)
-//   /api/memory/profile PUT {profile:'auto'|id}  the app's override (data/memory-profile.json)
+//   /api/memory     GET   detected GPU/RAM, memory profile (always auto, from VRAM), chat model fit (?fresh=1)
 //   /api/memory/before-queue POST {workflow}  unload Ollama if this profile/free VRAM says so
 //   /api/memory/before-chat  POST {model}     fit check; maybe ComfyUI /free first (small GPU)
 //   /api/memory/free-for-chat POST           OOM fallback: ComfyUI /free per profile
@@ -24,6 +23,8 @@
 //   /api/builder/check   POST {blocks, name, test}    re-validate (Test run gets the graph)
 //   /api/builder/config  GET / PUT {model}            builder model (data/builder.json)
 //   /api/user-presets    GET, POST {name, blocks}; /api/user-presets/:id PATCH {name}, DELETE
+//   /api/outputs    GET   ?kind=image&offset&limit  the app's results on the PC ("From Comfy UI"), see outputs.js
+//   /api/drive/save POST  {filename, subfolder, type, kind}  copy a result into Google Drive (drive.js)
 //   /scripts/* /extensions/* /assets/* -> ComfyUI too (custom-node extensions
 //                   that import from the ComfyUI root instead of /comfy/)
 // Binds 127.0.0.1 only. Remote access = `tailscale serve` in front of it.
@@ -52,6 +53,8 @@ import { vramFit } from '../app/js/lib/presets.js';
 import { splitOutputs } from '../app/js/lib/outputs.js';
 import { isLegacyPreset, migrateHistoryEntry } from '../app/js/lib/legacy-presets.js';
 import { defaultPreset } from '../app/js/lib/preset-choice.js';
+import { historyOutputs, comfyOutputDir, scanAppFolder, mergeOutputs } from './outputs.js';
+import { saveToDrive } from './drive.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
 
@@ -205,13 +208,27 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
     if (p === '/api/actions' && req.method === 'GET') return json(res, 200, { actions: actions.list() });
     if (p === '/api/ollama/unload' && req.method === 'POST') return json(res, 200, await ollama.unloadAll());
     if (p === '/api/memory' && req.method === 'GET') return json(res, 200, await memory.status({ fresh: url.searchParams.has('fresh') }));
-    if (p.startsWith('/api/memory/') && req.method === 'PUT' || req.method === 'POST' && p.startsWith('/api/memory/')) {
+    // The memory profile is always picked automatically from the detected VRAM (no override route).
+    if (req.method === 'POST' && p.startsWith('/api/memory/')) {
       let body = {};
       try { const t = (await readBody(req, 64 * 1024)).toString('utf8'); body = t ? JSON.parse(t) : {}; } catch { return json(res, 400, { error: 'Bad JSON' }); }
-      if (p === '/api/memory/profile' && req.method === 'PUT') { memory.setSetting(String(body.profile || 'auto')); return json(res, 200, await memory.status()); }
       if (p === '/api/memory/before-queue') { const id = String(body.workflow || 'default'); return json(res, 200, await memory.beforeQueue(id, { estMB: await estMBFor(id) })); }
       if (p === '/api/memory/before-chat') return json(res, 200, await memory.beforeChat(String(body.model || '')));
       if (p === '/api/memory/free-for-chat') return json(res, 200, await memory.freeForChat());
+    }
+    // ---- the app's results: "From Comfy UI" grid + Save to Drive ----
+    if (p === '/api/outputs' && req.method === 'GET') {
+      const kind = url.searchParams.get('kind') || undefined;
+      const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+      const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 120));
+      const dir = await comfyOutputDir(cfg);
+      return json(res, 200, { ...mergeOutputs([historyOutputs(history), scanAppFolder(dir, cfg.outputSubfolder)], { kind, offset, limit }), scanned: !!dir });
+    }
+    if (p === '/api/drive/save' && req.method === 'POST') {
+      let body;
+      try { body = JSON.parse((await readBody(req, 64 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
+      const historyFiles = new Set(historyOutputs(history).map((f) => `${f.subfolder}/${f.filename}`));
+      try { return json(res, 200, await saveToDrive(body, { driveDir: cfg.driveDir, comfyUrl: cfg.comfyUrl, outputSubfolder: cfg.outputSubfolder, historyFiles })); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     if (p === '/api/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });

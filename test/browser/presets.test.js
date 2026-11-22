@@ -71,9 +71,14 @@ test('header says Comfy UI; Run button is the only blue element; picker has 3D /
   assert.deepEqual(sections, ['3D', 'Image', 'Video', 'Audio'], 'no App presets section');
   assert.doesNotMatch(await page.textContent('#picker'), /App presets|Fast concept|From reference image/);
   const wan = page.locator('#picker .ent[data-preset="ai:wan22-5b-ti2v"]');
-  assert.match(await wan.textContent(), /needs download/);
+  // Rows show only the name: no tags, no header note; unavailable rows are grayed out.
+  assert.equal((await wan.textContent()).trim(), 'Wan 2.2 5B Text/Image to Video');
   assert.equal(await wan.getAttribute('aria-disabled'), 'true');
-  assert.match(await page.locator('#picker .ent[data-preset="ai:qwen-2512-t2i"]').textContent(), /slow · RAM offload/);
+  assert.ok(await wan.evaluate((e) => e.classList.contains('dis') && Number(getComputedStyle(e).opacity) < 1));
+  assert.equal((await page.locator('#picker .ent[data-preset="ai:qwen-2512-t2i"]').textContent()).trim(), 'Qwen 2512 Text to Image');
+  assert.equal(await page.locator('#picker .tg').count(), 0);
+  assert.equal((await page.textContent('#picker .mt')).trim(), 'AI Workflow');
+  assert.doesNotMatch(await page.textContent('#picker'), /tight on|RAM offload|needs download|same list/);
   await page.screenshot({ path: path.join(SHOTS, 'b1-picker.png') });
   await wan.click({ force: true }); // aria-disabled: Playwright would wait forever
   await page.waitForFunction(() => /needs download/.test(document.getElementById('toast')?.textContent || ''));
@@ -85,8 +90,10 @@ test('AI preset: params shown with ranges; out-of-range values are clamped befor
   await pick('ai:klein-4b-t2i');
   assert.match(await page.textContent('#preset-name'), /FLUX\.2 Klein 4B Text to Image/);
   assert.match(await page.textContent('#preset-crumb'), /Image/);
-  await page.click('#more > summary');
-  const steps = page.locator('#params [data-param="steps"]');
+  // Steps sits next to Batch and Seed (no More settings collapsible).
+  assert.equal(await page.locator('#more').count(), 0);
+  const steps = page.locator('#steps[data-param="steps"]');
+  assert.equal(await steps.isVisible(), true);
   await steps.fill('99');
   await page.selectOption('#aspect-ratio', '16:9');
   await page.click('#aspect-field .seg [data-orient="portrait"]');
@@ -105,7 +112,7 @@ test('AI preset: params shown with ranges; out-of-range values are clamped befor
   assert.equal(it.meta.params.steps, 30);
 });
 
-test('TTS preset (Chatterbox): text goes to the TTS node, the result is an "Audio ↓" tile', async () => {
+test('TTS preset (Chatterbox): text goes to the TTS node, the result is an "Audio" tile', async () => {
   await pick('ai:tts-chatterbox');
   await page.fill('#prompt', 'Testing one two three.');
   const it = await runAndWait();
@@ -113,7 +120,7 @@ test('TTS preset (Chatterbox): text goes to the TTS node, the result is an "Audi
   const tts = Object.values(g).find((n) => n.class_type === 'ChatterboxTTS');
   assert.equal(tts.inputs.text, 'Testing one two three.');
   assert.equal(tts.inputs.model_pack_name, 'chatterbox');
-  assert.match(await page.locator('#thumbs .thumb').last().textContent(), /Audio ↓/);
+  assert.match(await page.locator('#thumbs .thumb').last().textContent(), /Audio/);
   await page.screenshot({ path: path.join(SHOTS, 'b1-tts.png') });
 });
 

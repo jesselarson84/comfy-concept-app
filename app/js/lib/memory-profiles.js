@@ -80,7 +80,9 @@ export function normalizeMemoryConfig(raw) {
 }
 
 /**
- * Active profile. Precedence: env MEMORY_PROFILE > app setting > config "profile" > auto.
+ * Active profile. The server always calls this with profile 'auto' and no
+ * overrides (server/memory.js): the profile follows the detected VRAM.
+ * (Precedence when overrides are passed: env > setting > config "profile" > auto.)
  * "auto" (or an unknown id, with a warning) falls through to the next level.
  * Auto = the profile with the highest minVramMB <= total VRAM; unknown VRAM -> the smallest (safest).
  */

@@ -35,27 +35,27 @@ export const BLOCK_INFO = {
 // Image model families. Files are checked live against /object_info before use.
 export const FAMILIES = {
   'flux2-klein': {
-    label: 'FLUX.2 Klein 4B (4 steps)', estMB: 9000, steps: [2, 8, 4], sampler: 'custom', img2img: false, controlnet: null,
+    label: 'FLUX.2 Klein 4B (4 steps)', name: 'FLUX.2 Klein 4B', estMB: 9000, steps: [2, 8, 4], sampler: 'custom', img2img: false, controlnet: null,
     lora: /klein|flux[-_.]?2/i,
     loaders: { unet: ['UNETLoader', { unet_name: 'flux-2-klein-4b.safetensors', weight_dtype: 'default' }], clip: ['CLIPLoader', { clip_name: 'qwen_3_4b.safetensors', type: 'flux2', device: 'default' }], vae: ['VAELoader', { vae_name: 'flux2-vae.safetensors' }] },
   },
   'flux1-schnell': {
-    label: 'FLUX.1 schnell (GGUF, 4 steps)', estMB: 9600, steps: [1, 8, 4], sampler: 'ksampler', ks: { sampler_name: 'euler', scheduler: 'simple' }, img2img: true, controlnet: null,
+    label: 'FLUX.1 schnell (GGUF, 4 steps)', name: 'FLUX.1 schnell (GGUF)', estMB: 9600, steps: [1, 8, 4], sampler: 'ksampler', ks: { sampler_name: 'euler', scheduler: 'simple' }, img2img: true, controlnet: null,
     lora: /flux[-_.]?(1|dev|schnell)|flux-dev/i,
     loaders: { unet: ['UnetLoaderGGUF', { unet_name: 'flux1-schnell-Q5_K_S.gguf' }], clip: ['DualCLIPLoader', { clip_name1: 't5xxl_fp8_e4m3fn.safetensors', clip_name2: 'clip_l.safetensors', type: 'flux', device: 'default' }], vae: ['VAELoader', { vae_name: 'ae.safetensors' }] },
   },
   'flux1-dev': {
-    label: 'FLUX.1 dev (GGUF, 20 steps, non-commercial)', estMB: 9600, steps: [8, 30, 20], sampler: 'ksampler', ks: { sampler_name: 'euler', scheduler: 'simple' }, guidance: 3.5, img2img: true, controlnet: null,
+    label: 'FLUX.1 dev (GGUF, 20 steps, non-commercial)', name: 'FLUX.1 dev (GGUF, non-commercial)', estMB: 9600, steps: [8, 30, 20], sampler: 'ksampler', ks: { sampler_name: 'euler', scheduler: 'simple' }, guidance: 3.5, img2img: true, controlnet: null,
     lora: /flux[-_.]?(1|dev)|flux-dev/i,
     loaders: { unet: ['UnetLoaderGGUF', { unet_name: 'flux1-dev-Q5_K_S.gguf' }], clip: ['DualCLIPLoader', { clip_name1: 't5xxl_fp8_e4m3fn.safetensors', clip_name2: 'clip_l.safetensors', type: 'flux', device: 'default' }], vae: ['VAELoader', { vae_name: 'ae.safetensors' }] },
   },
   'z-image-turbo': {
-    label: 'Z-Image Turbo (8 steps)', estMB: 13800, steps: [4, 12, 8], sampler: 'ksampler', ks: { sampler_name: 'res_multistep', scheduler: 'simple' }, shift: 3, img2img: true, controlnet: null,
+    label: 'Z-Image Turbo (8 steps)', name: 'Z-Image Turbo', estMB: 13800, steps: [4, 12, 8], sampler: 'ksampler', ks: { sampler_name: 'res_multistep', scheduler: 'simple' }, shift: 3, img2img: true, controlnet: null,
     lora: /z[-_.]?image/i,
     loaders: { unet: ['UNETLoader', { unet_name: 'z_image_turbo_bf16.safetensors', weight_dtype: 'default' }], clip: ['CLIPLoader', { clip_name: 'qwen_3_4b.safetensors', type: 'lumina2', device: 'default' }], vae: ['VAELoader', { vae_name: 'ae.safetensors' }] },
   },
   'qwen-image': {
-    label: 'Qwen-Image 2512 (fp8 + Lightning 4 steps, heavy)', estMB: 21500, steps: [2, 8, 4], sampler: 'ksampler', ks: { sampler_name: 'euler', scheduler: 'simple' }, shift: 3.1, img2img: true, realNegative: true,
+    label: 'Qwen-Image 2512 (fp8 + Lightning 4 steps, heavy)', name: 'Qwen-Image 2512 (fp8 + Lightning)', estMB: 21500, steps: [2, 8, 4], sampler: 'ksampler', ks: { sampler_name: 'euler', scheduler: 'simple' }, shift: 3.1, img2img: true, realNegative: true,
     controlnet: /qwen/i, lora: /qwen/i,
     builtinLora: { lora_name: 'Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors', strength_model: 1 },
     loaders: { unet: ['UNETLoader', { unet_name: 'qwen_image_2512_fp8_e4m3fn.safetensors', weight_dtype: 'default' }], clip: ['CLIPLoader', { clip_name: 'qwen_2.5_vl_7b_fp8_scaled.safetensors', type: 'qwen_image', device: 'default' }], vae: ['VAELoader', { vae_name: 'qwen_image_vae.safetensors' }] },
@@ -423,7 +423,9 @@ export function summarize(blocks) {
     const p = b.params;
     switch (b.type) {
       case 'input_image': L.push('Use a picture you pick'); break;
-      case 'load_model': L.push(`Model: ${FAMILIES[p.family].label}`); break;
+      // The model line carries no step count: the sampler line below shows the
+      // steps actually used (after clamping), so the card matches its clamp note.
+      case 'load_model': L.push(`Model: ${FAMILIES[p.family].name || FAMILIES[p.family].label}`); break;
       case 'lora': L.push(`LoRA ${p.name.replace(/\.\w+$/, '')} at ${p.strength}`); break;
       case 'controlnet': L.push(`ControlNet ${p.name.replace(/\.\w+$/, '')} at ${p.strength} (layout from your picture)`); break;
       case 'txt2img': L.push(`Text to image, ${p.width}×${p.height}, ${p.steps} steps`); break;

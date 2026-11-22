@@ -73,7 +73,7 @@ export class ChatPanel {
       h('button.btn', { type: 'button', onclick: () => this.refresh() }, 'Retry'));
     this.log = h('div.chat-log', { 'aria-live': 'polite' });
     this.attach = h('div.chat-attach', { hidden: true });
-    this.input = h('textarea.chat-input', { rows: 2, placeholder: 'Describe an idea, or tell it what to change…', enterkeyhint: 'send' });
+    this.input = h('textarea.chat-input', { rows: 2, placeholder: 'Describe an idea…', enterkeyhint: 'send' });
     this.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.send(); } });
     this.sendBtn = h('button.btn.icon.chat-send', { type: 'button', 'aria-label': 'Send', title: 'Send', onclick: () => this.send() }, h('i.i.i-arrow-up'));
     this.stopBtn = h('button.btn.danger.chat-stop', { type: 'button', hidden: true, onclick: () => this.busy?.abort() }, 'Stop');
@@ -105,13 +105,13 @@ export class ChatPanel {
       this.online = true;
       this.offline.hidden = true;
       this.modelSel.replaceChildren(...this.models.map((m) => new Option(m.name, m.name)));
-      if (!this.models.length) { this.#setOffline('Ollama is running but has no models. Pull one (e.g. gemma3:4b) on the PC.'); return; }
+      if (!this.models.length) { this.#setOffline('Ollama has no models.'); return; }
       await this.#fitModels();
       const usable = this.models.filter((m) => !m.unusable);
       await this.#pickModel(usable.some((m) => m.name === this.model) ? this.model : (usable[0] || this.models[0]).name);
     } catch (e) {
       this.online = false;
-      this.#setOffline(e instanceof ollama.OllamaOffline ? 'Start Ollama on the PC (it listens on 127.0.0.1:11434), then tap Retry.' : e.message);
+      this.#setOffline(e instanceof ollama.OllamaOffline ? 'Not running on the PC (127.0.0.1:11434).' : e.message);
     }
     try { this.actions = ((await jreq('GET', '/api/actions')).actions || []).filter((a) => a.ok); } catch { this.actions = []; }
     this.#paintState();
@@ -127,7 +127,7 @@ export class ChatPanel {
       m.fit = f; m.unusable = f.fit === 'no-fit' || f.fit === 'too-big';
       const opt = [...this.modelSel.options].find((o) => o.value === m.name);
       if (!opt) continue;
-      opt.textContent = m.name + (f.fit === 'partial' ? ' - slower, partly in RAM' : m.unusable ? " - won't fit" : '');
+      opt.textContent = m.name + (m.unusable ? " - won't fit" : '');
       opt.title = f.message; opt.disabled = m.unusable;
     }
     this.#paintBadge(s);
@@ -217,7 +217,7 @@ export class ChatPanel {
     this.pending = ref; this.lastRef = ref;
     this.open();
     this.#paintAttach();
-    this.input.placeholder = 'What should change? e.g. "looks like a swan, not a duck"';
+    this.input.placeholder = 'What should change?';
     this.root.scrollIntoView({ block: 'nearest' });
     setTimeout(() => this.input.focus(), 50);
   }
@@ -255,12 +255,12 @@ export class ChatPanel {
     });
     this.messages.push(userMsg);
     this.input.value = ''; this.pending = null; this.#paintAttach();
-    this.input.placeholder = 'Describe an idea, or tell it what to change…';
+    this.input.placeholder = 'Describe an idea…';
     this.render();
     const ctrl = new AbortController();
     this.busy = ctrl; this.#paintState();
     const warm = await ollama.isLoaded(this.model);
-    const thinking = this.#thinking(warm ? 'Thinking…' : `Warming up ${this.model}… the first reply after a while can take 30-40 s while it loads into memory.${prep?.freed?.ok ? ' (ComfyUI freed GPU memory for it.)' : ''}${prep?.fit === 'partial' ? ' It runs partly in RAM, so it is slower.' : ''}`);
+    const thinking = this.#thinking(warm ? 'Thinking…' : `Loading ${this.model}…`);
     const req = { model: this.model, messages, format: replySchema(this.actions), options: { temperature: 0.4 }, keep_alive: prep?.keepAlive, signal: ctrl.signal, onChunk: (s) => thinking(`Writing… ${s.length} chars`) };
     let res;
     try {
@@ -276,7 +276,7 @@ export class ChatPanel {
       thinking(null);
       this.busy = null; this.#paintState();
       if (ctrl.signal.aborted) { this.#note('Stopped.'); return; }
-      if (e instanceof ollama.OllamaOffline) { this.online = false; this.#setOffline('Ollama stopped answering. Start it on the PC, then tap Retry.'); }
+      if (e instanceof ollama.OllamaOffline) { this.online = false; this.#setOffline('Ollama stopped answering.'); }
       this.#note('Error: ' + e.message);
       return;
     }
@@ -313,7 +313,6 @@ export class ChatPanel {
   // ---- rendering ------------------------------------------------------------
   render() {
     const els = this.messages.map((m, i) => (m.role === 'user' ? this.#userEl(m) : this.#assistantEl(m, i)));
-    if (!els.length) els.push(h('p.chat-empty.muted', {}, 'Ask for ideas or a prompt, or open an image and tap Discuss to fix what it got wrong. Proposed prompts appear with a diff and an Apply button.'));
     this.log.replaceChildren(...els);
     this.log.scrollTop = this.log.scrollHeight;
   }
@@ -331,7 +330,7 @@ export class ChatPanel {
     if (m.builder) box.append(this._builderEl(m));
     // Small models sometimes say "I revised the prompt" but send it back unchanged (seen live).
     if (!m.prompt && !m.negative && !m.action && /\b(?:revised|adjusted|updated|changed|added|modified|rewrote|replaced|removed)\b/i.test(m.content || '')) {
-      box.append(h('div.chat-note.muted.chat-unchanged', {}, 'The model sent the prompt back unchanged, so the prompt box was not touched. Ask again, or say exactly what to change.'));
+      box.append(h('div.chat-note.muted.chat-unchanged', {}, 'The model sent the prompt back unchanged, so the prompt box was not touched.'));
     }
     return box;
   }
@@ -353,9 +352,9 @@ export class ChatPanel {
       : [
         h('button.btn.primary', { type: 'button', onclick: () => this.apply(m) }, 'Apply'),
         h('button.btn', { type: 'button', onclick: () => this.apply(m, { generate: true }) }, 'Apply + Run (new seed)'),
-        seed !== undefined && seed !== null ? h('button.btn', { type: 'button', title: 'Re-run the discussed image\'s seed so only the prompt change shows', onclick: () => this.apply(m, { generate: true, seed }) }, `Apply + same seed ${seed}`) : null,
+        seed !== undefined && seed !== null ? h('button.btn', { type: 'button',  onclick: () => this.apply(m, { generate: true, seed }) }, `Apply + same seed ${seed}`) : null,
       ];
-    return h('div.chat-proposal', {}, h('div.label', {}, m.applied ? 'Prompt (applied)' : 'Proposed prompt - changes vs the box'), diff,
+    return h('div.chat-proposal', {}, h('div.label', {}, m.applied ? 'Prompt (applied)' : 'Proposed prompt'), diff,
       m.negative ? h('div.chat-neg', {}, h('span.label', {}, 'Negative '), m.negative) : null,
       h('div.chat-buttons', {}, buttons));
   }
@@ -365,7 +364,7 @@ export class ChatPanel {
     m.applied = true;
     this.render(); this.save();
     if (generate) this.onGenerate({ seed });
-    else toast('Prompt updated (Undo is under the prompt box)');
+    else toast('Prompt updated');
   }
 
   #actionEl(m, userText) {
@@ -399,7 +398,7 @@ Object.assign(ChatPanel.prototype, {
     this.render();
     const ctrl = { abort: () => {} };
     this.busy = ctrl; this._paint();
-    const el = h('div.chat-msg.assistant.chat-thinking', {}, 'Planning a setup… (the builder model only picks tested blocks; the app checks them against ComfyUI)');
+    const el = h('div.chat-msg.assistant.chat-thinking', {}, 'Planning a setup…');
     this.log.append(el); this.log.scrollTop = this.log.scrollHeight;
     let r;
     try { r = await api.proposeSetup({ text: text.replace(/^\/build\s*/i, ''), history }); } catch (e) { r = { ok: false, errors: [e.message], reply: '' }; }
@@ -439,12 +438,11 @@ Object.assign(ChatPanel.prototype, {
         h('button.btn.out', { type: 'button', onclick: () => this._testRun(m) }, h('i.i.i-play'), 'Test run'),
         h('button.btn.out', { type: 'button', onclick: () => this._saveSetup(m) }, h('i.i.i-save'), 'Save as preset'),
         h('button.btn.ghost', { type: 'button', onclick: () => { b.state = 'discarded'; this.render(); this.save(); } }, h('i.i.i-x'), 'Discard')));
-      card.append(h('div.fine', {}, 'Test run makes one result at reduced size. It is not saved as a preset until you tap Save.'));
     } else if (b.ok && b.state === 'tested') {
       card.append(h('div.acts', {},
         h('button.btn.out', { type: 'button', onclick: () => this._saveSetup(m) }, h('i.i.i-save'), 'Save as preset'),
         h('button.btn.ghost', { type: 'button', onclick: () => { b.state = 'discarded'; this.render(); this.save(); } }, h('i.i.i-x'), 'Discard')));
-    } else if (b.state === 'saved') card.append(h('div.fine', {}, 'Saved under My presets (rename or delete it in the picker).'));
+    } else if (b.state === 'saved') card.append(h('div.fine', {}, 'Saved under My presets.'));
     return card;
   },
 
