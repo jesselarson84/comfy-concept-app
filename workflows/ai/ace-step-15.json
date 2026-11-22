@@ -49,6 +49,7 @@
     "input": "keyscale",
     "type": "enum",
     "options": [
+     "auto",
      "C major",
      "C minor",
      "C# major",
@@ -74,9 +75,13 @@
      "B major",
      "B minor"
     ],
-    "default": "C major",
+    "default": "auto",
     "label": "Key",
-    "control": "select"
+    "control": "select",
+    "auto": "key",
+    "labels": {
+     "auto": "Auto"
+    }
    },
    "time": {
     "node": "94",

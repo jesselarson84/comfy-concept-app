@@ -26,6 +26,10 @@
     "labels": {
      "VibeVoice-1.5B": "VibeVoice 1.5B",
      "VibeVoice-7B": "VibeVoice 7B"
+    },
+    "installed": {
+     "fsFolder": "tts",
+     "dir": "VibeVoice/{v}"
     }
    },
    "quant4": {

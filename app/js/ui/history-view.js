@@ -2,14 +2,17 @@
 // on the PC, so it is the same on phone and tablet), grouped by session.
 // Batch 3:
 //   - Multi-select like Google Photos: long-press a tile to start, then tap to
-//     add/remove; each date group has a select-all circle. The top bar turns
-//     into  X · count · share · + (Favorites or a folder) · trash.
+//     add/remove; round check circles top-left on every tile; each date header
+//     has a select-all circle on its right. The top bar turns into
+//     X · count · share · + (Favorites or a folder) · trash · ⋮ (Select all,
+//     Remove from this folder / from Favorites).
+//   - Tiles are grouped by day (Today, Yesterday, Sat, Jun 20).
 //   - Trash deletes the files from the PC after a confirm (server checks every
 //     file is inside ComfyUI's output/concept-app folder).
 //   - Folders screen: cover, name and count; Favorites first. Folders are labels.
 //   - 3D tiles get real preview stills (ui/model-thumbs.js), rendered lazily.
 import { h, toast } from './dom.js';
-import { getHistory, deleteHistory, getFolders, createFolder, addToFolder, patchHistory } from '../api.js';
+import { getHistory, deleteHistory, getFolders, createFolder, addToFolder, removeFromFolder, patchHistory } from '../api.js';
 import { viewUrl } from '../comfy-client.js';
 import { deleteThumb, thumbKey } from '../lib/thumb-cache.js';
 import { fileLabel } from '../lib/outputs.js';
@@ -36,9 +39,10 @@ export class HistoryView {
     this.selBar = h('div.history-top.sel-bar', { hidden: true },
       h('button.icon-btn', { type: 'button', 'aria-label': 'Cancel selection', dataset: { act: 'cancel-sel' }, onclick: () => this.endSelect() }, '✕'),
       this.count, h('span.spacer'),
-      h('button.btn.icon', { type: 'button', 'aria-label': 'Share', dataset: { act: 'share' }, onclick: () => this.share() }, h('i.i.i-arrow-up')),
-      h('button.btn.icon', { type: 'button', 'aria-label': 'Add to', dataset: { act: 'add' }, onclick: () => this.openAddTo() }, h('i.i.i-plus')),
-      h('button.btn.icon', { type: 'button', 'aria-label': 'Delete', dataset: { act: 'delete' }, onclick: () => this.confirmDelete() }, h('i.i.i-trash-2')));
+      h('button.icon-btn', { type: 'button', 'aria-label': 'Share', dataset: { act: 'share' }, onclick: () => this.share() }, h('i.i.i-share-2')),
+      h('button.icon-btn', { type: 'button', 'aria-label': 'Add to', dataset: { act: 'add' }, onclick: () => this.openAddTo() }, h('i.i.i-plus')),
+      h('button.icon-btn', { type: 'button', 'aria-label': 'Delete', dataset: { act: 'delete' }, onclick: () => this.confirmDelete() }, h('i.i.i-trash-2')),
+      h('button.icon-btn', { type: 'button', 'aria-label': 'More', dataset: { act: 'more' }, onclick: (e) => this.openMore(e.currentTarget) }, h('i.i.i-more-vertical')));
     this.root = h('div.history', { hidden: true, role: 'dialog' }, this.normalBar, this.selBar, this.list);
     document.body.append(this.root);
     this.folders = new FoldersScreen((f) => { this.folder = f; this.favOnly = f?.id === 'favorites'; if (this.favOnly) this.folder = null; this.favBtn.classList.toggle('on', this.favOnly); this.load(); });
@@ -72,7 +76,7 @@ export class HistoryView {
 
   endSelect(fromPop) {
     if (!this.selecting) return;
-    this.selecting = false; this.selected.clear();
+    this.selecting = false; this.selected.clear(); this.menu?.remove();
     if (!fromPop && history.state?.historySel) history.back();
     this.paintSelection();
   }
@@ -177,6 +181,28 @@ export class HistoryView {
     await this.load();
   }
 
+  /** ⋮ menu on the selection bar. */
+  openMore(anchor) {
+    this.menu?.remove();
+    const item = (act, label, fn) => h('button.sel-menu-item', { type: 'button', dataset: { act }, onclick: async () => { close(); await fn(); } }, label);
+    const items = [item('select-all', 'Select all', () => { for (const g of this.list.querySelectorAll('.history-session')) for (const id of JSON.parse(g.dataset.ids || '[]')) this.selected.add(id); this.paintSelection(); })];
+    if (this.folder) items.push(item('remove-folder', `Remove from ${this.folder.name}`, () => this.removeSelected(() => removeFromFolder(this.folder.id, [...this.selected]))));
+    else if (this.favOnly) items.push(item('remove-fav', 'Remove from Favorites', () => this.removeSelected(() => Promise.all([...this.selected].map((id) => patchHistory(id, { favorite: false }))))));
+    const scrim = h('div.sel-menu-scrim', { onclick: () => close() });
+    const menu = h('div.sel-menu', { role: 'menu' }, ...items);
+    const close = () => { scrim.remove(); menu.remove(); this.menu = null; };
+    const r = anchor.getBoundingClientRect();
+    menu.style.top = `${Math.round(r.bottom + 4)}px`; menu.style.right = `${Math.max(8, Math.round(window.innerWidth - r.right))}px`;
+    document.body.append(scrim, menu);
+    this.menu = { remove: close };
+  }
+
+  async removeSelected(fn) {
+    try { await fn(); } catch (e) { toast(e.message, 6000); return; }
+    this.endSelect();
+    await this.load();
+  }
+
   async openFolders() { await this.folders.open(); }
 
   // ---- list ----------------------------------------------------------------
@@ -188,7 +214,7 @@ export class HistoryView {
     this.entries = new Map(sessions.flatMap((s) => s.entries.map((e) => [e.id, e])));
     for (const id of [...this.selected]) if (!this.entries.has(id)) this.selected.delete(id);
     if (!sessions.length) { this.list.replaceChildren(h('p.muted', {}, this.folder ? 'Empty folder.' : this.favOnly ? 'No favorites yet.' : 'Nothing generated yet.')); this.paintSelection(); return; }
-    this.list.replaceChildren(...sessions.map((s) => {
+    this.list.replaceChildren(...byDay(sessions).map((s) => {
       // Turn history entries into the same item shape the viewer uses.
       const items = s.entries.filter((e) => e.images.length).map((e) => ({
         key: e.id, historyId: e.id, image: e.images[0], favorite: e.favorite, status: 'done',
@@ -197,7 +223,6 @@ export class HistoryView {
       // Non-image results (3D .glb, audio, video) open the 3D viewer / audio player / file sheet.
       const files = s.entries.filter((e) => !e.images.length && e.files?.length);
       const ids = [...items.map((i) => i.historyId), ...files.map((e) => e.id)];
-      const when = new Date(s.startedAt);
       const check = () => h('span.sel-check', { 'aria-hidden': 'true' }, h('i.i.i-check'));
       const tiles = [
         ...items.map((it, i) => {
@@ -218,13 +243,34 @@ export class HistoryView {
       ];
       return h('section.history-session', { dataset: { ids: JSON.stringify(ids) } },
         h('h3', {},
-          h('button.sel-all', { type: 'button', 'aria-label': 'Select all', onclick: () => this.toggleGroup(ids) }, h('i.i.i-check')),
-          h('span', {}, `${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`),
-          h('span.muted', {}, `  ${items.length} images${files.length ? `, ${files.length} files` : ''}`)),
+          h('span.day', {}, s.label),
+          h('button.sel-all', { type: 'button', 'aria-label': `Select all from ${s.label}`, onclick: () => this.toggleGroup(ids) }, h('i.i.i-check'))),
         h('div.thumbs.grid', {}, tiles));
     }));
     this.paintSelection();
   }
+}
+
+/** Sessions (newest first) regrouped by calendar day: [{ key, label, entries }]. */
+export function byDay(sessions, now = new Date()) {
+  const days = new Map();
+  for (const e of sessions.flatMap((s) => s.entries).sort((a, b) => b.createdAt - a.createdAt)) {
+    const d = new Date(e.createdAt), key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (!days.has(key)) days.set(key, { key, label: dayLabel(d, now), entries: [] });
+    days.get(key).entries.push(e);
+  }
+  return [...days.values()];
+}
+
+/** Today / Yesterday / Sat, Jun 20 (with the year when it is not this year). */
+export function dayLabel(d, now = new Date()) {
+  const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((start(now) - start(d)) / 864e5);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  const o = { weekday: 'short', month: 'short', day: 'numeric' };
+  if (d.getFullYear() !== now.getFullYear()) o.year = 'numeric';
+  return d.toLocaleDateString('en-US', o);
 }
 
 /** The picture a 3D job started from (the reference in LoadImage), if known. */

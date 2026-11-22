@@ -77,11 +77,12 @@ test('checkInstalled: missing node class and missing model file give plain reaso
   assert.match(checkInstalled(wan.workflow, { objectInfo, models }, wan.manifest.files).reasons.join(), /needs download: wan2\.2_ti2v_5B_fp16\.safetensors/);
 });
 
-test('vramFit: ok / tight / slow RAM offload / unavailable', () => {
+test('vramFit: ok / tight / RAM offload / unavailable; only unavailable carries a label', () => {
   assert.equal(vramFit({ estMB: 3000, gpuTotalMB: 11264, ramFreeMB: 60000 }).status, 'ok');
   assert.equal(vramFit({ estMB: 9600, gpuTotalMB: 11264, ramFreeMB: 60000 }).status, 'tight');
   const off = vramFit({ estMB: 21500, gpuTotalMB: 11264, ramFreeMB: 60000, profileId: 'small' });
-  assert.equal(off.status, 'offload'); assert.equal(off.label, 'slow · RAM offload');
+  assert.equal(off.status, 'offload'); assert.equal(off.label, ''); assert.equal(off.reason, undefined);
+  assert.equal(vramFit({ estMB: 9600, gpuTotalMB: 11264, ramFreeMB: 60000 }).label, '');
   assert.equal(vramFit({ estMB: 21500, gpuTotalMB: 11264, ramFreeMB: 12000 }).status, 'unavailable');
 });
 
@@ -129,14 +130,15 @@ before(async () => {
 });
 after(() => s.close());
 
-test('/api/workflows: availability is computed live; Wan 2.2 5B and ACE-Step 1.5 need download; heavy = slow RAM offload on 11 GB', async () => {
+test('/api/workflows: availability is computed live; Wan 2.2 5B and ACE-Step 1.5 need download; heavy = RAM offload on 11 GB (no label)', async () => {
   const { workflows, comfy } = await j(await fetch(s.base + '/api/workflows?fresh=1'));
   assert.equal(comfy.reachable, true);
   assert.equal(avail(workflows, 'wan22-5b-ti2v').status, 'unavailable');
   assert.equal(avail(workflows, 'wan22-5b-ti2v').label, 'needs download');
   assert.equal(avail(workflows, 'ace-step-15').label, 'needs download');
   assert.match(avail(workflows, 'ace-step-15').reason, /acestep_v1\.5_turbo/);
-  for (const id of ['qwen-2512-t2i', 'qwen-edit-2509', 'z-image-turbo']) assert.equal(avail(workflows, id).label, 'slow · RAM offload', id);
+  for (const id of ['qwen-2512-t2i', 'qwen-edit-2509', 'z-image-turbo']) { assert.equal(avail(workflows, id).status, 'offload', id); assert.equal(avail(workflows, id).label, '', id); }
+  assert.doesNotMatch(JSON.stringify(workflows.map((w) => w.availability)), /RAM offload|tight on|slow/);
   for (const id of ['upscale-4x-model', 'tts-chatterbox', 'tts-vibevoice']) assert.equal(avail(workflows, id).status, 'ok', id);
   // the enum of upscale models only offers installed files
   const up = workflows.find((w) => w.id === 'ai:upscale-4x-model');

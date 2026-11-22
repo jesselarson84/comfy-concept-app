@@ -388,7 +388,7 @@ test('settings audit: every setting targets a real /object_info input and every 
         const spec = { ...(def.input.required || {}), ...(def.input.optional || {}) }[t.input.split('.')[0]];
         assert.ok(spec, `${id}.${k}: ${cls}.${t.input}`);
         const opts = comboOptions(spec);
-        if (prm.type === 'enum' && Array.isArray(opts) && !t.input.includes('.')) for (const o of prm.options) assert.ok(opts.includes(o), `${id}.${k}: ${o} not in ${cls}.${t.input}`);
+        if (prm.type === 'enum' && Array.isArray(opts) && !t.input.includes('.')) for (const o of prm.options) if (!(prm.auto && o === 'auto')) assert.ok(opts.includes(o), `${id}.${k}: ${o} not in ${cls}.${t.input}`); // "auto" is resolved by the app before queueing
         if (spec[0] === 'BOOLEAN') assert.deepEqual(prm.options, [false, true], `${id}.${k}`);
         n++;
       }

@@ -5,7 +5,7 @@
   "menuPath": "Image/Qwen Image Edit 2509",
   "source": "ComfyUI-AIWorkflowMenu image/qwen_image_edit_2509.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "image",
-  "description": "Edit a picture with an instruction (Qwen-Image-Edit 2509 fp8, 4-step Lightning LoRA).",
+  "description": "Edit a picture with an instruction, with up to two more reference pictures (Qwen-Image-Edit 2509, 4-step Lightning LoRA).",
   "size": {
    "base": [
     1664,
@@ -121,7 +121,35 @@
    "unet_name": "Qwen-Image-Edit-2509-Q5_K_M.gguf",
    "estMB": 15500,
    "basis": "13.9 GB Q5_K_M GGUF UNet (UnetLoaderGGUF) instead of the 20.4 GB fp8 + LoRA + activations; used on the small-GPU profile"
-  }
+  },
+  "optional": [
+   {
+    "node": "21",
+    "drop": [
+     {
+      "node": "7",
+      "input": "image2"
+     },
+     {
+      "node": "8",
+      "input": "image2"
+     }
+    ]
+   },
+   {
+    "node": "22",
+    "drop": [
+     {
+      "node": "7",
+      "input": "image3"
+     },
+     {
+      "node": "8",
+      "input": "image3"
+     }
+    ]
+   }
+  ]
  },
  "workflow": {
   "1": {
@@ -201,6 +229,14 @@
     "image1": [
      "6",
      0
+    ],
+    "image2": [
+     "21",
+     0
+    ],
+    "image3": [
+     "22",
+     0
     ]
    },
    "class_type": "TextEncodeQwenImageEditPlus",
@@ -217,6 +253,14 @@
     ],
     "image1": [
      "6",
+     0
+    ],
+    "image2": [
+     "21",
+     0
+    ],
+    "image3": [
+     "22",
      0
     ]
    },
@@ -310,6 +354,24 @@
    "class_type": "ComfySwitchNode",
    "_meta": {
     "title": "Lightning on/off"
+   }
+  },
+  "21": {
+   "inputs": {
+    "image": "reference_2.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Reference 2 #image"
+   }
+  },
+  "22": {
+   "inputs": {
+    "image": "reference_3.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Reference 3 #image"
    }
   }
  }

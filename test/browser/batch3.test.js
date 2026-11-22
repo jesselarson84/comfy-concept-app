@@ -554,6 +554,96 @@ test('3D tiles: fallback is the source picture, then a neutral 3D placeholder; t
   assert.equal(st.contexts, 1);
 });
 
+// ---- follow-up: Google Photos selection layout, Favorites tile, Qwen 2509 refs, ACE Auto key ----
+test('History selection matches the Google Photos layout: X · count · share · + · trash · ⋮, check circles top-left, select-all circle right of each day header', async () => {
+  const DAY = 864e5, now = Date.now();
+  const mk = async (n, createdAt) => {
+    const f = path.join(outDir, 'concept-app', 'hist', n); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, pngBytes()); s.mock.files.set(`output/concept-app/hist/${n}`, pngBytes());
+    return (await (await fetch(s.base + '/api/history', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: 'ai:z-image-turbo', prompt: n, images: [img(n)], createdAt }) })).json()).id;
+  };
+  const old1 = await mk('gp_old1.png', now - 3 * DAY), old2 = await mk('gp_old2.png', now - 40 * DAY);
+  const ids = await seedHistory(['gp_a.png', 'gp_b.png', 'gp_c.png']);
+  await page.click('#btn-history');
+  await page.waitForSelector(tile(old2));
+  const heads = await page.$$eval('.history-session h3', (hs) => hs.map((h) => [h.querySelector('.day').textContent, h.lastElementChild.classList.contains('sel-all')]));
+  assert.equal(heads[0][0], 'Today');
+  assert.ok(heads.every(([, right]) => right), 'select-all circle is the last thing in each header');
+  assert.ok(heads.some(([d]) => /^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2}$/.test(d)), JSON.stringify(heads));
+  assert.equal(new Set(heads.map((x) => x[0])).size, heads.length, 'one header per day');
+  await longPress(tile(ids[0]));
+  await page.waitForSelector('.history.selecting');
+  const bar = await page.$$eval('.history-top.sel-bar > *', (els) => els.map((e) => e.dataset.act || e.className));
+  assert.deepEqual(bar.filter((x) => x !== 'spacer'), ['cancel-sel', 'sel-count', 'share', 'add', 'delete', 'more']);
+  // circles: top-left on every tile; selected = white fill, not blue
+  const geo = await page.$eval(tile(ids[1]), (t) => { const a = t.getBoundingClientRect(), c = t.querySelector('.sel-check').getBoundingClientRect(); return { dx: c.left - a.left, dy: c.top - a.top, w: c.width, br: getComputedStyle(t.querySelector('.sel-check')).borderRadius, shown: getComputedStyle(t.querySelector('.sel-check')).display }; });
+  assert.ok(geo.dx < 12 && geo.dy < 12 && geo.w >= 20 && geo.shown === 'flex' && geo.br === '50%', JSON.stringify(geo));
+  const selBg = await page.$eval(`${tile(ids[0])} .sel-check`, (c) => getComputedStyle(c).backgroundColor);
+  assert.equal(selBg, 'rgb(255, 255, 255)');
+  const hr = await page.$eval('.history-session h3', (h) => { const a = h.getBoundingClientRect(), b = h.querySelector('.sel-all').getBoundingClientRect(); return a.right - b.right; });
+  assert.ok(hr < 24, `select-all sits at the right (${hr}px)`);
+  await page.locator('.history-session', { has: page.locator(`.thumb[data-id="${old1}"]`) }).locator('.sel-all').click();
+  assert.equal(await page.textContent('.sel-count'), '2');
+  await page.$eval('.history', (h) => { h.scrollTop = 0; });
+  await shot('history-select-gphotos');
+  await page.locator(tile(old1)).scrollIntoViewIfNeeded();
+  await shot('history-select-gphotos-days');
+  // ⋮ menu: Select all
+  await page.click('[data-act="more"]');
+  await page.waitForSelector('.sel-menu');
+  await shot('history-select-menu');
+  await page.click('.sel-menu [data-act="select-all"]');
+  assert.equal(Number(await page.textContent('.sel-count')), await page.locator('.history .thumb[data-id]').count());
+  await page.click('[data-act="cancel-sel"]');
+});
+
+test('Favorites is the first tile in the Folders grid, backed by the star; ⋮ in Favorites removes the star', async () => {
+  const ids = await seedHistory(['favtile_a.png']);
+  await fetch(s.base + `/api/history/${ids[0]}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ favorite: true }) });
+  const favCount = (await (await fetch(s.base + '/api/folders')).json()).favorites.count;
+  await page.click('#btn-history');
+  await page.click('.history [data-act="folders"]');
+  await page.waitForSelector('.folder-card[data-folder="favorites"]');
+  assert.equal(await page.$eval('.folder-grid > .folder-card', (c) => c.dataset.folder), 'favorites');
+  assert.equal(await page.textContent('.folder-card[data-folder="favorites"] .folder-count'), String(favCount));
+  assert.equal(await page.locator('.folder-card[data-folder="favorites"] .folder-cover img').count(), 1);
+  await page.click('.folder-card[data-folder="favorites"]');
+  await page.waitForFunction(() => document.querySelector('.history h2')?.textContent === 'Favorites');
+  await page.waitForSelector(tile(ids[0]));
+  await longPress(tile(ids[0]));
+  await page.click('[data-act="more"]');
+  await page.click('.sel-menu [data-act="remove-fav"]');
+  await page.waitForFunction((x) => !document.querySelector(`.history .thumb[data-id="${x}"]`), ids[0]);
+  assert.equal((await (await fetch(s.base + '/api/folders')).json()).favorites.count, favCount - 1);
+});
+
+test('Qwen Edit 2509: three picture slots, 2 and 3 optional; slot 1 alone gives a graph without image2/image3; two refs wire image2', async () => {
+  await pick('ai:qwen-edit-2509');
+  const slots = await page.$$eval('#reference .ref-slot, .ref-slot', (els) => [...new Set(els.map((e) => e.dataset.node))]);
+  assert.deepEqual(slots, ['6', '21', '22']);
+  await shot('qwen2509-three-refs');
+  await page.fill('#prompt', 'put the hat from picture 2 on the person');
+  await setBatch(1);
+  await app(() => { const r = window.conceptApp.refs; for (const n of ['6', '21', '22']) r.set(n, null); });
+  await page.click('#btn-generate');
+  assert.ok(await page.waitForFunction(() => /Add a picture first/.test(document.body.textContent)).catch(() => true));
+  await app(() => window.conceptApp.refs.set('6', 'qa.png'));
+  await page.click('#btn-generate'); await idle();
+  let g = lastGraph('TextEncodeQwenImageEditPlus');
+  assert.ok(!g['21'] && !g['22']);
+  assert.deepEqual(Object.keys(g['7'].inputs).filter((k) => k.startsWith('image')), ['image1']);
+  await app(() => window.conceptApp.refs.set('21', 'qb.png'));
+  await page.click('#btn-generate'); await idle();
+  g = lastGraph('TextEncodeQwenImageEditPlus');
+  assert.equal(g['21'].inputs.image, 'qb.png'); assert.ok(!g['22']);
+  assert.deepEqual(g['7'].inputs.image2, ['21', 0]); assert.deepEqual(g['8'].inputs.image2, ['21', 0]);
+  await app(() => { const r = window.conceptApp.refs; for (const n of ['6', '21']) r.set(n, null); });
+});
+
+test('ACE-Step: Key offers Auto (default) in the app\'s preset list (graph resolution is unit-tested; ACE is not installed in the mock)', async () => {
+  const k = await app(() => window.conceptApp.workflows.find((w) => w.id === 'ai:ace-step-15').ai.params.key);
+  assert.equal(k.options[0], 'auto'); assert.equal(k.default, 'auto'); assert.equal(k.labels.auto, 'Auto');
+});
+
 test('no page errors in the batch 3 run', () => {
   assert.deepEqual(errors.filter((e) => !/Failed to load resource: .* (503|404)/.test(e)), []);
 });

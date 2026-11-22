@@ -59,6 +59,8 @@ export function validatePreset(id, file) {
     if (p.control && !CONTROLS.includes(p.control)) return fail(`param ${key}: control must be one of ${CONTROLS.join(', ')}`);
     if (p.when && !(m.params[p.when.param])) return fail(`param ${key}: "when" names unknown param ${p.when.param}`);
     if (p.modes && !(m.params[p.modes.param])) return fail(`param ${key}: "modes" names unknown param ${p.modes.param}`);
+    if (p.auto && (p.auto !== 'key' || !p.options.includes('auto'))) return fail(`param ${key}: auto must be "key" with an "auto" option`);
+    if (p.installed && !((p.installed.folder && p.installed.prefix) || (p.installed.fsFolder && p.installed.dir))) return fail(`param ${key}: "installed" needs folder + prefix or fsFolder + dir`);
     params[key] = { ...p, label: p.label || key };
   }
   // Optional picture/audio slots: when left empty the node and its links are dropped.
@@ -104,6 +106,15 @@ export function validatePreset(id, file) {
 //   modes    { param, values: { [value]: { min, max, default } } }  range follows another setting
 //   zeroAtMax  the top of the range sends 0 (e.g. DecimateMesh 0 = full mesh)
 //   multiplyBy / divideBy  unit conversion into the graph (seconds -> tokens, % -> 0..1)
+//   auto     'key' (ACE-Step): the enum has an "auto" option although the node has no
+//            native auto (keyscale is a required combo, so it cannot be omitted).
+//            Auto = the key named in the prompt/tags if there is one ("... in A minor"),
+//            else one picked from the seed (same seed, same key). Nothing is
+//            added to the tags. See resolveAutoKey().
+//   installed  enum of model packs the node lists even when not downloaded: keep only
+//            packs found on the PC. { folder, prefix: '{v}/' } = a .safetensors under
+//            /models/<folder>; { fsFolder, dir: 'X/{v}' } = a .safetensors in that
+//            folder of ComfyUI's model paths (server/presets.js withInstalledOptions)
 export const CONTROLS = ['stepper', 'slider', 'select', 'seg', 'text'];
 
 /** Range of a numeric param (it may follow another param, manifest "modes"). */
@@ -196,12 +207,32 @@ export function clampPresetValues(manifest, { params = {}, width, height, batch 
   return { params: p, size, batch: b, notes };
 }
 
+/**
+ * ACE-Step "Auto" key: the node has no auto value, so the app resolves it.
+ * 1) a key named in the text ("in F# minor", "Bb major", "Am", "C#m") -> that key,
+ *    spelled as one of the options (enharmonic: A# = Bb, Db = C#, ...);
+ * 2) otherwise a key picked from the seed, so a seed always gives the same key.
+ */
+export function resolveAutoKey(options, text = '', seed = 0) {
+  const keys = options.filter((o) => o !== 'auto');
+  const ENH = { 'A#': 'Bb', Bb: 'A#', 'C#': 'Db', Db: 'C#', 'D#': 'Eb', Eb: 'D#', 'F#': 'Gb', Gb: 'F#', 'G#': 'Ab', Ab: 'G#' };
+  const re = /(?:^|[^A-Za-z#])([A-G])\s?(#|b|♯|♭)?\s?(major|minor|maj|min|m)(?![A-Za-z])/g;
+  for (const m of String(text || '').matchAll(re)) {
+    const root = m[1] + (m[2] === '#' || m[2] === '♯' ? '#' : m[2] === 'b' || m[2] === '♭' ? 'b' : '');
+    const q = /^m(in(or)?)?$/.test(m[3]) ? 'minor' : 'major';
+    for (const r of [root, ENH[root]]) if (r && keys.includes(`${r} ${q}`)) return `${r} ${q}`;
+  }
+  const n = Math.abs(Math.floor(Number(seed) || 0));
+  return keys[n % keys.length];
+}
+
 /** Write clamped params into a copy of the graph (divideBy applied). */
 export function applyPresetParams(manifest, workflow, params) {
   const out = structuredClone(workflow);
   for (const [key, p] of Object.entries(manifest.params)) {
     let v = params[key] ?? p.default;
     if (!paramActive(p, params, manifest.params) && 'offValue' in p) v = p.offValue;
+    if (p.auto === 'key' && v === 'auto') v = resolveAutoKey(p.options, out[p.node]?.inputs?.tags, out[p.node]?.inputs?.seed);
     if (p.zeroAtMax && Number(v) >= p.max) v = 0;
     if (p.multiplyBy) v = Math.round(v * p.multiplyBy);
     if (p.divideBy) v = Number((v / p.divideBy).toFixed(4));
@@ -278,9 +309,11 @@ export function comboOptions(spec) {
  *   ok       estimate <= 85 % of usable VRAM
  *   tight    <= usable VRAM
  *   offload  more than VRAM but fits VRAM + spare system RAM: ComfyUI keeps part
- *            of the weights in RAM ("slow, RAM offload")
+ *            of the weights in RAM
  *   unavailable  not even that
  * usable = total - desktopReserveMB (Windows desktop + driver).
+ * Only "unavailable" carries a label/reason: no warning labels or badges on
+ * presets that run (tight / RAM offload are statuses only).
  */
 export function vramFit({ estMB, gpuTotalMB, ramFreeMB, desktopReserveMB = 1200, ramReserveMB = 8192, profileId } = {}) {
   if (!estMB) return { status: 'ok', label: '' };
@@ -289,9 +322,9 @@ export function vramFit({ estMB, gpuTotalMB, ramFreeMB, desktopReserveMB = 1200,
   const gb = (mb) => (mb / 1024).toFixed(1);
   const vramGb = Math.round(gpuTotalMB / 1024);
   if (estMB <= usable * 0.85) return { status: 'ok', label: '' };
-  if (estMB <= usable) return { status: 'tight', label: `tight on ${vramGb} GB` };
+  if (estMB <= usable) return { status: 'tight', label: '' };
   const spare = Math.max(0, (ramFreeMB ?? 0) - ramReserveMB);
-  if (estMB <= usable + spare) return { status: 'offload', label: 'slow · RAM offload', reason: `needs ~${gb(estMB)} GB, more than the ~${gb(usable)} GB usable on the ${vramGb} GB GPU${profileId ? ` (${profileId} profile)` : ''}: part of it runs from system RAM, slower` };
+  if (estMB <= usable + spare) return { status: 'offload', label: '' };
   return { status: 'unavailable', label: 'not enough memory', reason: `needs ~${gb(estMB)} GB; GPU ${vramGb} GB + free RAM is not enough` };
 }
 

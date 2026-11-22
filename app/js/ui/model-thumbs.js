@@ -74,6 +74,7 @@ export async function renderStill(file) {
   }
 }
 
+const SKIP = Symbol('offscreen');
 const is3dModel = (f) => /\.(glb|gltf)$/i.test(f?.filename || '');
 
 /** Lazy thumbnails for 3D tiles. One instance per page. */
@@ -116,7 +117,12 @@ export class ModelThumbs {
 
   async #load(tile) {
     const t = tile._thumb; if (!t) return;
-    const blob = await this.#still(t.file).catch(() => null);
+    // A tile that left the screen (History closed, list re-rendered) before its
+    // turn is skipped, so stale tiles never hold up the ones being looked at.
+    const wanted = () => tile.isConnected && tile.offsetParent !== null;
+    let skipped = false;
+    const blob = await this.#still(t.file, wanted).catch((e) => { skipped = e === SKIP; return null; });
+    if (skipped) { if (tile.isConnected && this.io) this.io.observe(tile); return; }
     if (blob) {
       const key = thumbKey(t.file);
       let url = this.urls.get(key);
@@ -125,16 +131,16 @@ export class ModelThumbs {
     }
   }
 
-  #still(file) {
+  #still(file, wanted = () => true) {
     const key = thumbKey(file);
     if (this.pending.has(key)) return this.pending.get(key);
     const p = (async () => {
       const hit = await getThumb(key);
       if (hit) { stats.cacheHits++; return hit; }
-      const blob = await this.#enqueue(() => this.render(file));
+      const blob = await this.#enqueue(() => (wanted() ? this.render(file) : Promise.reject(SKIP)));
       if (blob) await putThumb(key, blob);
       return blob;
-    })().catch((e) => { stats.failures++; this.pending.delete(key); throw e; });
+    })().catch((e) => { if (e !== SKIP) stats.failures++; this.pending.delete(key); throw e; });
     this.pending.set(key, p);
     return p;
   }

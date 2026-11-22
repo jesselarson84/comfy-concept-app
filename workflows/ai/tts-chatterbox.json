@@ -34,7 +34,11 @@
      "chatterbox-multilingual-hi": "Multilingual · Hindi",
      "chatterbox-multilingual-zh-cmn": "Multilingual · Mandarin"
     },
-    "span2": true
+    "span2": true,
+    "installed": {
+     "folder": "chatterbox",
+     "prefix": "{v}/"
+    }
    },
    "seconds": {
     "node": "1",
