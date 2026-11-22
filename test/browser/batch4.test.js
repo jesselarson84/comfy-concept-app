@@ -63,6 +63,7 @@ test('B: the whole form is locked during a run and comes back exactly as it was'
   assert.ok(during.params.every((x) => x === false), 'Settings are locked');
   assert.equal(during.cancel, true, 'Cancel stays usable');
   assert.equal(during.history, true, 'History stays usable');
+  assert.equal(during.canvas, true, 'the canvas toggle stays usable');
   assert.equal(await page.getAttribute('#prompt', 'aria-disabled'), 'true');
   // typing does nothing; a tap on a locked stepper does nothing
   await page.click('#prompt', { force: true }); await page.keyboard.type('XYZ');
@@ -284,4 +285,112 @@ test('F: on the proxied ComfyUI page the Agent button and the Comfy Agent toast 
     }));
     assert.deepEqual(st, { agentBtn: 'none', queueBtn: 'inline-block', agentToast: 'none', infoToast: 'block', stack: 'block', embedded: false });
   } finally { await p2.close(); }
+});
+
+// ---- G. node view toggle -------------------------------------------------------
+test('G: canvas toggle shows ComfyUI under the persistent top bar; menu has no "ComfyUI canvas" any more', async () => {
+  await page.goto(s.base + '/');
+  await page.waitForFunction(() => (window.conceptApp?.workflows?.length || 0) > 10 && window.conceptApp.current);
+  const dialogs = [];
+  page.on('dialog', (d) => { dialogs.push(d.message()); d.dismiss().catch(() => {}); });
+  await page.click('details.menu > summary');
+  assert.deepEqual(await page.$$eval('.menu-pop > *', (els) => els.map((e) => e.id || e.className)), ['btn-import', 'field builder-model', 'menu-switches']);
+  await page.click('details.menu > summary');
+  assert.equal(await page.$('#node-view iframe'), null, 'nothing loaded before the first toggle');
+  await page.click('#btn-canvas');
+  await page.waitForSelector('#node-view iframe');
+  const frame = page.frame({ url: /\/comfy\/$/ }) || (await (await page.$('#node-view iframe')).contentFrame());
+  await frame.waitForSelector('h1');
+  assert.equal(await page.getAttribute('#btn-canvas', 'aria-pressed'), 'true');
+  assert.equal(await page.isDisabled('#preset-btn'), true, 'workflow dropdown greyed out in node view');
+  for (const sel of ['.topbar', '#preset-btn', '#btn-history', 'details.menu', '#btn-canvas']) assert.equal(await page.isVisible(sel), true, sel);
+  for (const sel of ['#panel', '#results', '.actionbar']) assert.equal(await page.isVisible(sel), false, sel);
+  const geo = await page.evaluate(() => { const t = document.querySelector('.topbar').getBoundingClientRect(), f = document.querySelector('#node-view iframe').getBoundingClientRect(); return { top: t.bottom, ft: f.top, fb: f.bottom, fw: f.width, vh: innerHeight, vw: innerWidth }; });
+  assert.ok(geo.ft >= geo.top - 1 && geo.fb <= geo.vh + 1 && geo.vh - geo.fb < 40 && geo.fw >= geo.vw - 2, JSON.stringify(geo));
+  // inside: node-view mode, Agent button hidden by the injected snippet
+  await frame.waitForFunction(() => document.documentElement.classList.contains('concept-embedded'));
+  assert.equal(await frame.evaluate(() => getComputedStyle([...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Agent')).display), 'none');
+  await frame.waitForFunction(() => document.querySelector('.p-toast-message-error')?.getAttribute('data-concept-hidden'));
+  await shot('node-view');
+  // graph state survives toggling: same document, no unload prompt
+  await frame.evaluate(() => { window.__graphState = 'edited'; });
+  await page.click('#btn-canvas');
+  assert.equal(await page.getAttribute('#btn-canvas', 'aria-pressed'), 'false');
+  assert.equal(await page.isVisible('#panel'), true);
+  assert.equal(await page.isEnabled('#preset-btn'), true);
+  await page.click('#btn-canvas');
+  assert.equal(await frame.evaluate(() => window.__graphState), 'edited', 'iframe was not reloaded');
+  assert.equal(await frame.evaluate(() => window.__unloadPrompt), 0);
+  assert.equal(await page.$$eval('#node-view iframe', (f) => f.length), 1);
+  await page.click('#btn-canvas');
+  assert.deepEqual(dialogs, [], 'no "Changes you made may not be saved" prompt');
+  assert.equal(new URL(page.url()).pathname, '/');
+});
+
+test('G: Back (Android back button) in node view returns to the default view, not away from the app', async () => {
+  await page.click('#btn-canvas');
+  await page.waitForFunction(() => document.body.classList.contains('node-view-on'));
+  await page.goBack();
+  await page.waitForFunction(() => !document.body.classList.contains('node-view-on'));
+  assert.equal(await page.getAttribute('#btn-canvas', 'aria-pressed'), 'false');
+  assert.equal(new URL(page.url()).pathname, '/');
+  assert.ok(await app(() => !!window.conceptApp), 'still the app page');
+  // History opened from the node view closes back to the node view
+  await page.click('#btn-canvas');
+  await page.click('#btn-history');
+  await page.waitForFunction(() => !document.querySelector('.history')?.hidden);
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelector('.history')?.hidden !== false);
+  assert.equal(await app(() => document.body.classList.contains('node-view-on')), true);
+  await page.click('#btn-canvas');
+  assert.equal(await app(() => document.body.classList.contains('node-view-on')), false);
+});
+
+test('G: a run keeps going and stays locked across node-view toggles; canvas toggle works during it; tablet layout', async () => {
+  await pick('ai:z-image-turbo');
+  await page.fill('#prompt', 'toggle while running');
+  await setBatch(2);
+  await page.click('#btn-generate');
+  await page.waitForFunction(() => document.querySelector('#prompt').readOnly);
+  assert.equal(await page.isEnabled('#btn-canvas'), true);
+  await page.click('#btn-canvas');
+  assert.equal(await page.isDisabled('#preset-btn'), true);
+  await page.click('#btn-canvas');
+  assert.equal(await page.isDisabled('#btn-generate'), true, 'still locked');
+  await idle();
+  assert.equal(await page.isEnabled('#preset-btn'), true);
+  // tablet: node view spans the full width under the top bar
+  await page.setViewportSize({ width: 1180, height: 820 });
+  await page.click('#btn-canvas');
+  const geo = await page.evaluate(() => { const f = document.querySelector('#node-view iframe').getBoundingClientRect(); return { w: f.width, h: f.height, vw: innerWidth }; });
+  assert.ok(geo.w >= geo.vw - 2 && geo.h > 600, JSON.stringify(geo));
+  await shot('node-view-tablet');
+  await page.click('#btn-canvas');
+  await page.setViewportSize({ width: 412, height: 860 });
+});
+
+// ---- 1. History delete: errors still end selection mode and reload ---------------------
+test('History delete: an error from the server still ends selection mode and reloads the list', async () => {
+  await page.click('#btn-history');
+  await page.waitForSelector('.history .thumb');
+  const before = await page.$$eval('.history .thumb', (t) => t.length);
+  const loads = [];
+  page.on('request', (r) => { if (/\/api\/history(\?|$)/.test(r.url()) && r.method() === 'GET') loads.push(r.url()); });
+  await page.route('**/api/history/delete', (r) => r.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'ComfyUI output folder is unknown, nothing was deleted' }) }));
+  await app(() => { const hv = window.conceptApp.historyView; const id = [...hv.entries.keys()][0]; hv.startSelect(id); hv.selected.add(id); hv.paintSelection(); });
+  assert.equal(await app(() => window.conceptApp.historyView.selecting), true);
+  const p = app(() => window.conceptApp.historyView.confirmDelete());
+  await page.click('.confirm [data-act="confirm"]');
+  await p;
+  await page.waitForFunction(() => /nothing was deleted/.test(document.getElementById('toast')?.textContent || ''));
+  assert.equal(await app(() => window.conceptApp.historyView.selecting), false, 'selection mode ended');
+  assert.ok(loads.length >= 1, 'list reloaded');
+  assert.equal(await page.$$eval('.history .thumb', (t) => t.length), before);
+  await page.unroute('**/api/history/delete');
+  await app(() => window.conceptApp.historyView.close());
+});
+
+test('no page errors in batch 4 tests', () => {
+  // expected: the deliberately failing websocket of the "ComfyUI really is gone" test
+  assert.deepEqual(errors.filter((e) => !/ws:\/\/127\.0\.0\.1:9\//.test(e)), []);
 });

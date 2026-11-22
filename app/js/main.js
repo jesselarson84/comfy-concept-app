@@ -42,6 +42,7 @@ import { RunLock, runProgress } from './lib/run-lock.js';
 import { lockControls } from './ui/form-lock.js';
 import { ConnectionBanner } from './lib/conn-banner.js';
 import { infoFor } from './lib/setting-info.js';
+import { NodeView } from './ui/node-view.js';
 import { textEncoderOnCpu, tiledVaeDecode, hasVaeDecode, wantTiledDecode, isOom } from './lib/memory-options.js';
 
 const comfy = new ComfyClient();
@@ -62,6 +63,9 @@ let current = null;
 const lock = new RunLock();
 const isLocked = () => lock.locked() || queue.active.length > 0;
 const busy = () => { toast('Running'); };
+// Node view (canvas button): ComfyUI's graph in an iframe under the top bar,
+// kept alive between toggles; the workflow dropdown is greyed out meanwhile.
+const nodeView = new NodeView({ button: $('#btn-canvas'), host: $('#node-view'), onChange: () => { picker.close(); paintThumbs(); } });
 
 const viewer = new Viewer({
   onFavorite: (it) => (it.historyId ? api.patchHistory(it.historyId, { favorite: it.favorite }) : Promise.reject(new Error('not saved yet'))),
@@ -343,7 +347,7 @@ function paintThumbs() {
   const run = $('#btn-generate');
   run.disabled = locked;
   run.classList.toggle('is-running', locked);
-  $('#preset-btn').disabled = locked;
+  $('#preset-btn').disabled = locked || nodeView.on;
   // The whole form is read-only during a run (ui/form-lock.js); the menu still
   // opens but its switches and Import wait too (Import could switch the preset).
   lockControls([$('#panel'), $('.menu-pop')], locked);
@@ -401,11 +405,6 @@ $('#builder-model').addEventListener('change', async (e) => { try { await api.se
 
 // ---- menu: history, advanced (real ComfyUI), import -------------------------
 $('#btn-history').addEventListener('click', () => historyView.open());
-$('#btn-advanced').addEventListener('click', () => {
-  // Same tab, so it works inside the installed PWA too. Come back with the
-  // browser/Android back button; presets reload when the app is shown again.
-  location.href = '/comfy/';
-});
 $('#btn-import').addEventListener('click', () => $('#import-file').click());
 $('#import-file').addEventListener('change', async (e) => {
   const f = e.target.files[0];
@@ -491,4 +490,4 @@ async function start() {
 start();
 // For tests and poking around from DevTools.
 window.conceptApp = { maskSlot, modelThumbs, historyView, isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, chat, versions, picker, selectPreset, loadWorkflows,
-  lock, resume, connBanner, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };
+  lock, resume, connBanner, nodeView, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };

@@ -573,3 +573,13 @@ input[type=range].sl::-moz-range-thumb { width: 14px; height: 14px; border-radiu
 .info-pop { position: fixed; z-index: 120; max-width: calc(100vw - 16px); background: var(--c-card, var(--raised)); color: var(--c-fg, var(--text)); border: 1px solid var(--c-border, var(--line)); border-radius: 10px; box-shadow: 0 10px 30px #0009; padding: 10px 12px; font-size: 14px; line-height: 1.45; }
 .info-pop-title { font-weight: 600; margin-bottom: 4px; }
 .info-pop-body { color: var(--c-node-fg, var(--text)); }
+
+/* ---- batch 4 G: node view (ComfyUI in an iframe under the top bar) ---- */
+.toggle-btn.on, .toggle-btn[aria-pressed="true"] { background: var(--c-selected, var(--raised)); border-color: var(--c-node-border, var(--accent)); color: var(--c-fg, var(--text)); box-shadow: inset 0 0 0 1px var(--c-node-border, var(--accent)); }
+.node-view { grid-area: node; min-height: 0; display: flex; background: var(--c-canvas, #141414); padding-bottom: var(--sab); }
+.node-frame { flex: 1; width: 100%; height: 100%; border: 0; display: block; background: var(--c-canvas, #141414); }
+body.node-view-on #app { grid-template-rows: auto auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "banner" "node"; }
+body.node-view-on #panel, body.node-view-on #results, body.node-view-on .actionbar { display: none; }
+@media (min-width: 820px) {
+  body.node-view-on #app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "banner" "node"; }
+}

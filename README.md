@@ -87,7 +87,7 @@ Chrome only offers the share target for an installed PWA served over HTTPS, whic
   - Share opens the Android share sheet.
   - Reuse loads that image's prompt and seed (locked).
 - **History**: everything you have generated, from any device, grouped into sessions. A new session starts after 90 minutes with no generations. The star filter shows favourites only.
-- **Menu (⋮) > ComfyUI canvas** opens the real ComfyUI UI at `/comfy/` in the same window. Use Back to return.
+- **Canvas button** (top bar, next to History and ⋮) toggles the **node view**: ComfyUI's own UI (`/comfy/`) fills the screen under the app's top bar, and the button stays highlighted. Tap it again (or press Back) for the normal view. The ComfyUI page is loaded once and then only hidden and shown, so your graph, its undo history and its websocket survive switching back and forth, and ComfyUI's *Changes you made may not be saved* prompt does not appear. The workflow dropdown is greyed out while the node view is shown. (`app/js/ui/node-view.js`)
 - **Menu (⋮) > Import workflow** uploads an API-format `.json` into `workflows/`.
 - **Menu (⋮) > GPU & memory** shows the detected GPU (name, total and free VRAM), system RAM, the active memory profile with a manual override, and which chat model is loaded (see *GPU & memory profiles*).
 - **Prompt assistant** (under the prompt box) and **💬 Discuss** in the viewer: see below.
@@ -139,7 +139,7 @@ The app reads the GPU's name, total and free VRAM (`nvidia-smi`, falling back to
 
 ## Adding workflows
 
-1. Build the graph in ComfyUI. You can do this on the PC, or on the phone through **ComfyUI canvas**.
+1. Build the graph in ComfyUI. You can do this on the PC, or on the phone in the **node view** (canvas button in the top bar).
 2. Use **Workflow > Export (API)**. Only API format can be queued. The normal "Save" writes UI format, and the app rejects that with a message.
 3. Either save the file into `comfy-concept-app/workflows/`, or use **Import workflow** in the app. The server watches the folder, so open apps refresh their dropdown on their own.
    (ComfyUI's own "Save" stores files in its user folder, not here. That is why Export/Import is the route.)
@@ -245,7 +245,7 @@ npm run dev:mock       # app + fake ComfyUI, http://127.0.0.1:3100 (no GPU neede
 - **Extra endpoints beyond the spec**: `PATCH /api/history/:id` (favourite, images, status) and `GET /api/events` (Server-Sent Events; tells open apps when `workflows/` changed).
 - **Imports never overwrite**: a name clash becomes `name-2.json`. UI-format files are rejected with an explanation.
 - **Several LoadImage nodes** (as in klein_ref, which has three): each gets its own slot with Pick, Camera and Paste.
-- **ComfyUI canvas** opens `/comfy/` in the same window (it also works inside the installed PWA). Back returns to the app, and presets reload when the app becomes visible again.
+- **Node view** (was the *ComfyUI canvas* menu item, which left the app): `/comfy/` in a same-origin iframe under the top bar, created on the first toggle and never unloaded. Back returns to the normal view (one history entry, like the overlays). ComfyUI's own top bar inside it is not hidden: its selectors could not be checked from the dev VM and it holds the Workflow menu (Export (API)) and Queue; `app/comfy-tweaks.css` is where to hide it later.
 - **Tablet layout** starts at a width of 820px.
 - **Service worker**: network-first for the app shell, with the cache as the offline fallback. API calls, images and `/comfy` are never cached. Bump `VERSION` in `app/sw.js` after changing app files.
 - **Live preview frames** (binary websocket messages) are ignored.
@@ -264,7 +264,7 @@ Everything was built and tested against the mock only. The dev VM cannot reach y
    - the job runs, and the result follows the picture's shape (scaled to about 1 MP)
 7. **Same prompt with the same locked seed twice**: ComfyUI may serve it from cache. An image should still appear, via the `/history` fallback.
 8. **Thumbnails**: `/comfy/view?...&preview=webp;70` returns a webp. If your build ignores it, the full PNG loads instead, which is fine but slower.
-9. **ComfyUI canvas**: the ComfyUI frontend loads under `/comfy/`. Check that the graph canvas, the node library, queueing from it and its websocket all work. If the frontend refuses to run under a sub-path, open http://127.0.0.1:8188 on the PC instead and report it. That would mean switching to a separate port for the proxy.
+9. **Node view** (canvas button): the ComfyUI frontend loads under `/comfy/` inside the app. Check that the graph canvas, the node library, queueing from it and its websocket all work. If the frontend refuses to run under a sub-path, open http://127.0.0.1:8188 on the PC instead and report it. That would mean switching to a separate port for the proxy.
 10. **Export (API)** a graph from ComfyUI into `workflows/`: it appears in the open app's dropdown within a second or two, without a reload. Also test **Import workflow** with the same file.
 11. **Tailscale**: `tailscale serve --bg 3100`, then the phone opens `https://<pc>.<tailnet>.ts.net/` and Generate works there. The websocket must work through `serve`; you'll know because progress bars move.
 12. **Install the PWA** on the phone, then share a screenshot to "Comfy UI". The app should open on *FLUX.2 Klein 4B Image Edit* with the screenshot in the slot.
@@ -280,6 +280,15 @@ Everything was built and tested against the mock only. The dev VM cannot reach y
     - Camera button
 14. **History** on the tablet shows what the phone generated. Favourites made on one device show on the other.
 15. Timing on the 2080 Ti: a 1MP, 4-step image. A batch of 20 should queue without errors.
+
+### Batch 4: check on the PC and the phone
+
+1. **Delete a locked file**: open a .glb from History in the 3D viewer, go back, select it and delete. It should either be deleted or say *File is in use (open in a viewer or another app), try again*; the rest of the selection is deleted either way. With Explorer's preview pane showing the file, the same.
+2. **Output folder**: without `comfyOutputDir` set, delete still works after a ComfyUI restart (look for `comfy-output-dir.json` in `data/`). If it says the folder is unknown, `data\server.log` says why; set `comfyOutputDir` (see *Run it*).
+3. **Node view**: the canvas button shows ComfyUI under the app's top bar on the phone and the tablet; the graph is still there after toggling back and forth; no *Changes you made may not be saved* prompt; Android Back returns to the normal view. If ComfyUI's own navigation adds history entries inside the frame, Back may step through those first: report it.
+4. **Agent**: no Agent button and no red *Comfy Agent error* toast in the node view or at `/comfy/`. If they show, note what the button/toast looks like (the selectors are text-based and unverified).
+5. **Switching apps**: leave the app for a minute, come back: no *Not connected to ComfyUI* banner, and a run that finished meanwhile shows its results.
+6. **During a run**: the form is greyed and cannot be changed; Cancel, thumbnails, History, the canvas toggle and (i) still work.
 
 ### Results on the PC (2026-11-21, Comfy Desktop 0.46.1, RTX 2080 Ti, app on a separate test port with temp data)
 
