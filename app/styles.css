@@ -552,3 +552,7 @@ input[type=range].sl::-moz-range-thumb { width: 14px; height: 14px; border-radiu
 .sel-menu { position: fixed; z-index: 73; min-width: 210px; background: #2b2b2b; border: 1px solid var(--c-border); border-radius: var(--r-lg); padding: 6px 0; box-shadow: var(--c-shadow); display: grid; }
 .sel-menu-item { min-height: 44px; padding: 0 16px; text-align: left; background: transparent; border: 0; color: var(--c-fg); font: inherit; cursor: pointer; }
 .sel-menu-item:hover, .sel-menu-item:focus-visible { background: #ffffff14; }
+
+/* ---- batch 4 B: form locked during a run (ui/form-lock.js) ---- */
+.is-run-locked [data-run-lock="on"] { opacity: .5; cursor: default; }
+.is-run-locked textarea[data-run-lock="on"] { color: var(--c-muted, var(--muted)); }

@@ -39,6 +39,7 @@ import { OutputPicker } from './ui/output-picker.js';
 import { PresetChooser } from './ui/preset-chooser.js';
 import { afterBack } from './ui/overlay.js';
 import { RunLock, runProgress } from './lib/run-lock.js';
+import { lockControls } from './ui/form-lock.js';
 import { textEncoderOnCpu, tiledVaeDecode, hasVaeDecode, wantTiledDecode, isOom } from './lib/memory-options.js';
 
 const comfy = new ComfyClient();
@@ -63,6 +64,7 @@ const busy = () => { toast('Running'); };
 const viewer = new Viewer({
   onFavorite: (it) => (it.historyId ? api.patchHistory(it.historyId, { favorite: it.favorite }) : Promise.reject(new Error('not saved yet'))),
   onReuse: (it) => {
+    if (isLocked()) return busy(); // Reuse rewrites the form: wait for the run to end
     // Switch back to the preset that made it (if it still exists). Results made
     // with the retired Fast concept / From reference image presets map to the
     // Klein 4B presets (lib/legacy-presets.js; history.json is not rewritten).
@@ -123,12 +125,12 @@ const takesPicture = (w) => isUsable(w) && !!w.controls?.images?.length;
 const referencePresets = () => workflows.filter((w) => takesPicture(w) && isAiWorkflow(w) && (w.group === '3D' || (w.group === 'Image' && /edit/i.test(w.label))));
 async function useAsReference(img) {
   if (!img) return;
+  if (isLocked()) { busy(); return null; } // the reference slots are locked during a run
   if (!viewer.root.hidden) { viewer.close(); await afterBack(); }
   const load = async () => { const ref = await refs.useImage(refs.targetNode(), img); if (ref) toast('Reference image ready'); return ref; };
   if (current && takesPicture(current)) return load();
   const list = referencePresets();
   if (!list.length) { toast('No preset with a reference image slot'); return null; }
-  if (isLocked()) { busy(); return null; }
   presetChooser.open(list, async (w) => { if (isLocked()) return busy(); selectPreset(w.id); await afterBack(); await load(); });
   return null;
 }
@@ -339,6 +341,9 @@ function paintThumbs() {
   run.disabled = locked;
   run.classList.toggle('is-running', locked);
   $('#preset-btn').disabled = locked;
+  // The whole form is read-only during a run (ui/form-lock.js); the menu still
+  // opens but its switches and Import wait too (Import could switch the preset).
+  lockControls([$('#panel'), $('.menu-pop')], locked);
   const pr = runProgress(lock.run.length ? lock.run : queue.active);
   $('#run-label').textContent = locked && pr.total ? `Running ${pr.current} of ${pr.total}` : 'Run';
   // Android: foreground service with "Running N of M"; vibrates when the run ends.
