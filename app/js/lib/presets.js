@@ -7,7 +7,7 @@
 // A preset file is { "preset": <manifest>, "workflow": <API graph> }, the same
 // pattern as workflows/actions/*.json:
 //   manifest = {
-//     group: "3D" | "Image" | "Video" | "Audio", label, menuPath, source,
+//     group: "3D" | "Image" | "Video" | "Audio", label, menuPath, menuOrder, source,
 //     output: "image" | "video" | "audio" | "3d", description,
 //     size:   { base: [w, h], min, max, multiple }   (aspect chips -> clamped size)
 //     params: { key: { node, input, also?: [{node,input}], type: "int"|"number"|"enum"|"text",
@@ -26,6 +26,18 @@
 import { clampParams } from './actions.js';
 
 export const GROUPS = ['3D', 'Image', 'Video', 'Audio'];
+// Sub sections of a group in the picker (batch 4), in this order. A preset is in
+// one when its menuPath is "<group>/<sub section>/<short name>", e.g.
+// "Image/Text to Image/Z-Image Turbo"; the short name is what the row shows
+// (the full label stays the preset's name everywhere else).
+export const SUBGROUPS = { Image: ['Text to Image', 'Image Edit', 'Inpainting', 'Upscale'] };
+
+/** { subgroup, short } from a menuPath ("Video/Wan 2.2 5B Text/Image to Video" has no sub section). */
+export function menuParts(group, menuPath, label) {
+  const parts = String(menuPath || '').split('/');
+  if (parts[0] === group && parts.length >= 3 && SUBGROUPS[group]?.includes(parts[1])) return { subgroup: parts[1], short: parts.slice(2).join('/').trim() || label };
+  return { subgroup: null, short: label };
+}
 export const OUTPUTS = ['image', 'video', 'audio', '3d'];
 // Literal inputs that name a model file: checked against ComfyUI's model lists.
 export const MODEL_EXT = /\.(safetensors|gguf|pth|pt|ckpt|bin|sft)$/i;
@@ -91,6 +103,7 @@ export function validatePreset(id, file) {
     ok: true, id,
     manifest: {
       group: m.group, label: m.label.trim(), menuPath: m.menuPath || `${m.group}/${m.label}`, source: String(m.source || ''),
+      ...menuParts(m.group, m.menuPath, m.label.trim()), menuOrder: Number.isFinite(m.menuOrder) ? m.menuOrder : 999,
       output: m.output, description: String(m.description || ''), params, size: m.size || null,
       inputs: (m.inputs || []).map((x) => ({ ...x, node: String(x.node) })), promptFormat: m.promptFormat || null,
       maxBatch: Number.isFinite(m.maxBatch) ? m.maxBatch : 20, vram: { estMB: 0, ...(m.vram || {}) }, files: m.files || [],

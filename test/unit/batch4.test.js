@@ -12,7 +12,7 @@ import { deleteAppFile, unlinkWithRetry, IN_USE, outputDirFromArgv, comfyOutputD
 import { createComfyProxy } from '../../server/proxy.js';
 import { ConnectionBanner, GRACE_MS } from '../../app/js/lib/conn-banner.js';
 import { exposedControls, infoFor, GLOSSARY } from '../../app/js/lib/setting-info.js';
-import { validatePreset } from '../../app/js/lib/presets.js';
+import { validatePreset, menuParts, SUBGROUPS } from '../../app/js/lib/presets.js';
 import { validateAction } from '../../app/js/lib/actions.js';
 
 function tempOutput() {
@@ -313,4 +313,31 @@ test('info: preset texts match what the presets really do (spot checks against t
   // a workflow can override any text
   assert.equal(infoFor('batch', { manifest: { info: { batch: 'Mine.' } } }), 'Mine.');
   assert.equal(validatePreset('x', { preset: { group: 'Image', label: 'x', output: 'image', info: { prompt: 3 } }, workflow: { 1: { class_type: 'A', inputs: {} } } }).ok, false, 'info must be text');
+});
+
+// ---- E. Image sub sections --------------------------------------------------------
+test('Image presets are split into Text to Image / Image Edit / Inpainting / Upscale (from menuPath)', async () => {
+  assert.deepEqual(SUBGROUPS.Image, ['Text to Image', 'Image Edit', 'Inpainting', 'Upscale']);
+  assert.deepEqual(menuParts('Image', 'Image/Text to Image/Z-Image Turbo', 'Z-Image Turbo Text to Image'), { subgroup: 'Text to Image', short: 'Z-Image Turbo' });
+  assert.deepEqual(menuParts('Video', 'Video/Wan 2.2 5B Text/Image to Video', 'Wan'), { subgroup: null, short: 'Wan' }, 'a "/" in a name is not a sub section');
+  assert.deepEqual(menuParts('Image', 'Image/Something Else/X', 'X full'), { subgroup: null, short: 'X full' });
+  const st = await startStack({ folderWorkflows: true });
+  try {
+    const list = (await (await fetch(st.base + '/api/workflows')).json()).workflows;
+    const by = (sub) => list.filter((w) => w.subgroup === sub).sort((a, b) => a.menuOrder - b.menuOrder).map((w) => w.id);
+    assert.deepEqual(by('Text to Image'), ['ai:z-image-turbo', 'ai:klein-4b-t2i', 'ai:qwen-2512-t2i', 'ai:flux1-dev-gguf', 'ai:flux1-schnell-gguf']);
+    assert.deepEqual(by('Image Edit'), ['ai:klein-4b-edit', 'ai:qwen-edit-2509', 'ai:qwen-edit-2511']);
+    assert.deepEqual(by('Inpainting'), ['ai:klein-4b-inpaint']);
+    assert.deepEqual(by('Upscale'), ['ai:seedvr2-7b-image', 'ai:upscale-4x-model']);
+    assert.ok(list.filter((w) => w.group === 'Image').every((w) => w.subgroup), 'every Image preset has a sub section');
+    assert.ok(list.filter((w) => w.group !== 'Image').every((w) => !w.subgroup));
+    const z = list.find((w) => w.id === 'ai:z-image-turbo');
+    assert.equal(z.short, 'Z-Image Turbo'); assert.equal(z.label, 'Z-Image Turbo Text to Image', 'the full name is unchanged (history, chat, legacy mapping)');
+    const { pickerLayout } = await import('../../app/js/ui/workflow-picker.js');
+    const lay = pickerLayout(list);
+    assert.deepEqual(lay.map((x) => x.sec.key), ['3D', 'Image', 'Video', 'Audio', 'My presets']);
+    const img = lay.find((x) => x.sec.key === 'Image');
+    assert.deepEqual(img.subs.map((x) => x.name), ['Text to Image', 'Image Edit', 'Inpainting', 'Upscale'], 'Upscale last');
+    assert.equal(img.rows.length, 0); assert.equal(img.count, 11);
+  } finally { await st.close(); }
 });

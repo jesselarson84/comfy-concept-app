@@ -2,7 +2,8 @@
  "preset": {
   "group": "Image",
   "label": "FLUX.2 Klein 4B Text to Image",
-  "menuPath": "Image/FLUX.2 Klein 4B Text to Image",
+  "menuPath": "Image/Text to Image/FLUX.2 Klein 4B",
+  "menuOrder": 2,
   "source": "ComfyUI-AIWorkflowMenu image/flux2_klein_4b_text_to_image.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "image",
   "description": "FLUX.2 Klein 4B base model, real negative prompt, cfg 5. Slower than the 4-step distilled Klein, more control.",

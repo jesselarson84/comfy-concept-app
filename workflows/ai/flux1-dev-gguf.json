@@ -2,7 +2,8 @@
  "preset": {
   "group": "Image",
   "label": "FLUX.1 Dev Text to Image (GGUF)",
-  "menuPath": "Image/FLUX.1 Dev Text to Image (GGUF)",
+  "menuPath": "Image/Text to Image/FLUX.1 Dev (GGUF)",
+  "menuOrder": 4,
   "source": "ComfyUI-AIWorkflowMenu image/flux1_dev_gguf.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "image",
   "description": "FLUX.1 dev Q5_K_S GGUF, 20 steps. Non-commercial license.",

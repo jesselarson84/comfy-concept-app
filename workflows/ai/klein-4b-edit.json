@@ -2,7 +2,8 @@
  "preset": {
   "group": "Image",
   "label": "FLUX.2 Klein 4B Image Edit",
-  "menuPath": "Image/FLUX.2 Klein 4B Image Edit",
+  "menuPath": "Image/Image Edit/FLUX.2 Klein 4B",
+  "menuOrder": 1,
   "source": "ComfyUI-AIWorkflowMenu image/flux2_klein_4b_image_edit.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "image",
   "description": "Edit a picture with an instruction (Klein 4B distilled, 4 steps). Output size follows the picture (scaled to 1 MP).",

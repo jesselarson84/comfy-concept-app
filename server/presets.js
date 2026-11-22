@@ -61,6 +61,7 @@ export class PresetStore {
       const controls = presetControls(v.workflow, manifest);
       return {
         id, file: `ai/${p.id}.json`, label: manifest.label, description: manifest.description, group: manifest.group,
+        subgroup: manifest.subgroup, short: manifest.short, menuOrder: manifest.menuOrder,
         ok: true, controls, workflow: v.workflow, ai: manifest, loader: v.loader,
         availability: presetAvailability({ ...pv, manifest }, live, hw, opts),
       };

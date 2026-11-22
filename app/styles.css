@@ -231,9 +231,12 @@ input[type=range], .switch input { accent-color: var(--c-node-fg); }
 
 /* picker */
 .picker { flex: 1; min-width: 0; justify-content: flex-start; border: 1px solid var(--c-border); background: var(--c-bg); padding: 0 12px; }
-.picker .crumb { color: var(--c-muted); font-weight: 400; white-space: nowrap; }
+/* "Image › Text to Image › Z-Image Turbo": the crumb gives way first (shrinks 4x
+   faster, ellipsis), the preset name keeps at least ~6 characters. */
+.picker .crumb { color: var(--c-muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 4 auto; min-width: 0; }
 .picker .crumb:empty { display: none; }
-.picker .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+@media (max-width: 480px) { .picker .crumb-sec:has(+ .crumb-sub) { display: none; } }
+.picker .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 6ch; flex: 0 1 auto; }
 .picker .i-chevron-down { margin-left: auto; color: var(--c-muted); }
 .picker.open { border-color: var(--c-node-border); background: var(--c-selected); }
 .picker-scrim { position: fixed; inset: 0; z-index: 29; background: #000a; }
@@ -241,6 +244,7 @@ input[type=range], .switch input { accent-color: var(--c-node-fg); }
 .picker-pop .mt { display: flex; align-items: center; gap: 8px; padding: 8px 10px 6px; color: var(--c-muted); font-size: 12px; }
 .picker-pop .mt b { color: var(--c-fg); font-weight: 600; font-size: 14px; }
 .picker-pop .grp { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; margin-top: 2px; font-weight: 600; border-top: 1px solid var(--c-border); }
+.picker-pop .sub, .pc-list .sub { display: flex; align-items: center; height: 28px; padding: 0 10px 0 34px; margin-top: 2px; color: var(--c-muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .picker-pop .grp .cnt { color: var(--c-muted); font-weight: 400; font-size: 12px; }
 .picker-pop .ent { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 10px 0 34px; border-radius: var(--r-md); color: var(--c-node-fg); cursor: pointer; }
 .picker-pop .ent .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

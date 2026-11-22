@@ -2,7 +2,8 @@
  "preset": {
   "group": "Image",
   "label": "Qwen 2512 Text to Image",
-  "menuPath": "Image/Qwen 2512 Text to Image",
+  "menuPath": "Image/Text to Image/Qwen 2512",
+  "menuOrder": 3,
   "source": "ComfyUI-AIWorkflowMenu image/qwen_2512_text_to_image.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "image",
   "description": "Qwen-Image 2512 (fp8) with the 4-step Lightning LoRA. Strong text rendering and layouts.",

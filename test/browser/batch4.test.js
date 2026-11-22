@@ -223,3 +223,46 @@ test('D: texts follow the preset, dimmed settings still explain themselves, and 
   await page.keyboard.press('Escape');
   await idle();
 });
+
+// ---- E. Image sub sections ----------------------------------------------------
+test('E: the picker splits Image into Text to Image / Image Edit / Inpainting / Upscale; the button reads Image › Text to Image › Z-Image Turbo', async () => {
+  await pick('ai:z-image-turbo');
+  assert.equal(await page.textContent('#preset-crumb'), 'Image › Text to Image ›');
+  assert.equal(await page.textContent('#preset-name'), 'Z-Image Turbo');
+  assert.equal(await page.getAttribute('#preset-btn', 'title'), 'Image › Text to Image › Z-Image Turbo Text to Image');
+  await page.click('#preset-btn');
+  const layout = await page.$$eval('#picker > *', (els) => els.map((e) => (e.classList.contains('grp') ? `# ${e.dataset.section}` : e.classList.contains('sub') ? `## ${e.dataset.sub}` : e.dataset.preset || '')).filter(Boolean));
+  const img = layout.slice(layout.indexOf('# Image'), layout.indexOf('# Video'));
+  assert.deepEqual(img, ['# Image',
+    '## Text to Image', 'ai:z-image-turbo', 'ai:klein-4b-t2i', 'ai:qwen-2512-t2i', 'ai:flux1-dev-gguf', 'ai:flux1-schnell-gguf',
+    '## Image Edit', 'ai:klein-4b-edit', 'ai:qwen-edit-2509', 'ai:qwen-edit-2511',
+    '## Inpainting', 'ai:klein-4b-inpaint',
+    '## Upscale', 'ai:seedvr2-7b-image', 'ai:upscale-4x-model']);
+  await page.locator('#picker [data-sub="Text to Image"]').scrollIntoViewIfNeeded();
+  await shot('picker-subsections');
+  await page.click('#picker .ent[data-preset="ai:klein-4b-inpaint"]');
+  await page.waitForFunction(() => window.conceptApp.current?.id === 'ai:klein-4b-inpaint');
+  assert.equal(await page.textContent('#preset-crumb'), 'Image › Inpainting ›');
+  assert.equal(await page.textContent('#preset-name'), 'FLUX.2 Klein 4B');
+});
+
+test('E: on a narrow phone the crumb is cut first and the preset name stays readable', async () => {
+  await page.setViewportSize({ width: 340, height: 740 });
+  await pick('ai:flux1-schnell-gguf');
+  const m = await page.evaluate(() => { const c = document.querySelector('#preset-crumb'), n = document.querySelector('#preset-name'); return { cw: c.clientWidth, cs: c.scrollWidth, nw: n.clientWidth, ns: n.scrollWidth, btn: document.querySelector('#preset-btn').getBoundingClientRect().right, vw: innerWidth }; });
+  assert.ok(m.btn <= m.vw, 'button fits');
+  assert.ok(m.cs > m.cw, 'crumb is ellipsized');
+  assert.ok(m.nw >= 60, `name keeps room (${m.nw}px)`);
+  await shot('picker-narrow');
+  await page.setViewportSize({ width: 412, height: 860 });
+});
+
+test('E: "Use as reference" chooser shows the same sub sections', async () => {
+  await pick('ai:z-image-turbo');
+  await app(() => window.conceptApp.presetChooser.open(window.conceptApp.referencePresets(), () => {}));
+  const subs = await page.$$eval('.preset-chooser .sub', (els) => els.map((e) => e.dataset.sub));
+  assert.ok(subs.includes('Image Edit'), subs.join());
+  assert.equal(await page.textContent('.preset-chooser .ent[data-preset="ai:klein-4b-edit"]'), 'FLUX.2 Klein 4B');
+  await app(() => window.conceptApp.presetChooser.close());
+  await page.waitForTimeout(300);
+});

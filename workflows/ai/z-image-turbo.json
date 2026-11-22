@@ -2,7 +2,8 @@
  "preset": {
   "group": "Image",
   "label": "Z-Image Turbo Text to Image",
-  "menuPath": "Image/Z-Image Turbo Text to Image",
+  "menuPath": "Image/Text to Image/Z-Image Turbo",
+  "menuOrder": 1,
   "source": "ComfyUI-AIWorkflowMenu image/z_image_turbo.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "image",
   "description": "Z-Image Turbo (bf16, 8 steps). Photographic look, fast at 1 MP.",

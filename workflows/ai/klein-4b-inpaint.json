@@ -2,7 +2,8 @@
  "preset": {
   "group": "Image",
   "label": "FLUX.2 Klein 4B Inpaint",
-  "menuPath": "Image/FLUX.2 Klein 4B Inpaint",
+  "menuPath": "Image/Inpainting/FLUX.2 Klein 4B",
+  "menuOrder": 1,
   "source": "Batch 3: Klein 4B distilled edit graph inside Inpaint Crop & Stitch (ComfyUI-Inpaint-CropAndStitch) with Acly's Color Match (comfyui-inpaint-nodes)",
   "output": "image",
   "description": "Repaint only the area you paint. The masked area is cropped (1024 px, context x1.35), edited with Klein 4B (4 steps, cfg 1), colour-matched and stitched back, so everything outside the mask stays as it was.",

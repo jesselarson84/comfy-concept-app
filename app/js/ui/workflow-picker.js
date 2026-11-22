@@ -2,10 +2,12 @@
 // Sections follow ComfyUI's right-click "AI Workflow" menu (3D / Image / Video /
 // Audio), with "My presets" at the bottom: setups saved from the chat builder
 // (rename / delete inline) and workflows imported or dropped into workflows/.
-// (The old "App presets" section is gone; see lib/legacy-presets.js.) Rows show
-// only the preset name. Unavailable rows (missing model file or node) are grayed
+// (The old "App presets" section is gone; see lib/legacy-presets.js.) Image is
+// split into sub sections (Text to Image, Image Edit, Inpainting, Upscale), see
+// pickerLayout. Rows show only the preset name. Unavailable rows (missing model file or node) are grayed
 // out with no tag; tapping one says what is missing.
 import { h, toast } from './dom.js';
+import { SUBGROUPS } from '../lib/presets.js';
 
 export const SECTIONS = [
   { key: '3D', label: '3D', icon: 'i-box' },
@@ -16,6 +18,27 @@ export const SECTIONS = [
 ];
 // Anything without a known group (an imported folder workflow) is the user's own.
 export const sectionOf = (w) => (w.group && SECTIONS.some((s) => s.key === w.group) ? w.group : 'My presets');
+
+/**
+ * Picker layout: [{ sec, rows, subs: [{ name, rows }] }] in SECTIONS order. Image
+ * is split into Text to Image / Image Edit / Inpainting / Upscale (lib/presets.js
+ * SUBGROUPS, from each preset's menuPath); rows inside a sub section are ordered
+ * by menuOrder and show the preset's short name. Empty sections are left out.
+ */
+export function pickerLayout(items) {
+  const out = [];
+  for (const sec of SECTIONS) {
+    const all = items.filter((w) => sectionOf(w) === sec.key);
+    if (!all.length) continue;
+    const names = SUBGROUPS[sec.key] || [];
+    const subs = names.map((name) => ({ name, rows: all.filter((w) => w.subgroup === name).sort((a, b) => (a.menuOrder ?? 999) - (b.menuOrder ?? 999)) })).filter((x) => x.rows.length);
+    out.push({ sec, rows: all.filter((w) => !names.includes(w.subgroup)), subs, count: all.length });
+  }
+  return out;
+}
+
+/** Name shown for a preset: its short name inside a sub section, else its label. */
+export const rowName = (w) => (w.subgroup && w.short ? w.short : w.label);
 
 export class WorkflowPicker {
   /** @param o.onPick(id)  @param o.onRename(w, name)  @param o.onDelete(w) */
@@ -37,9 +60,15 @@ export class WorkflowPicker {
   setCurrent(w) {
     this.current = w?.id || null;
     const sec = w ? SECTIONS.find((s) => s.key === sectionOf(w)) : null;
-    this.crumb.textContent = sec ? `${sec.label} ›` : '';
-    this.name.textContent = w ? w.label : 'No presets';
-    this.btn.title = w ? `${sec?.label || ''} › ${w.label}` : '';
+    // "Image › Text to Image › Z-Image Turbo"; on a narrow phone the crumb is
+    // cut with an ellipsis first, so the preset's own name stays readable.
+    const path = sec ? [sec.label, ...(w.subgroup ? [w.subgroup] : [])] : [];
+    // Two parts, so a phone can drop the section and keep "Text to Image ›".
+    this.crumb.replaceChildren(...(sec ? [h('span.crumb-sec', {}, `${sec.label} › `)] : []), ...(w?.subgroup ? [h('span.crumb-sub', {}, `${w.subgroup} ›`)] : []));
+    if (sec && !w.subgroup) this.crumb.firstChild.textContent = `${sec.label} ›`;
+    this.name.textContent = w ? rowName(w) : 'No presets';
+    this.btn.title = w ? [...path, w.label].join(' › ') : '';
+    this.btn.setAttribute('aria-label', w ? `Workflow preset: ${[...path, rowName(w)].join(', ')}` : 'Workflow preset');
   }
 
   open() { this.render(); this.pop.hidden = false; this.scrim.hidden = false; this.btn.classList.add('open'); this.btn.setAttribute('aria-expanded', 'true'); this.pop.querySelector('.ent.on')?.scrollIntoView({ block: 'nearest' }); }
@@ -47,10 +76,12 @@ export class WorkflowPicker {
 
   render() {
     const els = [h('div.mt', {}, h('i.i.i-workflow'), h('b', {}, 'AI Workflow'))];
-    for (const sec of SECTIONS) {
-      const rows = this.items.filter((w) => sectionOf(w) === sec.key);
-      if (!rows.length) continue;
-      els.push(h('div.grp', { dataset: { section: sec.key } }, h(`i.i.${sec.icon}`), sec.label, h('span.cnt', {}, String(rows.length))));
+    for (const { sec, rows, subs, count } of pickerLayout(this.items)) {
+      els.push(h('div.grp', { dataset: { section: sec.key } }, h(`i.i.${sec.icon}`), sec.label, h('span.cnt', {}, String(count))));
+      for (const sub of subs) {
+        els.push(h('div.sub', { dataset: { sub: sub.name }, role: 'presentation' }, sub.name));
+        for (const w of sub.rows) els.push(this.#row(w));
+      }
       for (const w of rows) els.push(this.#row(w));
     }
     if (!this.items.length) els.push(h('div.ent.dis', {}, h('span.nm', {}, 'No presets found')));
@@ -67,7 +98,7 @@ export class WorkflowPicker {
       dataset: { preset: w.id },
       onclick: (e) => { if (e.target.closest('.edit')) return; if (off) { toast(reason || 'Unavailable', 6000); return; } this.close(); this.onPick(w.id); },
       onkeydown: (e) => { if (e.key === 'Enter' && !off) { this.close(); this.onPick(w.id); } },
-    }, h('span.nm', {}, w.label), this.current === w.id ? h('i.i.i-check') : null,
+    }, h('span.nm', {}, rowName(w)), this.current === w.id ? h('i.i.i-check') : null,
     w.user ? h('button.edit.btn.text', { type: 'button', 'aria-label': `Rename or delete ${w.label}`, onclick: () => { this.editing = w.id; this.render(); } }, h('i.i.i-settings')) : null);
     row.classList.toggle('on', this.current === w.id);
     row.classList.toggle('dis', off);

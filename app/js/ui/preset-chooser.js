@@ -3,7 +3,7 @@
 // then the picked one is selected and the picture goes into its slot.
 import { h } from './dom.js';
 import { Overlay, overlayTop } from './overlay.js';
-import { SECTIONS, sectionOf } from './workflow-picker.js';
+import { pickerLayout, rowName } from './workflow-picker.js';
 
 export class PresetChooser {
   constructor() {
@@ -18,11 +18,11 @@ export class PresetChooser {
   /** presets: workflow items; onPick(w). */
   open(presets, onPick) {
     const els = [];
-    for (const sec of SECTIONS) {
-      const rows = presets.filter((w) => sectionOf(w) === sec.key);
-      if (!rows.length) continue;
+    const row = (w) => h('button.ent', { type: 'button', dataset: { preset: w.id }, onclick: () => { this.close(); onPick(w); } }, h('span.nm', {}, rowName(w)));
+    for (const { sec, rows, subs } of pickerLayout(presets)) {
       els.push(h('div.grp', {}, h(`i.i.${sec.icon}`), sec.label));
-      for (const w of rows) els.push(h('button.ent', { type: 'button', dataset: { preset: w.id }, onclick: () => { this.close(); onPick(w); } }, h('span.nm', {}, w.label)));
+      for (const sub of subs) { els.push(h('div.sub', { dataset: { sub: sub.name } }, sub.name)); els.push(...sub.rows.map(row)); }
+      els.push(...rows.map(row));
     }
     this.list.replaceChildren(...els);
     this.ov.show();

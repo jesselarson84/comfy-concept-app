@@ -2,7 +2,8 @@
  "preset": {
   "group": "Image",
   "label": "SeedVR2 7B Image Upscale",
-  "menuPath": "Image/SeedVR2 7B Image Upscale",
+  "menuPath": "Image/Upscale/SeedVR2 7B",
+  "menuOrder": 1,
   "source": "ComfyUI-AIWorkflowMenu image/seedvr2_7b_image_upscale.json (converted to API format with the ComfyUI 1.59.10 frontend); ImageCompare node removed",
   "output": "image",
   "description": "Diffusion upscaler (SeedVR2 7B int8). Restores detail; 2x by default (menu default 4x is heavy on 11 GB).",
