@@ -423,3 +423,30 @@ test('page snippet: wired into the app server for /comfy/ (mock ComfyUI page, gz
     assert.ok(!(await sys.text()).includes('data-concept-tweaks'));
   } finally { await st.close(); }
 });
+
+// ---- Cancel while a job's POST is still on its way (lock must really lift) ----------
+test('queue: Cancel during submission takes the job back out of ComfyUI; late progress never revives a cancelled job', async () => {
+  const mem = new Map();
+  globalThis.localStorage ??= { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k) };
+  const { JobQueue } = await import('../../app/js/job-queue.js');
+  const calls = [];
+  let release;
+  const comfy = Object.assign(new EventTarget(), {
+    queuePrompt: () => new Promise((r) => { release = () => r({ prompt_id: 'p1' }); }),
+    deleteQueued: async (ids) => { if (ids.length) calls.push(['delete', ...ids]); },
+    interrupt: async (id) => { calls.push(['interrupt', id]); },
+    history: async () => null,
+  });
+  const q = new JobQueue(comfy);
+  const run = q.submit([{ workflow: { 1: { class_type: 'SaveImage', inputs: {} } }, meta: {} }]).catch(() => {});
+  assert.equal(q.items[0].status, 'submitting');
+  await q.cancelAll();
+  assert.equal(q.items[0].status, 'cancelled');
+  release();
+  await run;
+  assert.deepEqual(calls, [['delete', 'p1'], ['interrupt', 'p1']]);
+  comfy.dispatchEvent(new CustomEvent('progress', { detail: { prompt_id: 'p1', value: 1, max: 4 } }));
+  comfy.dispatchEvent(new CustomEvent('execution_start', { detail: { prompt_id: 'p1' } }));
+  assert.equal(q.items[0].status, 'cancelled');
+  assert.equal(q.active.length, 0);
+});
