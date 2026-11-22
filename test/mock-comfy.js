@@ -25,6 +25,8 @@ import { encodePng } from '../scripts/png.js';
 import { readFileSync } from 'node:fs';
 import { readBody, parseMultipart } from '../server/multipart.js';
 
+import { makeGlb, makeWav, makeVideo } from './fixtures/media.js';
+const GLB = makeGlb(), WAV = makeWav(), VIDEO = makeVideo();
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
 
 export function createMockComfy({ stepMs = Number(process.env.MOCK_STEP_MS) || 120, imageScale = 0.25, objectInfo = fixture('object-info.json'), models = fixture('models.json'), folderPaths = {} } = {}) {
@@ -85,13 +87,14 @@ export function createMockComfy({ stepMs = Number(process.env.MOCK_STEP_MS) || 1
       }
       const out = {};
       for (const id of outputs) {
-        const fileOut = { SaveGLB: ['3d', 'glb', 'glTF\x02\x00\x00\x00mock'], Save3DAdvanced: ['3d', 'glb', 'glTF\x02\x00\x00\x00mock'], SaveVideo: ['images', 'mp4', 'mockmp4'], SaveAudio: ['audio', 'flac', 'fLaCmock'] }[wf[id].class_type];
+        // GLB, audio and video results are real, tiny files (a cube; a tone; a 2 s clip) so the viewers can load them.
+        const fileOut = { SaveGLB: ['3d', 'glb', GLB], Save3DAdvanced: ['3d', 'glb', GLB], SaveVideo: ['images', 'mp4', VIDEO], SaveAudio: ['audio', 'flac', WAV] }[wf[id].class_type];
         if (fileOut) {
           // Like real ComfyUI 0.46: SaveGLB -> {"3d": [...]}, SaveVideo -> {images: [...], animated: [true]}, SaveAudio -> {audio: [...]}.
           const prefix = String(wf[id].inputs.filename_prefix || 'out');
           const subfolder = prefix.includes('/') ? prefix.split('/').slice(0, -1).join('/') : '';
           const filename = `${prefix.split('/').pop()}_${String(++imgCounter).padStart(5, '0')}_.${fileOut[1]}`;
-          files.set(`output/${subfolder}/${filename}`, Buffer.from(fileOut[2]));
+          files.set(`output/${subfolder}/${filename}`, Buffer.isBuffer(fileOut[2]) ? fileOut[2] : Buffer.from(fileOut[2]));
           out[id] = { [fileOut[0]]: [{ filename, subfolder, type: 'output' }] };
           if (fileOut[1] === 'mp4') out[id].animated = [true];
           emit(cid, 'executed', { node: id, display_node: id, output: out[id], prompt_id: pid });
@@ -168,7 +171,17 @@ export function createMockComfy({ stepMs = Number(process.env.MOCK_STEP_MS) || 1
       const key = `${url.searchParams.get('type') || 'output'}/${url.searchParams.get('subfolder') || ''}/${url.searchParams.get('filename')}`;
       const f = files.get(key);
       if (!f) return json(res, 404, { error: 'not found', key });
-      res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': f.length });
+      const head = f.subarray(0, 4).toString('latin1');
+      const type = head === '\x1aE\xdf\xa3' ? 'video/webm' : head === 'RIFF' ? 'audio/wav' : head === 'glTF' ? 'model/gltf-binary' : head === '\x89PNG' ? 'image/png' : 'application/octet-stream';
+      // Range requests like ComfyUI's aiohttp file responses (the audio player seeks with them).
+      const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+      if (m && (m[1] || m[2])) {
+        const start = m[1] ? Number(m[1]) : Math.max(0, f.length - Number(m[2])), end = m[1] && m[2] ? Math.min(Number(m[2]), f.length - 1) : f.length - 1;
+        if (start >= f.length || start > end) { res.writeHead(416, { 'Content-Range': `bytes */${f.length}` }); return res.end(); }
+        res.writeHead(206, { 'Content-Type': type, 'Content-Length': end - start + 1, 'Content-Range': `bytes ${start}-${end}/${f.length}`, 'Accept-Ranges': 'bytes' });
+        return res.end(f.subarray(start, end + 1));
+      }
+      res.writeHead(200, { 'Content-Type': type, 'Content-Length': f.length, 'Accept-Ranges': 'bytes' });
       return res.end(f);
     }
     if (p === '/upload/image' && req.method === 'POST') {

@@ -18,7 +18,7 @@
     <string name="address_save">Save</string>
     <string name="address_connect">Connect</string>
     <string name="address_default">Default</string>
-    <string name="address_invalid">Enter an https:// address with no path, e.g. https://pc.tailnet.ts.net</string>
+    <string name="address_invalid">Enter an https:// address with no path</string>
     <string name="address_saved">Address saved</string>
 
     <!-- Launcher shortcut -->

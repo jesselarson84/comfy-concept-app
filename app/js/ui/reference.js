@@ -1,10 +1,11 @@
 // reference.js - reference image slots (one per LoadImage node).
 // A picture can come from: file picker, camera, paste (Ctrl+V / long-press
-// paste), or the Android share sheet (see server/share.js). Either way it is
-// uploaded to ComfyUI's /upload/image and the returned name is what the
-// LoadImage node gets.
+// paste), "From Comfy UI" (a grid of the app's own results, ui/output-picker.js),
+// "Use as reference" in the viewer, or the Android share sheet (see
+// server/share.js). Either way the full-resolution file is uploaded to
+// ComfyUI's /upload/image and the returned name is what the LoadImage node gets.
 import { h, toast } from './dom.js';
-import { inputViewUrl } from '../comfy-client.js';
+import { inputViewUrl, viewUrl } from '../comfy-client.js';
 
 export class ReferenceSlots {
   constructor(container, comfy, onChange) {
@@ -12,6 +13,7 @@ export class ReferenceSlots {
     this.values = {};        // nodeId -> LoadImage value ("name.png")
     this.slots = [];
     this.active = null;      // slot that receives a paste
+    this.onPickFromComfy = null; // (node) => opens the "From Comfy UI" grid (set by main.js)
     document.addEventListener('paste', (e) => {
       if (!this.slots.length) return;
       const file = [...(e.clipboardData?.files || [])].find((f) => f.type.startsWith('image/'));
@@ -27,7 +29,7 @@ export class ReferenceSlots {
     this.container.hidden = !slots.length;
     for (const slot of slots) {
       const preview = h('img.ref-preview', { alt: 'reference' });
-      const empty = h('span.ref-empty', {}, 'No image yet - pick, shoot, paste or share one');
+      const empty = h('i.i.i-image.ref-empty', { 'aria-hidden': 'true' });
       const set = this.values[slot.node];
       if (set) { preview.src = inputViewUrl(set); empty.hidden = true; } else preview.hidden = true;
       const fileIn = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: (e) => e.target.files[0] && this.upload(slot.node, e.target.files[0]) });
@@ -39,7 +41,8 @@ export class ReferenceSlots {
         h('div.ref-buttons', {},
           h('button.btn', { onclick: () => fileIn.click() }, 'Pick'),
           h('button.btn', { onclick: () => camIn.click() }, 'Camera'),
-          h('button.btn', { onclick: () => this.pasteFromClipboard(slot.node) }, 'Paste')),
+          h('button.btn', { onclick: () => this.pasteFromClipboard(slot.node) }, 'Paste'),
+          h('button.btn', { dataset: { from: 'comfy' }, onclick: () => this.onPickFromComfy?.(slot.node) }, 'From Comfy UI')),
         fileIn, camIn);
       this.container.append(box);
     }
@@ -54,7 +57,7 @@ export class ReferenceSlots {
         if (type) { const blob = await item.getType(type); return this.upload(node, new File([blob], 'pasted.' + type.split('/')[1], { type })); }
       }
       toast('No image on the clipboard');
-    } catch { toast('Clipboard not available - long-press the prompt box and paste, or use Pick'); }
+    } catch { toast('Clipboard not available'); }
   }
 
   async upload(node, file) {
@@ -69,5 +72,26 @@ export class ReferenceSlots {
   }
 
   set(node, ref) { this.values[node] = ref; this.render(this.slots); }
+
+  /** One of ComfyUI's results ({ filename, subfolder, type }) -> this slot, at full
+   *  resolution: the original file is fetched (no preview/thumbnail) and uploaded
+   *  to ComfyUI's input folder like a picked file. */
+  async useImage(node, img) {
+    const box = this.container.querySelector(`[data-node="${node}"]`);
+    box?.classList.add('busy');
+    try {
+      const r = await fetch(viewUrl(img));
+      if (!r.ok) throw new Error(`Could not load ${img.filename} (${r.status})`);
+      const blob = await r.blob();
+      await this.upload(node, new File([blob], img.filename, { type: blob.type || 'image/png' }));
+      return this.values[node];
+    } catch (e) { toast(e.message, 6000); return null; } finally { box?.classList.remove('busy'); }
+  }
+
+  /** Slot for an incoming picture: the one last touched, else the first empty, else the first. */
+  targetNode() {
+    if (this.active && this.slots.some((s) => s.node === this.active)) return this.active;
+    return (this.slots.find((s) => !this.values[s.node]) || this.slots[0])?.node;
+  }
   missing() { return this.slots.filter((s) => !this.values[s.node]); }
 }

@@ -147,10 +147,10 @@ test('user presets: Save stores blocks (re-validated), listed under My presets; 
   assert.match(fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8'), /^\/?data\/?$/m);
 });
 
-test('builder model is configurable (default gemma3:4b; recommended 12-14B after the GPU swap)', async () => {
+test('builder model is configurable (default gemma3:4b); the config carries no recommendation', async () => {
   const c = await j(await fetch(s.base + '/api/builder/config'));
   assert.equal(c.model, 'gemma3:4b');
-  assert.match(c.recommended.model, /12b|14b/);
+  assert.equal(c.recommended, undefined, 'no "recommended after the upgrade" model');
   assert.equal((await j(await post(s, '/api/builder/config', { model: 'qwen3:14b' }, 'PUT'))).model, 'qwen3:14b');
   assert.equal((await post(s, '/api/builder/config', { model: 'bad name; rm' }, 'PUT')).status, 400);
 });

@@ -1,6 +1,5 @@
 {
-  "_readme": "GPU/RAM memory profiles for sharing the GPU between ComfyUI and Ollama (chat). The app reads the GPU's total VRAM at startup (nvidia-smi, or ComfyUI /system_stats) and picks the profile with the highest minVramMB that is <= total VRAM. Override: set \"profile\" here, pick one in the app (menu > GPU & memory), or set env MEMORY_PROFILE. Precedence: env > app setting > this file > auto. Edits here are picked up without a restart. All sizes are MiB.",
-  "profile": "auto",
+  "_readme": "GPU/RAM memory profiles for sharing the GPU between ComfyUI and Ollama (chat). The app reads the GPU's total VRAM (nvidia-smi, or ComfyUI /system_stats) and always picks the profile with the highest minVramMB that is <= total VRAM (Auto). There is no manual override. Edits here are picked up without a restart. All sizes are MiB.",
   "headroomMB": 768,
   "desktopReserveMB": 1200,
   "modelOverheadFactor": 1.2,

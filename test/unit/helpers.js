@@ -17,7 +17,7 @@ const listen = (server) => new Promise((r) => server.listen(0, '127.0.0.1', () =
 // ram: { totalMB, freeMB }. env: e.g. { MEMORY_PROFILE: 'large' }. memoryFile: a memory-profiles.json path.
 export const GPU_2080TI = { name: 'NVIDIA GeForce RTX 2080 Ti', totalMB: 11264, freeMB: 4000 };
 export const GPU_5080 = { name: 'NVIDIA GeForce RTX 5080', totalMB: 16303, freeMB: 9000 };
-export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = false, gpu = GPU_2080TI, ram = { totalMB: 98204, freeMB: 60000 }, env = {}, memoryFile, ollamaOptions = {}, comfyOptions = {}, folderWorkflows = true, legacyFiles = false, data = null } = {}) {
+export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = false, gpu = GPU_2080TI, ram = { totalMB: 98204, freeMB: 60000 }, env = {}, memoryFile, ollamaOptions = {}, comfyOptions = {}, folderWorkflows = true, legacyFiles = false, data = null, drive = true, outputDir = null } = {}) {
   const mock = createMockComfy({ stepMs, ...comfyOptions });
   const mockPort = await listen(mock.server);
   const ollama = createMockOllama(ollamaOptions);
@@ -39,7 +39,13 @@ export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = 
   const comfyUrl = comfyDown ? 'http://127.0.0.1:9' : `http://127.0.0.1:${mockPort}`;
   // ollamaDown: point at a closed port so the Chat tab shows its offline state.
   const ollamaUrl = ollamaDown ? 'http://127.0.0.1:9' : `http://127.0.0.1:${ollamaPort}`;
-  const cfg = loadConfig({ comfyUrl, workflowsDir: wfDir, dataDir, ollamaUrl, ...(memoryFile ? { memoryProfilesFile: memoryFile } : {}) });
+  // Save to Drive never touches a real drive in tests: a temp "Q:" with (drive:
+  // true) or without (drive: false) its "My Drive" folder.
+  const driveRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-drive-'));
+  if (drive) fs.mkdirSync(path.join(driveRoot, 'My Drive'));
+  const driveDir = path.join(driveRoot, 'My Drive', 'Comfy UI');
+  // outputDir: a temp ComfyUI output folder for "From Comfy UI" (else none: history only).
+  const cfg = loadConfig({ comfyUrl, workflowsDir: wfDir, dataDir, ollamaUrl, driveDir, comfyOutputDir: outputDir || '', ...(memoryFile ? { memoryProfilesFile: memoryFile } : {}) });
   const hw = { gpu, ram };
   const runSmi = async () => { if (!hw.gpu) throw Object.assign(new Error('not found'), { code: 'ENOENT' }); return `${hw.gpu.name}, ${hw.gpu.totalMB}, ${hw.gpu.freeMB}\n`; };
   const fakeOs = { totalmem: () => hw.ram.totalMB * 1048576, freemem: () => hw.ram.freeMB * 1048576 };
@@ -47,7 +53,7 @@ export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = 
   const port = await listen(app.server);
   const base = `http://127.0.0.1:${port}`;
   return {
-    mock, app, base, mockBase: `http://127.0.0.1:${mockPort}`, wfDir, dataDir, port,
+    mock, app, base, mockBase: `http://127.0.0.1:${mockPort}`, wfDir, dataDir, port, driveRoot, driveDir,
     ollama, ollamaBase: `http://127.0.0.1:${ollamaPort}`, hw,
     async close() {
       app.server.closeAllConnections?.(); mock.server.closeAllConnections?.(); ollama.server.closeAllConnections?.();

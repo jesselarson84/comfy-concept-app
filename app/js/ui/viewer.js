@@ -16,7 +16,7 @@ import { bridge, has, absoluteUrl } from '../native.js';
 export class Viewer {
   /**
    * getItems(): array of { image, meta, favorite, historyId }
-   * hooks: { onFavorite(item), onReuse(item) }
+   * hooks: { onFavorite(item), onReuse(item), onDiscuss(item), onUseAsReference(item), onSaveToDrive(item) }
    */
   constructor(hooks) {
     this.hooks = hooks;
@@ -45,7 +45,10 @@ export class Viewer {
         btn('↻ Reuse', 'Reuse prompt + seed', () => { const it = this.current(); if (it) { this.close(); this.hooks.onReuse?.(it); } }),
         // Discuss: attach this image (+ its prompt and seed) to the Prompt
         // assistant chat, to say what is wrong and get a revised prompt.
-        btn('💬 Discuss', 'Discuss / fix this image in the chat', () => { const it = this.current(); if (it) { this.close(); this.hooks.onDiscuss?.(it); } })));
+        btn('💬 Discuss', 'Discuss', () => { const it = this.current(); if (it) { this.close(); this.hooks.onDiscuss?.(it); } }),
+        // Use as reference: this picture, full resolution, into a reference slot.
+        btn('⧉ Use as reference', 'Use as reference', () => { const it = this.current(); if (it) this.hooks.onUseAsReference?.(it); }),
+        btn('☁ Save to Drive', 'Save to Drive', () => { const it = this.current(); if (it) this.hooks.onSaveToDrive?.(it); })));
     this.root = h('div.viewer', { role: 'dialog', 'aria-modal': 'true', hidden: true }, this.stage, this.top, this.bottom);
     document.body.append(this.root);
     this.#gestures();

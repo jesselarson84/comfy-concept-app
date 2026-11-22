@@ -21,14 +21,21 @@ import { setKeepAwake } from './native.js';
 import { PromptVersions } from './ui/prompt-versions.js';
 import { ChatPanel } from './ui/chat-panel.js';
 import { prepareComfyQueue } from './ollama-client.js';
-import { MemoryPanel } from './ui/memory-panel.js';
 import { buildActionGraph } from './lib/actions.js';
 import { clampPresetValues, applyPresetParams, formatPrompt } from './lib/presets.js';
 import { detectControls } from './lib/workflow-detect.js';
 import { WorkflowPicker } from './ui/workflow-picker.js';
 import { resolvePresetId, remapReference, isLegacyPreset } from './lib/legacy-presets.js';
-import { choosePreset, isUsable } from './lib/preset-choice.js';
+import { choosePreset, isUsable, isAiWorkflow } from './lib/preset-choice.js';
 import { FileInputs } from './ui/file-inputs.js';
+import { fileKind } from './lib/outputs.js';
+import { ModelViewer } from './ui/model-viewer.js';
+import { AudioPlayer } from './ui/audio-player.js';
+import { FileSheet } from './ui/file-sheet.js';
+import { VideoPlayer } from './ui/video-player.js';
+import { OutputPicker } from './ui/output-picker.js';
+import { PresetChooser } from './ui/preset-chooser.js';
+import { afterBack } from './ui/overlay.js';
 
 const comfy = new ComfyClient();
 const queue = new JobQueue(comfy);
@@ -57,9 +64,56 @@ const viewer = new Viewer({
     toast(`Prompt + seed ${it.meta?.seed ?? ''} loaded`);
   },
   onDiscuss: (it) => chat.discuss(it),
+  onUseAsReference: (it) => useAsReference(it.image),
+  onSaveToDrive: (it) => saveToDrive(it.image, 'image'),
 });
 viewer.onClose = () => paintThumbs();
-const historyView = new HistoryView((getItems, i) => viewer.open(getItems, i));
+const historyView = new HistoryView((getItems, i) => viewer.open(getItems, i), (f, meta) => openFile(f, meta));
+
+// ---- non-image results: 3D viewer, audio player, file sheet ------------------
+const fileHooks = { onDownload: (f) => downloadFile(f), onSaveToDrive: (f) => saveToDrive(f, fileKind(f)) };
+const modelViewer = new ModelViewer(fileHooks);
+const audioPlayer = new AudioPlayer(fileHooks);
+const videoPlayer = new VideoPlayer(fileHooks);
+const fileSheet = new FileSheet(fileHooks);
+/** Tap on a 3D / audio / video result (session strip or History). */
+function openFile(f, meta = {}) {
+  const k = fileKind(f);
+  if (k === '3d' && /\.(glb|gltf)$/i.test(f.filename || '')) return modelViewer.open(f, meta);
+  if (k === 'audio') return audioPlayer.open(f, meta);
+  if (k === 'video' && /\.(mp4|webm|mov|mkv)$/i.test(f.filename || '')) return videoPlayer.open(f, meta);
+  return fileSheet.open(f, meta);
+}
+
+// ---- Save to Drive (server copies the file into Q:\My Drive\Comfy UI\<kind>\) ----
+async function saveToDrive(f, kind) {
+  try {
+    const r = await api.saveToDrive(f, kind);
+    toast(`Saved to Drive: Comfy UI/${r.folder}/${r.name}`, 5000);
+    return r;
+  } catch (e) { toast(e.message, 8000); return null; }
+}
+
+// ---- reference pictures from ComfyUI results ---------------------------------
+// "From Comfy UI" (reference slot button): this session's pictures + earlier ones.
+const outputPicker = new OutputPicker();
+const sessionImages = () => queue.items.filter((i) => i.image).flatMap((i) => [i.image, ...(i.extraImages || [])]).reverse();
+refs.onPickFromComfy = (node) => outputPicker.open({ session: sessionImages, onPick: (img) => refs.useImage(node, img) });
+// "Use as reference" (image viewer): into the current preset's slot, or pick
+// one of the presets that take a picture (3D and Image Edit) first.
+const presetChooser = new PresetChooser();
+const takesPicture = (w) => isUsable(w) && !!w.controls?.images?.length;
+const referencePresets = () => workflows.filter((w) => takesPicture(w) && isAiWorkflow(w) && (w.group === '3D' || (w.group === 'Image' && /edit/i.test(w.label))));
+async function useAsReference(img) {
+  if (!img) return;
+  if (!viewer.root.hidden) { viewer.close(); await afterBack(); }
+  const load = async () => { const ref = await refs.useImage(refs.targetNode(), img); if (ref) toast('Reference image ready'); return ref; };
+  if (current && takesPicture(current)) return load();
+  const list = referencePresets();
+  if (!list.length) { toast('No preset with a reference image slot'); return null; }
+  presetChooser.open(list, async (w) => { selectPreset(w.id); await afterBack(); await load(); });
+  return null;
+}
 
 // ---- presets ---------------------------------------------------------------
 // The picker lists the AI Workflow presets (3D / Image / Video / Audio,
@@ -153,14 +207,14 @@ async function runBuilderTest({ graph, name }) {
   const c = detectControls(graph);
   const v = panel.values();
   if (c.images.length) return toast('This setup needs a picture: Save it, then pick it under My presets and add the picture there.', 8000);
-  if (c.prompt.length && !v.prompt.trim()) return toast('Type a prompt in the prompt box first (the test run uses it)');
+  if (c.prompt.length && !v.prompt.trim()) return toast('Type a prompt first');
   const seed = batchSeeds(1, v.seedMode, v.seed)[0];
   // VibeVoice reads "[1] text": add the speaker tag to plain text (same rule as the VibeVoice preset).
   const vv = Object.values(graph).some((n) => n.class_type === 'VibeVoiceTTS');
   const prompt = vv ? formatPrompt({ promptFormat: { unless: '\\[\\d+\\]|Speaker \\d+:', template: '[1] {text}' } }, v.prompt) : v.prompt;
   const workflow = injectParams(graph, c, { prompt, negative: v.negative, seed, outputPrefix: '', batchSize: 1 });
   await beforeComfyQueue('builder:test');
-  try { await queue.submit([{ workflow, meta: { workflow: 'builder:test', prompt: `Test run · ${name} · ${v.prompt}`.slice(0, 400), seed } }]); toast('Test run queued (not saved as a preset)'); } catch (e) { toast(e.message, 8000); }
+  try { await queue.submit([{ workflow, meta: { workflow: 'builder:test', prompt: `Test run · ${name} · ${v.prompt}`.slice(0, 400), seed } }]); toast('Test run queued'); } catch (e) { toast(e.message, 8000); }
 }
 
 // ---- workflow actions (from the chat's confirm chip) -------------------------
@@ -195,7 +249,7 @@ $('#btn-clear').addEventListener('click', () => queue.clearFinished());
 // ---- thumbnails ------------------------------------------------------------
 function paintThumbs() {
   renderThumbs($('#thumbs'), queue.items, (it) => {
-    if (!it.image && it.files?.length) { downloadFile(it.files[0]); return; }
+    if (!it.image && it.files?.length) { openFile(it.files[0], it.meta); return; }
     if (!it.image) { if (it.error) toast(it.error, 8000); return; }
     const done = queue.items.filter((x) => x.image);
     viewer.open(() => queue.items, done.indexOf(it));
@@ -214,9 +268,9 @@ queue.addEventListener('change', () => {
   raf = requestAnimationFrame(() => { paintThumbs(); viewer.refresh(); });
 });
 
-// A non-image result (3D .glb, video, audio): download it (the Android app's
-// download handler puts it in Download/Comfy UI). No 3D viewer: that would
-// need a WebGL library, and the app has no dependencies.
+// Download a non-image result (the Download button in the 3D viewer, audio
+// player and file sheet; the Android app's download handler puts it in
+// Download/Comfy UI).
 function downloadFile(f) {
   const a = document.createElement('a');
   a.href = viewUrl(f); a.download = f.filename; document.body.append(a); a.click(); a.remove();
@@ -234,21 +288,21 @@ const chat = new ChatPanel($('#chat-mount'), {
   onGenerate: ({ seed } = {}) => { panel.setSeed(seed); return generate(); },
   onRunAction: (r) => runAction(r),
   onTestRun: (r) => runBuilderTest(r),
-  onSavedPreset: (id) => loadWorkflows(id, { remember: true }).then(() => toast('Saved under My presets in the picker')),
+  onSavedPreset: (id) => loadWorkflows(id, { remember: true }).then(() => toast('Saved under My presets')),
 });
-const memory = new MemoryPanel($('#memory-mount'), { onChange: () => chat.refresh() });
-$('details.menu').addEventListener('toggle', (e) => { if (e.target.open) { memory.refresh(true); paintBuilderModel(); } });
+// The memory profile is always Auto (picked on the server from the detected
+// VRAM); the menu has no GPU & memory section.
+$('details.menu').addEventListener('toggle', (e) => { if (e.target.open) paintBuilderModel(); });
 
-// Setup builder model (server: data/builder.json). gemma3:4b now; a 12-14B model after the GPU upgrade.
+// Setup builder model (server: data/builder.json): a plain picker of the models Ollama has.
 async function paintBuilderModel() {
-  const sel = $('#builder-model'), note = $('#builder-model-note');
+  const sel = $('#builder-model');
   try {
     const [cfgB, tags] = await Promise.all([api.getBuilderConfig(), fetch('/ollama/api/tags').then((r) => r.json()).catch(() => ({ models: [] }))]);
     const names = [...new Set([cfgB.model, ...(tags.models || []).map((m) => m.name)])];
     sel.replaceChildren(...names.map((n) => new Option(n, n)));
     sel.value = cfgB.model;
-    note.textContent = `Recommended after the 16 GB GPU: ${cfgB.recommended.model} (or ${cfgB.recommended.alt}).`;
-  } catch (e) { note.textContent = 'Builder settings unavailable: ' + e.message; }
+  } catch (e) { toast('Builder settings unavailable: ' + e.message, 6000); }
 }
 $('#builder-model').addEventListener('change', async (e) => { try { await api.setBuilderModel(e.target.value); toast(`Setup builder uses ${e.target.value}`); } catch (err) { toast(err.message, 6000); } });
 
@@ -295,7 +349,7 @@ async function handleLaunchParams() {
 
 // ---- start ---------------------------------------------------------------
 async function start() {
-  try { config = await api.getConfig(); if (!config.comfyReachable) banner(`ComfyUI not reachable at ${config.comfyUrl} - is Comfy Desktop running?`); } catch { banner('App server not reachable'); }
+  try { config = await api.getConfig(); if (!config.comfyReachable) banner(`ComfyUI not reachable at ${config.comfyUrl}`); } catch { banner('App server not reachable'); }
   await loadWorkflows();
   await handleLaunchParams();
   comfy.connect();
@@ -307,4 +361,5 @@ async function start() {
 }
 start();
 // For tests and poking around from DevTools.
-window.conceptApp = { isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, chat, versions, memory, picker, selectPreset, loadWorkflows, get workflows() { return workflows; }, get current() { return current; } };
+window.conceptApp = { isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, chat, versions, picker, selectPreset, loadWorkflows,
+  modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };

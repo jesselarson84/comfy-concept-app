@@ -2,9 +2,9 @@
 // Sections follow ComfyUI's right-click "AI Workflow" menu (3D / Image / Video /
 // Audio), with "My presets" at the bottom: setups saved from the chat builder
 // (rename / delete inline) and workflows imported or dropped into workflows/.
-// (The old "App presets" section is gone; see lib/legacy-presets.js.) Each row shows
-// its live availability: "needs download" / "missing node" rows are disabled
-// with the reason; "slow · RAM offload" and "tight on 11 GB" are hints.
+// (The old "App presets" section is gone; see lib/legacy-presets.js.) Rows show
+// only the preset name. Unavailable rows (missing model file or node) are grayed
+// out with no tag; tapping one says what is missing.
 import { h, toast } from './dom.js';
 
 export const SECTIONS = [
@@ -46,7 +46,7 @@ export class WorkflowPicker {
   close() { this.pop.hidden = true; this.scrim.hidden = true; this.btn.classList.remove('open'); this.btn.setAttribute('aria-expanded', 'false'); this.editing = null; }
 
   render() {
-    const els = [h('div.mt', {}, h('i.i.i-workflow'), h('b', {}, 'AI Workflow'), h('span', {}, 'same list as ComfyUI right-click'))];
+    const els = [h('div.mt', {}, h('i.i.i-workflow'), h('b', {}, 'AI Workflow'))];
     for (const sec of SECTIONS) {
       const rows = this.items.filter((w) => sectionOf(w) === sec.key);
       if (!rows.length) continue;
@@ -60,17 +60,14 @@ export class WorkflowPicker {
   #row(w) {
     const av = w.availability;
     const off = !w.ok || av?.status === 'unavailable';
-    const tag = !w.ok ? h('span.tg.na', {}, 'invalid')
-      : av?.status === 'unavailable' ? h('span.tg.na', {}, av.label || 'unavailable')
-        : av?.label ? h('span.tg', {}, av.label) : null;
-    const reason = !w.ok ? w.error : av?.reason || w.description || '';
+    const reason = !w.ok ? w.error : off ? av?.reason || '' : '';
     if (this.editing === w.id) return this.#editRow(w);
     const row = h('div.ent', {
-      role: 'option', tabindex: off ? -1 : 0, title: reason, 'aria-selected': String(this.current === w.id), 'aria-disabled': String(off),
+      role: 'option', tabindex: off ? -1 : 0, title: off ? reason : undefined, 'aria-selected': String(this.current === w.id), 'aria-disabled': String(off),
       dataset: { preset: w.id },
       onclick: (e) => { if (e.target.closest('.edit')) return; if (off) { toast(reason || 'Unavailable', 6000); return; } this.close(); this.onPick(w.id); },
       onkeydown: (e) => { if (e.key === 'Enter' && !off) { this.close(); this.onPick(w.id); } },
-    }, h('span.nm', {}, w.label), tag, this.current === w.id ? h('i.i.i-check') : null,
+    }, h('span.nm', {}, w.label), this.current === w.id ? h('i.i.i-check') : null,
     w.user ? h('button.edit.btn.text', { type: 'button', 'aria-label': `Rename or delete ${w.label}`, onclick: () => { this.editing = w.id; this.render(); } }, h('i.i.i-settings')) : null);
     row.classList.toggle('on', this.current === w.id);
     row.classList.toggle('dis', off);

@@ -16,7 +16,7 @@
 <body>
   <div id="app">
     <header class="topbar">
-      <!-- Workflow picker: same list as ComfyUI's right-click "AI Workflow" menu (3D / Image / Video / Audio), plus app presets and saved setups -->
+      <!-- Workflow picker: ComfyUI's right-click "AI Workflow" menu (3D / Image / Video / Audio) plus My presets -->
       <button id="preset-btn" class="btn picker" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Workflow preset">
         <i class="i i-workflow"></i><span class="crumb" id="preset-crumb"></span><span class="name" id="preset-name">Loading&hellip;</span><i class="i i-chevron-down"></i>
       </button>
@@ -26,8 +26,7 @@
         <div class="menu-pop">
           <button id="btn-advanced" class="btn"><i class="i i-workflow"></i>ComfyUI canvas</button>
           <button id="btn-import" class="btn"><i class="i i-folder"></i>Import workflow&hellip;</button>
-          <label class="field builder-model"><span class="label">Setup builder model</span><select id="builder-model" aria-label="Setup builder model"></select><small id="builder-model-note" class="muted"></small></label>
-          <div id="memory-mount"></div>
+          <label class="field builder-model"><span class="label">Setup builder model</span><select id="builder-model" aria-label="Setup builder model"></select></label>
         </div>
       </details>
     </header>
@@ -55,7 +54,6 @@
       <div id="strength-field" class="field" hidden>
         <span class="label">Strength <output id="strength-out"></output></span>
         <input type="range" id="strength" min="0.05" max="1" step="0.05">
-        <small class="muted">Low = stay close to the reference, 1 = reimagine it.</small>
       </div>
 
       <div id="aspect-field" class="field" hidden>
@@ -86,6 +84,7 @@
             <button id="batch-plus" class="btn icon" aria-label="More"><i class="i i-plus"></i></button>
           </div>
         </div>
+        <label id="steps-field" class="field steps-field" hidden><span class="label">Steps</span><input id="steps" type="number" min="1" max="200" inputmode="numeric" aria-label="Steps"></label>
         <div id="seed-field" class="field seed-field" hidden>
           <span class="label">Seed</span>
           <div class="seed">
@@ -96,12 +95,8 @@
         </div>
       </div>
 
-      <details id="more" class="more" hidden>
-        <summary><i class="i i-chevron-right"></i>More settings</summary>
-        <label id="steps-field" class="field" hidden><span class="label">Steps</span><input id="steps" type="number" min="1" max="200" inputmode="numeric"></label>
-        <div id="params"></div>
-        <div id="expose"></div>
-      </details>
+      <div id="params" class="params"></div>
+      <div id="expose" class="params"></div>
     </section>
 
     <section id="results" class="results empty">
@@ -110,7 +105,6 @@
         <button id="btn-clear" class="link">clear finished</button>
       </div>
       <div id="thumbs" class="thumbs"></div>
-      <p class="results-empty muted">Results appear here as each one finishes.</p>
     </section>
 
     <footer class="actionbar">

@@ -20,7 +20,7 @@ export class FileInputs {
       const fileIn = h('input', { type: 'file', accept: ACCEPT[s.kind] || '*/*', hidden: true, onchange: (e) => e.target.files[0] && this.upload(s, e.target.files[0]) });
       this.container.append(h('div.ref-slot', { dataset: { input: k } },
         h('div.ref-head', {}, h('span', {}, s.label || s.kind), set ? h('button.link', { onclick: () => { delete this.values[k]; this.render(this.slots); } }, 'clear') : null),
-        h('div.ref-body', {}, h('span.ref-empty', {}, set ? set : s.defaultAvailable ? `Using ${s.default} (pick a file to use your own)` : `No ${s.kind} yet - pick one (short clips: this runs on the PC's GPU)`)),
+        h('div.ref-body', {}, h('span.ref-empty', {}, set ? set : s.defaultAvailable ? `Using ${s.default}` : '')),
         h('div.ref-buttons.one', {}, h('button.btn', { onclick: () => fileIn.click() }, `Pick ${s.kind}`)),
         fileIn));
     }

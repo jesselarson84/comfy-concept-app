@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { startStack, ROOT, GPU_5080 } from './helpers.js';
+import { startStack, ROOT, GPU_5080, GPU_2080TI } from './helpers.js';
 import { DEFAULT_MEMORY_CONFIG, normalizeMemoryConfig, selectProfile, workflowNeedMB, decideBeforeQueue, decideBeforeChat, modelFit, offloadBadge } from '../../app/js/lib/memory-profiles.js';
 import { loadMemoryConfig } from '../../server/memory.js';
 import { parseNvidiaSmi, fromSystemStats } from '../../server/hardware.js';
@@ -166,27 +166,26 @@ test('5080 (16 GB): chat model stays loaded next to ComfyUI; low free VRAM trigg
   } finally { await s.close(); }
 });
 
-test('app setting override is saved in data/ and beaten by MEMORY_PROFILE; bad ids rejected; partial badge in status', async () => {
-  const s = await startStack({ gpu: { ...GPU_5080 }, ollamaOptions: { vramFraction: { 'gemma3:4b': 0.6 } } });
+test('memory profile is always Auto from VRAM: old saved choice, MEMORY_PROFILE and the override route are ignored; partial badge in status', async () => {
+  // An old data/memory-profile.json from the removed menu setting must not matter.
+  const s = await startStack({ gpu: { ...GPU_5080 }, env: { MEMORY_PROFILE: 'small' }, data: { 'memory-profile.json': { profile: 'small' } }, ollamaOptions: { vramFraction: { 'gemma3:4b': 0.6 } } });
   try {
-    let r = await fetch(s.base + '/api/memory/profile', { method: 'PUT', body: JSON.stringify({ profile: 'small' }) });
-    const m = await r.json();
-    assert.deepEqual([m.profile.id, m.profile.source, m.setting], ['small', 'setting', 'small']);
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(s.dataDir, 'memory-profile.json'), 'utf8')), { profile: 'small' });
-    r = await fetch(s.base + '/api/memory/profile', { method: 'PUT', body: JSON.stringify({ profile: 'huge' }) });
-    assert.equal(r.status, 400);
+    const m = await j(await fetch(s.base + '/api/memory'));
+    assert.deepEqual([m.profile.id, m.profile.source], ['large', 'auto']);
+    assert.equal(m.setting, undefined); assert.equal(m.env, undefined);
+    const r = await fetch(s.base + '/api/memory/profile', { method: 'PUT', body: JSON.stringify({ profile: 'small' }) });
+    assert.equal(r.status, 404, 'no override route');
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(s.dataDir, 'memory-profile.json'), 'utf8')), { profile: 'small' }, 'old file left alone, just ignored');
+    assert.equal((await j(await fetch(s.base + '/api/memory'))).profile.id, 'large');
+    const q = await post(s.base + '/api/memory/before-queue', { workflow: 'default' });
+    assert.equal(q.profile, 'large');
     await fetch(s.base + '/ollama/api/chat', { method: 'POST', body: JSON.stringify({ model: 'gemma3:4b', messages: [{ role: 'user', content: 'hi' }], stream: false }) });
     const st = await j(await fetch(s.base + '/api/memory'));
     assert.deepEqual(st.ollama.loaded[0].badge, { partial: true, gpuPct: 60, text: 'slower, runs partly in RAM (60% on GPU)' });
-    await fetch(s.base + '/api/memory/profile', { method: 'PUT', body: JSON.stringify({ profile: 'auto' }) });
-    assert.equal((await j(await fetch(s.base + '/api/memory'))).profile.source, 'auto');
   } finally { await s.close(); }
-  const e = await startStack({ gpu: { ...GPU_5080 }, env: { MEMORY_PROFILE: 'small' } });
-  try {
-    await fetch(e.base + '/api/memory/profile', { method: 'PUT', body: JSON.stringify({ profile: 'large' }) });
-    const m = await j(await fetch(e.base + '/api/memory'));
-    assert.deepEqual([m.profile.id, m.profile.source, m.env], ['small', 'env', 'small']);
-  } finally { await e.close(); }
+  // Broken old file: still fine.
+  const e = await startStack({ gpu: { ...GPU_2080TI }, data: { 'memory-profile.json': '{not json' } });
+  try { assert.deepEqual((await j(await fetch(e.base + '/api/memory'))).profile.id, 'small'); } finally { await e.close(); }
 });
 
 test('no nvidia-smi: falls back to ComfyUI /system_stats; config edits are picked up without restart', async () => {
@@ -197,9 +196,14 @@ test('no nvidia-smi: falls back to ComfyUI /system_stats; config edits are picke
     assert.equal(m.hardware.gpu.source, 'comfyui');
     assert.equal(m.hardware.gpu.name, 'mock-gpu');
     assert.equal(m.profile.id, 'small');
+    // A "profile" set in the file is ignored (always Auto); edited thresholds are picked up.
     fs.writeFileSync(f, JSON.stringify({ ...DEFAULT_MEMORY_CONFIG, profile: 'large' }));
-    const t = Date.now() / 1000 + 5; fs.utimesSync(f, t, t);
+    let t = Date.now() / 1000 + 5; fs.utimesSync(f, t, t);
     const m2 = await j(await fetch(s.base + '/api/memory'));
-    assert.deepEqual([m2.profile.id, m2.profile.source], ['large', 'config']);
+    assert.deepEqual([m2.profile.id, m2.profile.source], ['small', 'auto']);
+    fs.writeFileSync(f, JSON.stringify({ ...DEFAULT_MEMORY_CONFIG, profiles: [{ ...DEFAULT_MEMORY_CONFIG.profiles[0], id: 'tiny' }, DEFAULT_MEMORY_CONFIG.profiles[1]] }));
+    t = Date.now() / 1000 + 10; fs.utimesSync(f, t, t);
+    const m3 = await j(await fetch(s.base + '/api/memory'));
+    assert.deepEqual([m3.profile.id, m3.profile.source], ['tiny', 'auto']);
   } finally { await s.close(); }
 });

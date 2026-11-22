@@ -199,7 +199,7 @@ Ask for a setup in the chat, e.g. "make a setup: schnell then upscale 2x", or st
 
 The chat shows a summary card with **Test run** (one result at reduced size, never saved), **Save as preset** and **Discard**. A setup becomes a preset only when you tap Save. It then appears under **My presets**, where you can rename or delete it (the ⚙ button on its row). Saved setups are stored as blocks in `data/user-presets.json` (gitignored) and re-validated every time the list loads.
 
-**Builder model:** Menu (⋮) > *Setup builder model* (saved in `data/builder.json`). The default is `gemma3:4b`, which fits next to ComfyUI on the 11 GB card. After the RTX 5080 (16 GB) swap, the recommended model is **gemma3:12b**, or **qwen3:14b** as the alternative; both follow the JSON schema more reliably. They need `ollama pull` first, which the app never does by itself.
+**Builder model:** Menu (⋮) > *Setup builder model* (saved in `data/builder.json`). The default is `gemma3:4b`, which fits next to ComfyUI on the 11 GB card. Any model already pulled in Ollama can be picked; the app never pulls models by itself.
 
 ## Tests
 

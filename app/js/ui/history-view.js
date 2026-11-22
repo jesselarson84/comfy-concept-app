@@ -6,8 +6,9 @@ import { viewUrl } from '../comfy-client.js';
 import { fileLabel } from '../lib/outputs.js';
 
 export class HistoryView {
-  constructor(openViewer) {
-    this.openViewer = openViewer;
+  /** openViewer(getItems, index) for pictures; openFile(file, meta) for 3D / audio / video. */
+  constructor(openViewer, openFile) {
+    this.openViewer = openViewer; this.openFile = openFile;
     this.favOnly = false;
     this.list = h('div.history-list');
     this.favBtn = h('button.btn', { onclick: () => { this.favOnly = !this.favOnly; this.favBtn.classList.toggle('on', this.favOnly); this.load(); } }, '★ Favorites');
@@ -44,14 +45,14 @@ export class HistoryView {
         key: e.id, historyId: e.id, image: e.images[0], favorite: e.favorite, status: 'done',
         meta: { prompt: e.prompt, negative: e.negative, seed: e.seed, workflow: e.workflow, legacyWorkflow: e.legacyWorkflow, width: e.width, height: e.height, strength: e.strength, reference: e.reference, action: e.action, parent: e.parent },
       }));
-      // Non-image results (the 3D action's .glb) are download tiles.
+      // Non-image results (3D .glb, audio, video) open the 3D viewer / audio player / file sheet.
       const files = s.entries.filter((e) => !e.images.length && e.files?.length);
       const when = new Date(s.startedAt);
       return h('section.history-session', {},
         h('h3', {}, `${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, h('span.muted', {}, `  ${items.length} images${files.length ? `, ${files.length} files` : ''}`)),
         h('div.thumbs.grid', {}, items.map((it, i) => h('button.thumb.s-done', { onclick: () => this.openViewer(() => items, i), title: it.meta.prompt },
           h('img', { src: viewUrl(it.image, { thumb: true }), loading: 'lazy', alt: '' }), h('span.thumb-label', {}, it.favorite ? '★' : ''))),
-          files.map((e) => h('a.thumb.s-done.is-file', { href: viewUrl(e.files[0]), download: e.files[0].filename, title: e.prompt },
+          files.map((e) => h('button.thumb.s-done.is-file', { type: 'button', onclick: () => this.openFile?.(e.files[0], { prompt: e.prompt, seed: e.seed, workflow: e.workflow }), title: e.prompt },
             e.parent?.image ? h('img', { src: viewUrl(e.parent.image, { thumb: true }), loading: 'lazy', alt: '' }) : null, h('span.thumb-label', {}, fileLabel(e.files[0]))))));
     }));
   }
