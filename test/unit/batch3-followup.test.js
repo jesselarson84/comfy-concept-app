@@ -62,7 +62,7 @@ test('Qwen 2509: image1/image2/image3 of TextEncodeQwenImageEditPlus (real /obje
   const spec = objectInfo.TextEncodeQwenImageEditPlus.input;
   for (const i of ['image1', 'image2', 'image3']) assert.ok(spec.optional[i], i);
   for (const n of ['7', '8']) {
-    assert.deepEqual(p.workflow[n].inputs.image1, ['6', 0]);
+    assert.deepEqual(p.workflow[n].inputs.image1, ['14', 0]); // 6 -> FluxKontextImageScale 14
     assert.deepEqual(p.workflow[n].inputs.image2, ['21', 0]);
     assert.deepEqual(p.workflow[n].inputs.image3, ['22', 0]);
   }
@@ -122,4 +122,26 @@ test('Folders API: Favorites is a tile backed by the star flag (count follows st
     await post(`/api/history/${e.id}`, { favorite: false }, 'PATCH');
     assert.equal((await j(await fetch(s.base + '/api/folders'))).favorites.count, 0);
   } finally { await s.close(); }
+});
+
+test('Qwen 2509 edits in place like 2511: input VAE-encoded, vae into both text encoders, sampler starts from the input latent at denoise 1', () => {
+  const p = preset('qwen-edit-2509');
+  assert.equal(p.ok, true, p.error);
+  const w = p.workflow;
+  assert.ok(!Object.values(w).some((n) => /^Empty.*Latent/.test(n.class_type)), 'no empty latent');
+  assert.equal(w['14'].class_type, 'FluxKontextImageScale'); assert.deepEqual(w['14'].inputs.image, ['6', 0]);
+  assert.equal(w['9'].class_type, 'VAEEncode'); assert.deepEqual(w['9'].inputs, { pixels: ['14', 0], vae: ['5', 0] });
+  for (const n of ['7', '8']) { assert.deepEqual(w[n].inputs.vae, ['5', 0]); assert.deepEqual(w[n].inputs.image1, ['14', 0]); }
+  assert.deepEqual(w['10'].inputs.latent_image, ['9', 0]); assert.equal(w['10'].inputs.denoise, 1);
+  assert.equal(p.manifest.size, null, 'output size follows the input picture');
+  // every input used exists in /object_info
+  for (const [id, n] of Object.entries(w)) {
+    const def = objectInfo[n.class_type]; assert.ok(def, n.class_type);
+    const spec = { ...(def.input.required || {}), ...(def.input.optional || {}) };
+    for (const k of Object.keys(n.inputs)) assert.ok(k in spec, `${id} ${n.class_type}.${k}`);
+  }
+  // slot 1 only: still valid, no dangling links
+  const only1 = dropEmptyOptional(p.manifest, structuredClone(w), new Set(['6']));
+  for (const [id, n] of Object.entries(only1)) for (const v of Object.values(n.inputs)) if (Array.isArray(v)) assert.ok(only1[v[0]], `${id} -> ${v[0]}`);
+  assert.deepEqual(Object.keys(only1['7'].inputs).filter((k) => k.startsWith('image')), ['image1']);
 });

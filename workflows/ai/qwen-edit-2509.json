@@ -5,16 +5,7 @@
   "menuPath": "Image/Qwen Image Edit 2509",
   "source": "ComfyUI-AIWorkflowMenu image/qwen_image_edit_2509.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "image",
-  "description": "Edit a picture with an instruction, with up to two more reference pictures (Qwen-Image-Edit 2509, 4-step Lightning LoRA).",
-  "size": {
-   "base": [
-    1664,
-    928
-   ],
-   "min": 512,
-   "max": 1664,
-   "multiple": 16
-  },
+  "description": "Edit a picture with an instruction, with up to two more reference pictures (Qwen-Image-Edit 2509, 4-step Lightning LoRA). The picture is VAE-encoded and edited in place.",
   "params": {
    "lightning": {
     "node": "20",
@@ -219,6 +210,34 @@
     "title": "Image to edit #image"
    }
   },
+  "14": {
+   "inputs": {
+    "image": [
+     "6",
+     0
+    ]
+   },
+   "class_type": "FluxKontextImageScale",
+   "_meta": {
+    "title": "FluxKontextImageScale"
+   }
+  },
+  "9": {
+   "inputs": {
+    "pixels": [
+     "14",
+     0
+    ],
+    "vae": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "VAEEncode",
+   "_meta": {
+    "title": "VAE Encode (input image)"
+   }
+  },
   "7": {
    "inputs": {
     "prompt": "Describe the edit here.",
@@ -226,8 +245,12 @@
      "4",
      0
     ],
+    "vae": [
+     "5",
+     0
+    ],
     "image1": [
-     "6",
+     "14",
      0
     ],
     "image2": [
@@ -251,8 +274,12 @@
      "4",
      0
     ],
+    "vae": [
+     "5",
+     0
+    ],
     "image1": [
-     "6",
+     "14",
      0
     ],
     "image2": [
@@ -267,17 +294,6 @@
    "class_type": "TextEncodeQwenImageEditPlus",
    "_meta": {
     "title": "Negative #negative"
-   }
-  },
-  "9": {
-   "inputs": {
-    "width": 1664,
-    "height": 928,
-    "batch_size": 1
-   },
-   "class_type": "EmptySD3LatentImage",
-   "_meta": {
-    "title": "EmptySD3LatentImage"
    }
   },
   "10": {

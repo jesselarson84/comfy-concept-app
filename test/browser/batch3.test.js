@@ -549,7 +549,9 @@ test('3D tiles: fallback is the source picture, then a neutral 3D placeholder; t
   s.mock.files.set('input/obj3d.png', pngBytes());
   await app(() => window.conceptApp.refs.set('2', 'obj3d.png'));
   await page.click('#btn-generate'); await idle();
-  await page.waitForFunction(() => document.querySelector('#thumbs .thumb.is-3d.has-still'), null, { timeout: 30000 });
+  await page.waitForSelector('#thumbs .thumb.is-3d');
+  await page.$eval('#thumbs .thumb.is-3d', (t) => t.scrollIntoView({ inline: 'nearest', block: 'nearest' }));
+  await page.waitForFunction(() => document.querySelector('#thumbs .thumb.is-3d.has-still'), null, { timeout: 60000 });
   const st = await page.evaluate(async () => ({ ...(await import('/js/ui/model-thumbs.js')).stats }));
   assert.equal(st.contexts, 1);
 });
