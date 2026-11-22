@@ -1,0 +1,80 @@
+{
+ "preset": {
+  "group": "Image",
+  "label": "4x Model Upscale",
+  "menuPath": "Image/4x Model Upscale",
+  "source": "ComfyUI-AIWorkflowMenu image/upscale_4x_model.json (converted to API format with the ComfyUI 1.59.10 frontend)",
+  "output": "image",
+  "description": "Plain 4x upscale with an upscale model (fast, no diffusion).",
+  "params": {
+   "model": {
+    "node": "2",
+    "input": "model_name",
+    "type": "enum",
+    "options": [
+     "4x-UltraSharp.safetensors",
+     "4x-ClearRealityV1.safetensors",
+     "4x_NMKD-Siax_200k.pth",
+     "4x_foolhardy_Remacri.pth",
+     "RealESRGAN_x4plus.safetensors"
+    ],
+    "default": "4x-UltraSharp.safetensors",
+    "label": "Model"
+   }
+  },
+  "maxBatch": 4,
+  "vram": {
+   "estMB": 1500,
+   "basis": "67 MB model; tiled upscale, ~1-2 GB activations"
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "image": "example.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Image to upscale #image"
+   }
+  },
+  "2": {
+   "inputs": {
+    "model_name": "4x-UltraSharp.safetensors"
+   },
+   "class_type": "UpscaleModelLoader",
+   "_meta": {
+    "title": "Load Upscale Model"
+   }
+  },
+  "3": {
+   "inputs": {
+    "upscale_model": [
+     "2",
+     0
+    ],
+    "image": [
+     "1",
+     0
+    ]
+   },
+   "class_type": "ImageUpscaleWithModel",
+   "_meta": {
+    "title": "Upscale Image (using Model)"
+   }
+  },
+  "4": {
+   "inputs": {
+    "filename_prefix": "concept-app/upscale4x",
+    "images": [
+     "3",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save Image"
+   }
+  }
+ }
+}

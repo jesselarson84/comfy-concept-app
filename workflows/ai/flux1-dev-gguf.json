@@ -1,0 +1,184 @@
+{
+ "preset": {
+  "group": "Image",
+  "label": "FLUX.1 Dev Text to Image (GGUF)",
+  "menuPath": "Image/FLUX.1 Dev Text to Image (GGUF)",
+  "source": "ComfyUI-AIWorkflowMenu image/flux1_dev_gguf.json (converted to API format with the ComfyUI 1.59.10 frontend)",
+  "output": "image",
+  "description": "FLUX.1 dev Q5_K_S GGUF, 20 steps. Non-commercial license.",
+  "size": {
+   "base": [
+    1024,
+    1024
+   ],
+   "min": 512,
+   "max": 1536,
+   "multiple": 16
+  },
+  "params": {
+   "steps": {
+    "node": "8",
+    "input": "steps",
+    "type": "int",
+    "min": 8,
+    "max": 30,
+    "default": 20,
+    "label": "Steps"
+   },
+   "guidance": {
+    "node": "5",
+    "input": "guidance",
+    "type": "number",
+    "min": 1.5,
+    "max": 5,
+    "default": 3.5,
+    "label": "Guidance"
+   }
+  },
+  "maxBatch": 8,
+  "vram": {
+   "estMB": 9600,
+   "basis": "weights: 8.3 GB Q5_K_S GGUF UNet + T5 fp8 (4.9 GB, swapped out after encode) + activations at 1 MP"
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "unet_name": "flux1-dev-Q5_K_S.gguf"
+   },
+   "class_type": "UnetLoaderGGUF",
+   "_meta": {
+    "title": "Unet Loader (GGUF)"
+   }
+  },
+  "2": {
+   "inputs": {
+    "clip_name1": "t5xxl_fp8_e4m3fn.safetensors",
+    "clip_name2": "clip_l.safetensors",
+    "type": "flux",
+    "device": "default"
+   },
+   "class_type": "DualCLIPLoader",
+   "_meta": {
+    "title": "Load CLIP (Dual)"
+   }
+  },
+  "3": {
+   "inputs": {
+    "vae_name": "ae.safetensors"
+   },
+   "class_type": "VAELoader",
+   "_meta": {
+    "title": "Load VAE"
+   }
+  },
+  "4": {
+   "inputs": {
+    "text": "Describe the image you want here.",
+    "clip": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Prompt #prompt"
+   }
+  },
+  "5": {
+   "inputs": {
+    "guidance": 3.5,
+    "conditioning": [
+     "4",
+     0
+    ]
+   },
+   "class_type": "FluxGuidance",
+   "_meta": {
+    "title": "FluxGuidance"
+   }
+  },
+  "6": {
+   "inputs": {
+    "conditioning": [
+     "4",
+     0
+    ]
+   },
+   "class_type": "ConditioningZeroOut",
+   "_meta": {
+    "title": "Conditioning Zero Out"
+   }
+  },
+  "7": {
+   "inputs": {
+    "width": 1024,
+    "height": 1024,
+    "batch_size": 1
+   },
+   "class_type": "EmptySD3LatentImage",
+   "_meta": {
+    "title": "EmptySD3LatentImage"
+   }
+  },
+  "8": {
+   "inputs": {
+    "seed": 0,
+    "steps": 20,
+    "cfg": 1,
+    "sampler_name": "euler",
+    "scheduler": "simple",
+    "denoise": 1,
+    "model": [
+     "1",
+     0
+    ],
+    "positive": [
+     "5",
+     0
+    ],
+    "negative": [
+     "6",
+     0
+    ],
+    "latent_image": [
+     "7",
+     0
+    ]
+   },
+   "class_type": "KSampler",
+   "_meta": {
+    "title": "KSampler"
+   }
+  },
+  "9": {
+   "inputs": {
+    "samples": [
+     "8",
+     0
+    ],
+    "vae": [
+     "3",
+     0
+    ]
+   },
+   "class_type": "VAEDecode",
+   "_meta": {
+    "title": "VAE Decode"
+   }
+  },
+  "10": {
+   "inputs": {
+    "filename_prefix": "concept-app/flux1_dev",
+    "images": [
+     "9",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save Image"
+   }
+  }
+ }
+}

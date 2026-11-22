@@ -3,6 +3,7 @@
 // are reused by item key so progress updates don't flicker.
 import { h } from './dom.js';
 import { viewUrl } from '../comfy-client.js';
+import { fileLabel } from '../lib/outputs.js';
 
 export function renderThumbs(container, items, onOpen) {
   const existing = new Map([...container.children].map((el) => [el.dataset.key, el]));
@@ -21,7 +22,7 @@ export function renderThumbs(container, items, onOpen) {
     el.querySelector('.thumb-fill').style.width = `${Math.round((it.progress || 0) * 100)}%`;
     el.querySelector('.thumb-label').textContent = {
       submitting: '…', queued: 'queued', running: `${Math.round((it.progress || 0) * 100)}%`,
-      error: 'failed', cancelled: 'cancelled', done: it.favorite ? '★' : (!it.image && it.files?.length ? '3D ↓' : ''),
+      error: 'failed', cancelled: 'cancelled', done: it.favorite ? '★' : (!it.image && it.files?.length ? fileLabel(it.files[0]) : ''),
     }[it.status] ?? '';
     if (container.children[i] !== el) container.insertBefore(el, container.children[i] || null);
   });

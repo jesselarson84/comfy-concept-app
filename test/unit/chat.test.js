@@ -15,7 +15,7 @@ import { validateAction, clampParams, resolveChoice, buildActionGraph, describeC
 
 const loadAction = (id) => validateAction(id, JSON.parse(fs.readFileSync(path.join(ROOT, 'workflows/actions', id + '.json'), 'utf8')));
 const ACTIONS = ['upscale', 'image-to-3d'].map(loadAction);
-const fast = { id: 'fast-concept', workflow: JSON.parse(fs.readFileSync(path.join(ROOT, 'workflows/fast-concept.json'), 'utf8')) };
+const fast = { id: 'basic-txt2img', workflow: JSON.parse(fs.readFileSync(path.join(ROOT, 'test/fixtures/workflows/basic-txt2img.json'), 'utf8')) };
 
 // ---- parseReply ----------------------------------------------------------------
 test('parseReply: valid structured JSON -> reply + prompt (+ negative, action)', () => {
@@ -111,9 +111,9 @@ test('diffWords: marks added and removed words', () => {
 // ---- context ----------------------------------------------------------------------
 test('buildMessages: current prompt + negative + image prompt/seed in system; base64 only on the new message', () => {
   const msgs = buildMessages({
-    current: { prompt: 'a purple duck', negative: 'blurry', negativeOn: true, hasNegative: true, preset: 'Fast concept', workflow: fast },
+    current: { prompt: 'a purple duck', negative: 'blurry', negativeOn: true, hasNegative: true, preset: 'Basic txt2img', workflow: fast },
     history: [{ role: 'user', content: 'duck pls', images: ['img1'] }, { role: 'assistant', content: 'ok', prompt: 'a purple duck' }],
-    images: { img1: { prompt: 'a purple duck', seed: 4242, preset: 'fast-concept' } },
+    images: { img1: { prompt: 'a purple duck', seed: 4242, preset: 'basic-txt2img' } },
     actions: ACTIONS, userText: 'looks like a swan', newImages: [{ ref: 'img1', base64: 'AAAA' }],
   });
   const sys = msgs[0].content;
@@ -263,7 +263,7 @@ test('/api/actions lists the shipped actions; a broken action file is listed as 
   assert.equal(actions.find((a) => a.id === 'broken').ok, false);
   // actions/ is a folder: it never shows up as a preset
   const { workflows } = await j(await fetch(s.base + '/api/workflows'));
-  assert.ok(!workflows.some((w) => /actions|upscale|broken/.test(w.id)));
+  assert.ok(!workflows.some((w) => !w.ai && /actions|upscale|broken/.test(w.id)));
 });
 
 test('history keeps action results linked to their parent image (and non-image files)', async () => {

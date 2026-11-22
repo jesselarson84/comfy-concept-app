@@ -26,13 +26,15 @@ import java.util.Locale;
  * Saving into the gallery (MediaStore) and downloading for "Share".
  * All methods block: call them on a background thread.
  *
- * Images go to Pictures/Comfy Concept, anything else to Download/Comfy Concept.
+ * Images go to Pictures/Comfy UI, anything else to Download/Comfy UI.
+ * (Before batch 1 the folder was "Comfy Concept"; files already saved there
+ * stay where they are, only new saves use the new folder.)
  *   API 29+: MediaStore with RELATIVE_PATH + IS_PENDING (no permission needed).
  *   API 26-28: a file in the public folder + media scan (needs
  *              WRITE_EXTERNAL_STORAGE, which MainActivity requests first).
  */
 final class MediaSaver {
-    static final String FOLDER = "Comfy Concept";
+    static final String FOLDER = "Comfy UI";
     private static final long MAX_BYTES = 200L * 1024 * 1024;
 
     private MediaSaver() {

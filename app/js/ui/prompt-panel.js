@@ -1,8 +1,11 @@
 // prompt-panel.js - the left/top form. Shows only the controls the selected
 // preset actually has (from detectControls on the server) and remembers what
 // you typed in localStorage, so reopening the app keeps your prompt.
+// AI Workflow presets also bring their own clamped settings (manifest params:
+// steps, scale, detail...), shown under More settings with their allowed range.
 import { h, $ } from './dom.js';
 import { randomSeed } from '../lib/seed.js';
+import { parseAspect, aspectKey, sizeFor } from '../lib/aspect.js';
 
 const STORE = 'conceptPanel.v1';
 
@@ -11,11 +14,14 @@ export class PromptPanel {
     this.el = {
       prompt: $('#prompt'), negToggle: $('#neg-toggle'), negRow: $('#neg-row'), negative: $('#negative'),
       msg: $('#preset-msg'), strengthField: $('#strength-field'), strength: $('#strength'), strengthOut: $('#strength-out'),
-      aspectField: $('#aspect-field'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
+      aspectField: $('#aspect-field'), aspectSize: $('#aspect-size'), ratio: $('#aspect-ratio'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
       seedField: $('#seed-field'), seedLock: $('#seed-lock'), seed: $('#seed'), seedDice: $('#seed-dice'),
-      stepsField: $('#steps-field'), steps: $('#steps'), expose: $('#expose'), more: $('#more'),
+      stepsField: $('#steps-field'), steps: $('#steps'), expose: $('#expose'), params: $('#params'), more: $('#more'),
     };
-    this.state = { prompt: '', negative: '', negOn: false, batch: 4, aspect: 'square', seedMode: 'random', seed: 0, strength: null, steps: {}, expose: {}, ...this.#load() };
+    this.state = { prompt: '', negative: '', negOn: false, batch: 4, aspect: '1:1', seedMode: 'random', seed: 0, strength: null, steps: {}, expose: {}, params: {}, ...this.#load() };
+    // Saved state from before the ratio chips: square/portrait/landscape -> chips.
+    this.state.aspect = aspectKey(parseAspect(this.state.aspect));
+    this.state.params ||= {};
     this.#wire();
     this.#paint();
   }
@@ -29,8 +35,15 @@ export class PromptPanel {
     e.negative.addEventListener('input', () => { s.negative = e.negative.value; this.save(); });
     e.negToggle.addEventListener('change', () => { s.negOn = e.negToggle.checked; e.negative.hidden = !s.negOn; this.save(); });
     e.strength.addEventListener('input', () => { s.strength = Number(e.strength.value); e.strengthOut.textContent = s.strength.toFixed(2); this.save(); });
-    document.querySelectorAll('input[name=aspect]').forEach((r) => r.addEventListener('change', () => { s.aspect = r.value; this.save(); }));
-    const setBatch = (n) => { s.batch = Math.max(1, Math.min(20, n || 1)); e.batch.value = s.batch; this.save(); };
+    // Ratio dropdown (1:1 / 4:3 / 3:2 / 16:9); the orientation toggle beside it is separate.
+    e.ratio.addEventListener('change', () => { const a = parseAspect(s.aspect); this.setAspect(aspectKey({ ...a, ratio: e.ratio.value })); });
+    document.querySelectorAll('[data-orient]').forEach((b) => b.addEventListener('click', () => {
+      const a = parseAspect(s.aspect);
+      // Flipping orientation on 1:1 picks the most common non-square ratio.
+      this.setAspect(aspectKey({ ratio: a.ratio === '1:1' ? '3:2' : a.ratio, orient: b.dataset.orient }));
+    }));
+    const setBatch = (n) => { s.batch = Math.max(1, Math.min(this.maxBatch(), n || 1)); e.batch.value = s.batch; this.save(); };
+    this.setBatch = setBatch;
     e.batch.addEventListener('change', () => setBatch(Number(e.batch.value)));
     e.batchMinus.addEventListener('click', () => setBatch(s.batch - 1));
     e.batchPlus.addEventListener('click', () => setBatch(s.batch + 1));
@@ -40,11 +53,41 @@ export class PromptPanel {
     e.steps.addEventListener('input', () => { if (this.wf) { s.steps[this.wf.id] = Number(e.steps.value); this.save(); } });
   }
 
+  maxBatch() { return Math.min(20, this.wf?.ai?.maxBatch || 20); }
+
+  setAspect(key) { this.state.aspect = aspectKey(parseAspect(key)); this.#paintAspect(); this.save(); }
+
   #paintSeed() {
     const e = this.el, s = this.state;
     e.seedLock.checked = s.seedMode === 'locked';
+    e.seedLock.closest('.toggle')?.classList.toggle('on', s.seedMode === 'locked');
     e.seed.disabled = s.seedMode !== 'locked';
     e.seed.value = s.seed;
+  }
+
+  /** Base size of the selected preset (its own latent size, or the manifest's). */
+  baseSize() {
+    const c = this.wf?.controls, sz = this.wf?.ai?.size;
+    if (sz) return sz.base;
+    return [c?.defaults?.width || 1024, c?.defaults?.height || 1024];
+  }
+
+  #paintAspect() {
+    const a = parseAspect(this.state.aspect);
+    this.el.ratio.value = a.ratio;
+    document.querySelectorAll('[data-orient]').forEach((b) => { const on = a.ratio !== '1:1' && b.dataset.orient === a.orient; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+    const [bw, bh] = this.baseSize();
+    const sz = this.clampSize(sizeFor(this.state.aspect, bw, bh, this.wf?.ai?.size?.multiple || 16));
+    this.el.aspectSize.textContent = `${sz.width} × ${sz.height}`;
+  }
+
+  /** Keep a size inside the preset's allowed range (AI presets only). */
+  clampSize({ width, height }) {
+    const sz = this.wf?.ai?.size;
+    if (!sz) return { width, height };
+    const m = sz.multiple || 16;
+    const f = (v) => Math.max(m, Math.round(Math.min(sz.max, Math.max(sz.min, v)) / m) * m);
+    return { width: f(width), height: f(height) };
   }
 
   #paint() {
@@ -52,11 +95,11 @@ export class PromptPanel {
     e.prompt.value = s.prompt; e.negative.value = s.negative;
     e.negToggle.checked = s.negOn;
     e.batch.value = s.batch;
-    document.querySelectorAll('input[name=aspect]').forEach((r) => { r.checked = r.value === s.aspect; });
+    this.#paintAspect();
     this.#paintSeed();
   }
 
-  /** Show/hide controls for a preset ({ id, label, controls, ok, error }). */
+  /** Show/hide controls for a preset ({ id, label, controls, ok, error, ai?, availability? }). */
   setWorkflow(wf) {
     this.wf = wf;
     const e = this.el, s = this.state, c = wf?.ok ? wf.controls : null;
@@ -64,9 +107,17 @@ export class PromptPanel {
     const msgs = [];
     if (!wf) msgs.push('No presets found. Put API-format .json files in the workflows folder.');
     else if (!wf.ok) msgs.push(`This file can't be used: ${wf.error}`);
-    else { if (c.message) msgs.push(c.message); msgs.push(...c.warnings); }
+    else {
+      const av = wf.availability;
+      if (av?.status === 'unavailable') msgs.push(`Unavailable: ${av.reason}`);
+      else if (av?.status === 'offload' || av?.status === 'tight') msgs.push(`${av.label}${av.reason ? `: ${av.reason}` : ''}.`);
+      if (wf.ai?.description) msgs.push(wf.ai.description);
+      if (c?.message && !wf.ai) msgs.push(c.message);
+      if (c) msgs.push(...c.warnings.filter((w) => !wf.ai || !/No prompt text node/.test(w)));
+    }
     e.msg.textContent = msgs.join(' ');
     e.msg.hidden = !msgs.length;
+    e.msg.classList.toggle('warn', wf?.availability?.status === 'unavailable' || wf?.availability?.status === 'offload');
     show(e.prompt.closest('.field'), !!c?.prompt.length || !c);
     show(e.negRow, !!c?.negative.length);
     e.negative.hidden = !(c?.negative.length && s.negOn);
@@ -76,9 +127,30 @@ export class PromptPanel {
       e.strength.value = v; e.strengthOut.textContent = Number(v).toFixed(2);
     }
     show(e.aspectField, !!(c?.width.length && c?.height.length));
+    this.#paintAspect();
     show(e.seedField, !!c?.seed.length);
     show(e.stepsField, !!c?.steps.length);
     if (c?.steps.length) e.steps.value = s.steps[wf.id] ?? c.defaults.steps ?? 4;
+    if (s.batch > this.maxBatch()) { s.batch = this.maxBatch(); e.batch.value = s.batch; }
+    e.batch.max = this.maxBatch();
+    // Preset settings with their allowed ranges.
+    e.params.replaceChildren();
+    for (const [key, p] of Object.entries(wf?.ai?.params || {})) {
+      const val = s.params[wf.id]?.[key] ?? p.default;
+      let input;
+      if (p.type === 'enum') {
+        input = h('select', {}, p.options.map((o) => new Option(String(o).replace(/\.(safetensors|pth|gguf)$/, ''), String(o))));
+        input.value = String(val);
+      } else if (p.type === 'text') input = h('textarea', { rows: 3 }, String(val));
+      else input = h('input', { type: 'number', min: p.min, max: p.max, step: p.type === 'int' ? 1 : 'any', value: val, inputmode: p.type === 'int' ? 'numeric' : 'decimal' });
+      input.dataset.param = key;
+      input.addEventListener(p.type === 'enum' ? 'change' : 'input', () => {
+        const v = p.type === 'enum' ? (p.options.find((o) => String(o) === input.value) ?? input.value) : p.type === 'text' ? input.value : Number(input.value);
+        (s.params[wf.id] ||= {})[key] = v; this.save();
+      });
+      const range = p.type === 'int' || p.type === 'number' ? h('small.muted', {}, `${p.min}–${p.max}`) : null;
+      e.params.append(h('label.field', {}, h('span.label', {}, p.label, range), input));
+    }
     // Generic "#expose" controls.
     e.expose.replaceChildren();
     for (const x of c?.expose || []) {
@@ -93,7 +165,7 @@ export class PromptPanel {
       });
       e.expose.append(h('label.field', {}, h('span.label', {}, x.label), input));
     }
-    show(e.more, !!(c?.steps.length || c?.expose.length));
+    show(e.more, !!(c?.steps.length || c?.expose.length || e.params.children.length));
   }
 
   /** Values the user chose, for this preset. */
@@ -101,10 +173,11 @@ export class PromptPanel {
     const s = this.state, c = this.wf?.controls;
     return {
       prompt: s.prompt, negative: c?.negative.length && s.negOn ? s.negative : (c?.negative.length ? '' : undefined),
-      batch: s.batch, aspect: s.aspect, seedMode: s.seedMode, seed: s.seed,
+      batch: Math.min(s.batch, this.maxBatch()), aspect: s.aspect, seedMode: s.seedMode, seed: s.seed,
       strength: c?.strength.length ? Number(this.el.strength.value) : undefined,
       steps: c?.steps.length ? Number(this.el.steps.value) : undefined,
       expose: s.expose[this.wf?.id] || {},
+      params: { ...(s.params[this.wf?.id] || {}) },
     };
   }
 
@@ -114,8 +187,9 @@ export class PromptPanel {
     if (meta.prompt !== undefined) s.prompt = meta.prompt;
     if (meta.negative) { s.negative = meta.negative; s.negOn = true; }
     if (meta.seed !== undefined && meta.seed !== null) { s.seed = meta.seed; s.seedMode = 'locked'; }
-    if (meta.aspect) s.aspect = meta.aspect;
+    if (meta.aspect) s.aspect = aspectKey(parseAspect(meta.aspect));
     if (meta.strength !== undefined && meta.strength !== null) s.strength = meta.strength;
+    if (meta.params && this.wf && meta.workflow === this.wf.id) s.params[this.wf.id] = { ...meta.params };
     this.#paint(); this.save();
     if (this.wf) this.setWorkflow(this.wf);
   }

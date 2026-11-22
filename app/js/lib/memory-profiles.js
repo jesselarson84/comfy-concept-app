@@ -17,8 +17,8 @@ export const DEFAULT_MEMORY_CONFIG = {
   modelOverheadFactor: 1.2,
   ram: { reserveMB: 8192 },
   profiles: [
-    { id: 'small', label: 'Under 12 GB VRAM (e.g. RTX 2080 Ti 11 GB)', minVramMB: 0, unloadOllamaBeforeQueue: 'always', ollamaKeepAlive: '5m', freeComfyBeforeChat: 'if-low', comfyFree: { unload_models: true, free_memory: true }, maxChatModelMB: 6500 },
-    { id: 'large', label: '16 GB+ VRAM (e.g. RTX 5080 16 GB)', minVramMB: 15000, unloadOllamaBeforeQueue: 'if-needed', ollamaKeepAlive: '10m', freeComfyBeforeChat: 'never', comfyFree: { unload_models: false, free_memory: true }, maxChatModelMB: 26000 },
+    { id: 'small', label: 'Under 12 GB VRAM (e.g. RTX 2080 Ti 11 GB)', minVramMB: 0, unloadOllamaBeforeQueue: 'always', ollamaKeepAlive: '5m', freeComfyBeforeChat: 'if-low', freeComfyBeforeQueue: 'on-switch', comfyFree: { unload_models: true, free_memory: true }, maxChatModelMB: 6500 },
+    { id: 'large', label: '16 GB+ VRAM (e.g. RTX 5080 16 GB)', minVramMB: 15000, unloadOllamaBeforeQueue: 'if-needed', ollamaKeepAlive: '10m', freeComfyBeforeChat: 'never', freeComfyBeforeQueue: 'never', comfyFree: { unload_models: false, free_memory: true }, maxChatModelMB: 26000 },
   ],
   workflowVramNeedMB: { default: 3000, 'fast-concept': 2500, 'from-reference-image': 3000, 'action:upscale': 2500, 'action:image-to-3d': 8000 },
 };
@@ -60,6 +60,7 @@ export function normalizeMemoryConfig(raw) {
       unloadOllamaBeforeQueue: UNLOAD_MODES.includes(p.unloadOllamaBeforeQueue) ? p.unloadOllamaBeforeQueue : base.unloadOllamaBeforeQueue,
       ollamaKeepAlive: typeof p.ollamaKeepAlive === 'string' || typeof p.ollamaKeepAlive === 'number' ? p.ollamaKeepAlive : base.ollamaKeepAlive,
       freeComfyBeforeChat: FREE_MODES.includes(p.freeComfyBeforeChat) ? p.freeComfyBeforeChat : base.freeComfyBeforeChat,
+      freeComfyBeforeQueue: ['never', 'on-switch'].includes(p.freeComfyBeforeQueue) ? p.freeComfyBeforeQueue : (base.freeComfyBeforeQueue || 'never'),
       comfyFree: { unload_models: !!(p.comfyFree?.unload_models ?? base.comfyFree.unload_models), free_memory: p.comfyFree?.free_memory ?? base.comfyFree.free_memory ?? true },
       maxChatModelMB: num(p.maxChatModelMB, base.maxChatModelMB),
     };
@@ -96,9 +97,27 @@ export function selectProfile(totalVramMB, config, { env, setting } = {}) {
   return { profile: chosen, source: 'auto', warnings };
 }
 
-export function workflowNeedMB(config, workflowId) {
+export function workflowNeedMB(config, workflowId, presetEstMB) {
   const t = config.workflowVramNeedMB;
-  return num(t[workflowId], num(t.default, 3000));
+  return num(t[workflowId], num(presetEstMB, num(t.default, 3000)));
+}
+
+/**
+ * Before a ComfyUI job: ask ComfyUI to /free its cached models first?
+ * Small profile ('on-switch'): only when switching to a DIFFERENT workflow than
+ * the last one queued, and the VRAM free after unloading Ollama is still below
+ * what the new workflow needs (stale models from the previous preset would
+ * otherwise push the new one into RAM offload). Same workflow again = keep the
+ * loaded models (that is what makes the second run fast).
+ */
+export function decideFreeBeforeQueue({ profile, freeMB, ollamaFreedMB = 0, needMB, headroomMB = 0, lastWorkflow, workflow }) {
+  if ((profile.freeComfyBeforeQueue || 'never') !== 'on-switch') return { freeComfy: false, reason: `profile ${profile.id}: ComfyUI keeps its models between jobs` };
+  if (!lastWorkflow || lastWorkflow === workflow) return { freeComfy: false, reason: lastWorkflow ? 'same workflow as last time: keep loaded models' : 'first job since start' };
+  if (typeof freeMB !== 'number') return { freeComfy: false, reason: 'free VRAM unknown' };
+  const avail = freeMB + ollamaFreedMB - headroomMB;
+  return avail < needMB
+    ? { freeComfy: true, reason: `switching ${lastWorkflow} -> ${workflow}: ~${avail} MB free < need ${needMB} MB, asking ComfyUI to free VRAM` }
+    : { freeComfy: false, reason: `switching workflows, ~${avail} MB free is enough for ${needMB} MB` };
 }
 
 /**

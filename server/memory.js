@@ -8,7 +8,7 @@
 //   freeForChat()       the out-of-memory fallback: ComfyUI /free (API call, ComfyUI keeps running)
 import fs from 'node:fs';
 import path from 'node:path';
-import { normalizeMemoryConfig, selectProfile, workflowNeedMB, decideBeforeQueue, decideBeforeChat, modelFit, offloadBadge } from '../app/js/lib/memory-profiles.js';
+import { normalizeMemoryConfig, selectProfile, workflowNeedMB, decideBeforeQueue, decideFreeBeforeQueue, decideBeforeChat, modelFit, offloadBadge } from '../app/js/lib/memory-profiles.js';
 
 export function loadMemoryConfig(file) {
   let raw;
@@ -75,13 +75,19 @@ export function createMemory({ cfg, hardware, ollama, getComfyUrl, env = process
     fs.renameSync(tmp, settingFile);
   }
 
-  async function beforeQueue(workflowId = 'default') {
+  let lastWorkflow = null;
+  async function beforeQueue(workflowId = 'default', { estMB } = {}) {
     const { c, hw, sel } = await active({ fresh: true });
     const loaded = await ps();
-    const needMB = workflowNeedMB(c, workflowId);
+    const needMB = workflowNeedMB(c, workflowId, estMB);
     const d = decideBeforeQueue({ profile: sel.profile, freeMB: hw.gpu?.freeMB, ollamaModels: loaded || [], needMB, headroomMB: c.headroomMB });
     const out = { profile: sel.profile.id, workflow: workflowId, freeMB: hw.gpu?.freeMB ?? null, needMB, loaded: (loaded || []).map((m) => m.name), ...d };
     if (d.unload) out.result = await ollama.unloadAll();
+    const freedMB = d.unload ? Math.round((loaded || []).reduce((a, m) => a + (m.size_vram || 0), 0) / 1048576) : 0;
+    const f = decideFreeBeforeQueue({ profile: sel.profile, freeMB: hw.gpu?.freeMB, ollamaFreedMB: freedMB, needMB, headroomMB: c.headroomMB, lastWorkflow, workflow: workflowId });
+    out.comfyFree = f;
+    if (f.freeComfy) out.comfyFree.result = await comfyFree(sel.profile.comfyFree);
+    lastWorkflow = workflowId;
     return out;
   }
 

@@ -3,7 +3,7 @@
 //   /            -> the PWA (static files from app/)
 //   /comfy/*     -> reverse proxy to ComfyUI (HTTP + websocket), see proxy.js
 //   /api/config     GET   app settings + whether ComfyUI answers
-//   /api/workflows  GET   presets with detected controls; POST import (multipart or JSON)
+//   /api/workflows  GET   presets with detected controls + default (fresh-client preset); POST import (multipart or JSON)
 //   /api/history    GET   sessions -> entries; POST add entry
 //   /api/history/:id PATCH favourite / images / status
 //   /api/events     GET   Server-Sent Events ("workflows" when the folder changes)
@@ -17,6 +17,13 @@
 //   /api/memory/before-chat  POST {model}     fit check; maybe ComfyUI /free first (small GPU)
 //   /api/memory/free-for-chat POST           OOM fallback: ComfyUI /free per profile
 //   /api/actions    GET   workflow actions (workflows/actions/*.json) for the Chat
+//   /api/workflows?fresh=1 also lists the AI Workflow presets (workflows/ai/*.json,
+//                   availability computed live from ComfyUI /object_info + model
+//                   lists + GPU/RAM) and the user's saved builder setups
+//   /api/builder/propose POST {text, history, model}  chat builder: Ollama proposes blocks, server validates
+//   /api/builder/check   POST {blocks, name, test}    re-validate (Test run gets the graph)
+//   /api/builder/config  GET / PUT {model}            builder model (data/builder.json)
+//   /api/user-presets    GET, POST {name, blocks}; /api/user-presets/:id PATCH {name}, DELETE
 //   /scripts/* /extensions/* /assets/* -> ComfyUI too (custom-node extensions
 //                   that import from the ComfyUI root instead of /comfy/)
 // Binds 127.0.0.1 only. Remote access = `tailscale serve` in front of it.
@@ -36,6 +43,17 @@ import { createHardware } from './hardware.js';
 import { createMemory } from './memory.js';
 import { handleShare } from './share.js';
 import { readBody, parseMultipart } from './multipart.js';
+import { createComfyInfo } from './comfy-info.js';
+import { PresetStore } from './presets.js';
+import { UserPresetStore } from './user-presets.js';
+import { createBuilder } from './builder.js';
+import { detectControls } from '../app/js/lib/workflow-detect.js';
+import { vramFit } from '../app/js/lib/presets.js';
+import { splitOutputs } from '../app/js/lib/outputs.js';
+import { isLegacyPreset, migrateHistoryEntry } from '../app/js/lib/legacy-presets.js';
+import { defaultPreset } from '../app/js/lib/preset-choice.js';
+
+const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
 
 const json = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
 
@@ -53,7 +71,41 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
   const actions = new ActionStore(path.join(cfg.workflowsDir, 'actions'));
   const hardware = createHardware({ getComfyUrl: () => cfg.comfyUrl, ...(runSmi ? { runSmi } : {}), ...(os ? { os } : {}) });
   const memory = createMemory({ cfg, hardware, ollama, getComfyUrl: () => cfg.comfyUrl, ...(env ? { env } : {}) });
+  const comfyInfo = createComfyInfo({ getComfyUrl: () => cfg.comfyUrl });
+  const presets = new PresetStore(path.join(cfg.workflowsDir, 'ai'));
+  const userPresets = new UserPresetStore(cfg.dataDir);
+  const builder = createBuilder({ cfg, comfyInfo, presets, memory, hardware });
   const sseClients = new Set();
+
+  // Everything the preset picker shows: AI Workflow presets (live
+  // availability), saved builder setups (re-validated live) and workflows
+  // imported/dropped into workflows/ (both under My presets). A leftover
+  // fast-concept.json / from-reference-image.json is not listed: those ids
+  // are retired and resolve to the Klein 4B presets (lib/legacy-presets.js).
+  async function allWorkflows({ fresh = false } = {}) {
+    const info = await comfyInfo.get({ fresh });
+    const hw = await hardware.detect();
+    let profileId; try { profileId = (await memory.status()).profile.id; } catch {}
+    const hwOpts = { gpuTotalMB: hw.gpu?.totalMB, ramFreeMB: hw.ram?.freeMB };
+    const ai = presets.list(info, hwOpts, { profileId });
+    const mine = await Promise.all(userPresets.list().map(async (u) => {
+      const base = { id: `user:${u.id}`, file: null, label: u.name, group: 'My presets', user: { id: u.id, name: u.name, blocks: u.blocks, output: u.output } };
+      if (!info.objectInfo) return { ...base, ok: true, workflow: null, availability: { status: 'unknown', label: 'ComfyUI offline', reason: 'ComfyUI is not reachable' } };
+      const r = await builder.check({ blocks: u.blocks, name: u.name });
+      if (!r.ok) return { ...base, ok: true, workflow: null, availability: { status: 'unavailable', label: 'unavailable', reason: r.errors.join(' ') } };
+      return { ...base, ok: true, workflow: r.graph, controls: detectControls(r.graph), description: r.summary.join(' · '), output: r.output, ai: { output: r.output, params: {}, size: null, maxBatch: r.output === 'image' ? 8 : 2, vram: { estMB: r.estMB }, promptFormat: r.blocks.some((b) => b.type === 'audio' && b.params.engine === 'vibevoice') ? { unless: '\\[\\d+\\]|Speaker \\d+:', template: '[1] {text}' } : null }, availability: { ...vramFit({ estMB: r.estMB, ...hwOpts, profileId }), estMB: r.estMB } };
+    }));
+    const folder = workflows.list().filter((w) => !isLegacyPreset(w.id)).map((w) => ({ ...w, group: 'My presets', folder: true }));
+    const list = [...ai, ...mine, ...folder];
+    // default: what a fresh client opens on (same rule as the browser, lib/preset-choice.js).
+    return { workflows: list, default: defaultPreset(list), comfy: { reachable: !!info.objectInfo, error: info.error || null } };
+  }
+  async function estMBFor(id) {
+    if (id.startsWith('ai:')) { const p = presets.get(id); return p ? (p.manifest.vram.measuredMB || p.manifest.vram.estMB) : undefined; }
+    if (id.startsWith('user:')) { const u = userPresets.get(id); if (!u) return undefined; const r = await builder.check({ blocks: u.blocks, name: u.name }); return r.estMB; }
+    if (id.startsWith('builder:')) return undefined;
+    return undefined;
+  }
   workflows.on('change', () => { for (const r of sseClients) r.write('event: workflows\ndata: {}\n\n'); });
 
   // If a browser lost track of a job (phone slept, tab closed), the history
@@ -67,8 +119,7 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
         if (!r.ok) return;
         const h = (await r.json())[e.promptId];
         if (!h) return;
-        const images = Object.values(h.outputs || {}).flatMap((o) => o.images || []);
-        const files = Object.values(h.outputs || {}).flatMap((o) => o['3d'] || []);
+        const { images, files } = splitOutputs(h.outputs);
         if (images.length || files.length) await history.update(e.id, { images, files, status: 'done' });
         else if (h.status?.status_str === 'error') await history.update(e.id, { status: 'error' });
       } catch { /* ComfyUI offline: leave as is */ }
@@ -81,7 +132,31 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
       const probe = await probeComfy({ ...cfg, comfyUrlExplicit: true }, 1500);
       return json(res, 200, { comfyUrl: cfg.comfyUrl, comfyReachable: probe.ok, comfyStats: probe.stats || null, outputSubfolder: cfg.outputSubfolder, sessionGapMinutes: cfg.sessionGapMinutes });
     }
-    if (p === '/api/workflows' && req.method === 'GET') return json(res, 200, { workflows: workflows.list() });
+    if (p === '/api/workflows' && req.method === 'GET') return json(res, 200, await allWorkflows({ fresh: url.searchParams.get('fresh') === '1' }));
+    // ---- Chat builder + saved setups ----
+    if (p.startsWith('/api/builder/') || p.startsWith('/api/user-presets')) {
+      let body = {};
+      if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+        try { const t = (await readBody(req, 256 * 1024)).toString('utf8'); body = t ? JSON.parse(t) : {}; } catch { return json(res, 400, { error: 'Bad JSON' }); }
+      }
+      if (p === '/api/builder/config' && req.method === 'GET') return json(res, 200, builder.config());
+      if (p === '/api/builder/config' && req.method === 'PUT') { try { return json(res, 200, builder.setModel(body.model)); } catch (e) { return json(res, e.status || 500, { error: e.message }); } }
+      if (p === '/api/builder/propose' && req.method === 'POST') return json(res, 200, await builder.propose({ text: body.text, history: Array.isArray(body.history) ? body.history : [], model: body.model }));
+      if (p === '/api/builder/check' && req.method === 'POST') return json(res, 200, await builder.check({ blocks: body.blocks, name: body.name, test: !!body.test }));
+      if (p === '/api/user-presets' && req.method === 'GET') return json(res, 200, { presets: userPresets.list() });
+      if (p === '/api/user-presets' && req.method === 'POST') {
+        const r = await builder.check({ blocks: body.blocks, name: body.name });
+        if (!r.ok) return json(res, 422, { error: r.errors.join(' '), errors: r.errors });
+        const u = await userPresets.add({ name: body.name, blocks: r.blocks, output: r.output });
+        for (const c of sseClients) c.write('event: workflows\ndata: {}\n\n');
+        return json(res, 201, { ...u, id: `user:${u.id}` });
+      }
+      let dp = p; try { dp = decodeURIComponent(p); } catch {}
+      const um = /^\/api\/user-presets\/(?:user:)?([\w-]+)$/.exec(dp);
+      if (um && req.method === 'PATCH') { try { const u = await userPresets.rename(um[1], body.name); if (!u) return json(res, 404, { error: 'Not found' }); for (const c of sseClients) c.write('event: workflows\ndata: {}\n\n'); return json(res, 200, { ...u, id: `user:${u.id}` }); } catch (e) { return json(res, e.status || 500, { error: e.message }); } }
+      if (um && req.method === 'DELETE') { const ok = await userPresets.remove(um[1]); if (ok) for (const c of sseClients) c.write('event: workflows\ndata: {}\n\n'); return ok ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Not found' }); }
+      return json(res, 404, { error: 'Unknown API route' });
+    }
     if (p === '/api/workflows' && req.method === 'POST') {
       const body = await readBody(req, 10 * 1024 * 1024);
       const ct = req.headers['content-type'] || '';
@@ -107,7 +182,7 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
       let body;
       try { body = JSON.parse((await readBody(req, 1024 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
       const e = await history.update(m[1], body);
-      return e ? json(res, 200, e) : json(res, 404, { error: 'Not found' });
+      return e ? json(res, 200, migrateHistoryEntry(e)) : json(res, 404, { error: 'Not found' });
     }
     // ---- Chat tab ----
     if (p === '/api/chats' && req.method === 'GET') return json(res, 200, { chats: chats.list() });
@@ -134,7 +209,7 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
       let body = {};
       try { const t = (await readBody(req, 64 * 1024)).toString('utf8'); body = t ? JSON.parse(t) : {}; } catch { return json(res, 400, { error: 'Bad JSON' }); }
       if (p === '/api/memory/profile' && req.method === 'PUT') { memory.setSetting(String(body.profile || 'auto')); return json(res, 200, await memory.status()); }
-      if (p === '/api/memory/before-queue') return json(res, 200, await memory.beforeQueue(String(body.workflow || 'default')));
+      if (p === '/api/memory/before-queue') { const id = String(body.workflow || 'default'); return json(res, 200, await memory.beforeQueue(id, { estMB: await estMBFor(id) })); }
       if (p === '/api/memory/before-chat') return json(res, 200, await memory.beforeChat(String(body.model || '')));
       if (p === '/api/memory/free-for-chat') return json(res, 200, await memory.freeForChat());
     }
@@ -192,7 +267,7 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
     server.closeAllConnections?.();
     return close(cb);
   };
-  return { server, workflows, history, chats, memory, hardware, cfg };
+  return { server, workflows, history, chats, memory, hardware, cfg, presets, userPresets, builder, comfyInfo };
 }
 
 // Run directly: `node server/index.js` / `npm start` / start.bat
@@ -202,7 +277,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (probe.ok) cfg.comfyUrl = probe.url;
   const { server, memory } = createApp(cfg);
   server.listen(cfg.port, cfg.host, () => {
-    console.log(`Comfy Concept app:  http://${cfg.host}:${cfg.port}/`);
+    console.log(`Comfy UI app:       http://${cfg.host}:${cfg.port}/`);
     console.log(`ComfyUI target:     ${cfg.comfyUrl}  (${probe.ok ? 'reachable' : 'NOT reachable yet - start Comfy Desktop'})`);
     console.log(`Workflows folder:   ${cfg.workflowsDir}`);
     memory.status({ fresh: true }).then((s) => console.log(`GPU / RAM:          ${s.hardware.gpu ? `${s.hardware.gpu.name} ${s.hardware.gpu.totalMB} MiB (${s.hardware.gpu.source})` : 'no GPU detected'} / ${s.hardware.ram.totalMB} MiB RAM -> memory profile "${s.profile.id}" (${s.profile.source})`)).catch(() => {});

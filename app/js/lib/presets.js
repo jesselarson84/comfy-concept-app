@@ -1,0 +1,216 @@
+// presets.js - the AI Workflow presets (workflows/ai/*.json): one ready-made
+// API graph per entry of ComfyUI's "AI Workflow" right-click menu (custom node
+// pack ComfyUI-AIWorkflowMenu), plus the TTS presets.
+// Shared by the server (validation + live availability) and the browser
+// (clamping what the user typed before a graph is queued). No I/O here.
+// -----------------------------------------------------------------------------
+// A preset file is { "preset": <manifest>, "workflow": <API graph> }, the same
+// pattern as workflows/actions/*.json:
+//   manifest = {
+//     group: "3D" | "Image" | "Video" | "Audio", label, menuPath, source,
+//     output: "image" | "video" | "audio" | "3d", description,
+//     size:   { base: [w, h], min, max, multiple }   (aspect chips -> clamped size)
+//     params: { key: { node, input, also?: [{node,input}], type: "int"|"number"|"enum"|"text",
+//                      min, max, default, options, label, divideBy } }
+//     inputs: [{ kind: "video", node, input, label }]   file slots other than LoadImage
+//     promptFormat: { unless: regex, template: "[1] {text}" }
+//     maxBatch, vram: { estMB, basis, measuredMB }, files: [{ folder, file }]
+//   }
+// Prompt / negative / seed / reference images / width+height are found by
+// detectControls() from the #tags in node titles, exactly like the other
+// presets; params are clamped to [min, max] (bad enum -> default) with a note
+// for every change. The graph always comes from the file.
+// -----------------------------------------------------------------------------
+import { clampParams } from './actions.js';
+
+export const GROUPS = ['3D', 'Image', 'Video', 'Audio'];
+export const OUTPUTS = ['image', 'video', 'audio', '3d'];
+// Literal inputs that name a model file: checked against ComfyUI's model lists.
+export const MODEL_EXT = /\.(safetensors|gguf|pth|pt|ckpt|bin|sft)$/i;
+
+/** Validate one preset file. Returns { ok, id, manifest, workflow, error }. */
+export function validatePreset(id, file) {
+  const fail = (error) => ({ ok: false, id, error });
+  if (!file || typeof file !== 'object') return fail('not an object');
+  const m = file.preset, wf = file.workflow;
+  if (!m || typeof m !== 'object') return fail('missing "preset" manifest');
+  if (!wf || typeof wf !== 'object' || !Object.keys(wf).length) return fail('missing "workflow" graph');
+  for (const [k, n] of Object.entries(wf)) if (!k.startsWith('_') && (!n || typeof n.class_type !== 'string' || typeof n.inputs !== 'object')) return fail(`workflow node ${k} is not API format`);
+  if (!GROUPS.includes(m.group)) return fail(`group must be one of ${GROUPS.join(', ')}`);
+  if (typeof m.label !== 'string' || !m.label.trim()) return fail('manifest needs a label');
+  if (!OUTPUTS.includes(m.output)) return fail(`output must be one of ${OUTPUTS.join(', ')}`);
+  const params = {};
+  for (const [key, p] of Object.entries(m.params || {})) {
+    for (const t of [p, ...(p.also || [])]) {
+      const n = wf[t?.node];
+      if (!n) return fail(`param ${key}: node ${t?.node} not in workflow`);
+      if (!(t.input in n.inputs)) return fail(`param ${key}: input ${t.input} not on node ${t.node}`);
+      if (Array.isArray(n.inputs[t.input])) return fail(`param ${key}: input ${t.input} on node ${t.node} is a link, not a value`);
+    }
+    if (p.type === 'enum') {
+      if (!Array.isArray(p.options) || !p.options.length) return fail(`param ${key}: enum needs options`);
+      if (!p.options.includes(p.default)) return fail(`param ${key}: default not in options`);
+    } else if (p.type === 'number' || p.type === 'int') {
+      if (!(Number.isFinite(p.min) && Number.isFinite(p.max) && p.min <= p.max)) return fail(`param ${key}: needs min <= max`);
+      if (!(p.default >= p.min && p.default <= p.max)) return fail(`param ${key}: default outside [min, max]`);
+    } else if (p.type === 'text') {
+      if (typeof p.default !== 'string') return fail(`param ${key}: text default must be a string`);
+    } else return fail(`param ${key}: type must be int, number, enum or text`);
+    params[key] = { ...p, label: p.label || key };
+  }
+  if (m.size) {
+    const s = m.size;
+    if (!Array.isArray(s.base) || s.base.length !== 2 || !(s.min > 0 && s.max >= s.min)) return fail('size needs base [w, h], min and max');
+  }
+  for (const inp of m.inputs || []) {
+    const n = wf[inp.node];
+    if (!n || !(inp.input in n.inputs)) return fail(`input slot ${inp.kind}: node ${inp.node}.${inp.input} not in workflow`);
+  }
+  return {
+    ok: true, id,
+    manifest: {
+      group: m.group, label: m.label.trim(), menuPath: m.menuPath || `${m.group}/${m.label}`, source: String(m.source || ''),
+      output: m.output, description: String(m.description || ''), params, size: m.size || null,
+      inputs: (m.inputs || []).map((x) => ({ ...x, node: String(x.node) })), promptFormat: m.promptFormat || null,
+      maxBatch: Number.isFinite(m.maxBatch) ? m.maxBatch : 20, vram: { estMB: 0, ...(m.vram || {}) }, files: m.files || [],
+    },
+    workflow: wf,
+  };
+}
+
+/** Clamp the user's values for a preset. Returns { params, size, batch, notes }. */
+export function clampPresetValues(manifest, { params = {}, width, height, batch } = {}) {
+  const numeric = Object.fromEntries(Object.entries(manifest.params).filter(([, d]) => d.type !== 'text'));
+  const given = Object.fromEntries(Object.entries(params || {}).filter(([k]) => manifest.params[k]?.type !== 'text'));
+  const { params: p, notes } = clampParams({ params: numeric }, given);
+  // text params: any string, but bounded length
+  for (const [k, d] of Object.entries(manifest.params)) {
+    if (d.type === 'text') { const v = params[k]; p[k] = typeof v === 'string' ? v.slice(0, 4000) : d.default; }
+  }
+  let size;
+  if (manifest.size && width !== undefined && height !== undefined) {
+    const { min, max, multiple = 16 } = manifest.size;
+    const fix = (v, name) => {
+      let x = Math.min(max, Math.max(min, Number(v) || min));
+      x = Math.max(multiple, Math.round(x / multiple) * multiple);
+      if (x !== Number(v)) notes.push(`${name}: ${v} -> ${x} (allowed ${min}-${max}, multiple of ${multiple})`);
+      return x;
+    };
+    size = { width: fix(width, 'width'), height: fix(height, 'height') };
+  }
+  let b;
+  if (batch !== undefined) {
+    b = Math.max(1, Math.min(manifest.maxBatch || 20, Math.round(Number(batch) || 1)));
+    if (b !== Number(batch)) notes.push(`batch: ${batch} -> ${b} (this preset allows up to ${manifest.maxBatch})`);
+  }
+  return { params: p, size, batch: b, notes };
+}
+
+/** Write clamped params into a copy of the graph (divideBy applied). */
+export function applyPresetParams(manifest, workflow, params) {
+  const out = structuredClone(workflow);
+  for (const [key, p] of Object.entries(manifest.params)) {
+    let v = params[key] ?? p.default;
+    if (p.divideBy) v = Number((v / p.divideBy).toFixed(4));
+    for (const t of [p, ...(p.also || [])]) if (out[t.node]) out[t.node].inputs[t.input] = v;
+  }
+  return out;
+}
+
+/** TTS engines want "[1] text": add the speaker tag when the user typed plain text. */
+export function formatPrompt(manifest, text) {
+  const f = manifest?.promptFormat;
+  if (!f || typeof text !== 'string' || !text.trim()) return text;
+  if (f.unless && new RegExp(f.unless).test(text)) return text;
+  return String(f.template || '{text}').replace('{text}', text.trim());
+}
+
+/** Model files a graph loads: [{ node, input, file, classType }]. */
+export function modelRefs(workflow) {
+  const out = [];
+  for (const [id, n] of Object.entries(workflow || {})) {
+    if (id.startsWith('_') || !n?.inputs) continue;
+    for (const [k, v] of Object.entries(n.inputs)) if (typeof v === 'string' && MODEL_EXT.test(v)) out.push({ node: id, input: k, file: v, classType: n.class_type });
+  }
+  return out;
+}
+
+const norm = (s) => String(s).replace(/\\/g, '/');
+
+/**
+ * Is everything this graph needs present in ComfyUI right now?
+ * @param info { objectInfo: {class: def}, models: {folder: [files]} } (live, from ComfyUI)
+ * Returns { ok, missingNodes[], missingModels[{file, where}], reasons[] }.
+ */
+export function checkInstalled(workflow, info, files = []) {
+  const oi = info?.objectInfo || {};
+  const missingNodes = [], missingModels = [];
+  for (const [id, n] of Object.entries(workflow || {})) {
+    if (id.startsWith('_') || !n?.class_type) continue;
+    if (!oi[n.class_type]) { if (!missingNodes.includes(n.class_type)) missingNodes.push(n.class_type); continue; }
+    const spec = { ...(oi[n.class_type].input?.required || {}), ...(oi[n.class_type].input?.optional || {}) };
+    for (const [k, v] of Object.entries(n.inputs)) {
+      if (typeof v !== 'string' || !MODEL_EXT.test(v)) continue;
+      const opts = comboOptions(spec[k]);
+      if (opts && !opts.map(norm).includes(norm(v))) missingModels.push({ file: v, where: `${n.class_type}.${k}` });
+    }
+  }
+  for (const f of files) {
+    if (f.fsFolder) {
+      const hit = info?.fsFiles?.[`${f.fsFolder}/${f.file}`];
+      if (hit !== true) missingModels.push({ file: f.file, where: `models/${f.fsFolder}`, unverified: hit === undefined });
+      continue;
+    }
+    const list = (info?.models?.[f.folder] || []).map(norm);
+    if (!list.includes(norm(f.file))) missingModels.push({ file: f.file, where: `models/${f.folder}` });
+  }
+  const reasons = [];
+  if (missingNodes.length) reasons.push(`missing custom node${missingNodes.length > 1 ? 's' : ''}: ${missingNodes.join(', ')}`);
+  const unverified = missingModels.filter((m) => m.unverified), absent = missingModels.filter((m) => !m.unverified);
+  if (absent.length) reasons.push(`needs download: ${[...new Set(absent.map((m) => m.file.split(/[\\/]/).pop()))].join(', ')}`);
+  if (unverified.length) reasons.push(`cannot check ${unverified.length} model file(s) on a remote ComfyUI: ${unverified.map((m) => m.file).join(', ')}`);
+  return { ok: !reasons.length, missingNodes, missingModels, reasons };
+}
+
+/** Options of a COMBO input spec in /object_info (old [[...]] or new ["COMBO", {options}]). */
+export function comboOptions(spec) {
+  if (!Array.isArray(spec)) return null;
+  if (Array.isArray(spec[0])) return spec[0];
+  if (spec[0] === 'COMBO' && Array.isArray(spec[1]?.options)) return spec[1].options;
+  return null;
+}
+
+/**
+ * VRAM fit of an estimate on this GPU, per memory profile.
+ *   ok       estimate <= 85 % of usable VRAM
+ *   tight    <= usable VRAM
+ *   offload  more than VRAM but fits VRAM + spare system RAM: ComfyUI keeps part
+ *            of the weights in RAM ("slow, RAM offload")
+ *   unavailable  not even that
+ * usable = total - desktopReserveMB (Windows desktop + driver).
+ */
+export function vramFit({ estMB, gpuTotalMB, ramFreeMB, desktopReserveMB = 1200, ramReserveMB = 8192, profileId } = {}) {
+  if (!estMB) return { status: 'ok', label: '' };
+  if (!gpuTotalMB) return { status: 'unknown', label: 'GPU not detected' };
+  const usable = gpuTotalMB - desktopReserveMB;
+  const gb = (mb) => (mb / 1024).toFixed(1);
+  const vramGb = Math.round(gpuTotalMB / 1024);
+  if (estMB <= usable * 0.85) return { status: 'ok', label: '' };
+  if (estMB <= usable) return { status: 'tight', label: `tight on ${vramGb} GB` };
+  const spare = Math.max(0, (ramFreeMB ?? 0) - ramReserveMB);
+  if (estMB <= usable + spare) return { status: 'offload', label: 'slow · RAM offload', reason: `needs ~${gb(estMB)} GB, more than the ~${gb(usable)} GB usable on the ${vramGb} GB GPU${profileId ? ` (${profileId} profile)` : ''}: part of it runs from system RAM, slower` };
+  return { status: 'unavailable', label: 'not enough memory', reason: `needs ~${gb(estMB)} GB; GPU ${vramGb} GB + free RAM is not enough` };
+}
+
+/** Availability of a preset = installed check + VRAM fit. */
+export function presetAvailability(p, info, hw = {}, opts = {}) {
+  if (!info?.objectInfo) return { status: 'unknown', label: 'ComfyUI offline', reason: 'ComfyUI is not reachable, so availability could not be checked' };
+  const inst = checkInstalled(p.workflow, info, p.manifest.files);
+  if (!inst.ok) {
+    const dl = inst.missingModels.length && !inst.missingNodes.length;
+    return { status: 'unavailable', label: dl ? 'needs download' : 'missing node', reason: inst.reasons.join('; '), missing: inst };
+  }
+  const est = p.manifest.vram?.measuredMB || p.manifest.vram?.estMB || 0;
+  const fit = vramFit({ estMB: est, gpuTotalMB: hw.gpuTotalMB, ramFreeMB: hw.ramFreeMB, desktopReserveMB: opts.desktopReserveMB, ramReserveMB: opts.ramReserveMB, profileId: opts.profileId });
+  return { ...fit, estMB: est };
+}

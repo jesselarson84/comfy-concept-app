@@ -1,0 +1,114 @@
+{
+ "preset": {
+  "group": "Audio",
+  "label": "VibeVoice 1.5B TTS",
+  "menuPath": "Audio/VibeVoice TTS",
+  "source": "authored from /object_info (VibeVoiceTTS + SaveAudio); model pinned to the installed VibeVoice-1.5B",
+  "output": "audio",
+  "description": "Long-form / multi-speaker speech. Mark speakers with [1], [2]; plain text is read by speaker 1. VibeVoice 1.5B clones the voice of a short speech sample: pick one, or leave it empty to use verify-voice.flac from ComfyUI input (a Chatterbox test voice).",
+  "promptFormat": {
+   "unless": "\\[\\d+\\]|Speaker \\d+:",
+   "template": "[1] {text}"
+  },
+  "params": {
+   "steps": {
+    "node": "1",
+    "input": "inference_steps",
+    "type": "int",
+    "min": 5,
+    "max": 30,
+    "default": 10,
+    "label": "Steps"
+   },
+   "cfg": {
+    "node": "1",
+    "input": "cfg_scale",
+    "type": "number",
+    "min": 1,
+    "max": 2,
+    "default": 1.3,
+    "label": "Voice adherence (cfg)"
+   }
+  },
+  "maxBatch": 2,
+  "files": [
+   {
+    "fsFolder": "tts",
+    "file": "VibeVoice/VibeVoice-1.5B/model-00001-of-00003.safetensors"
+   },
+   {
+    "fsFolder": "tts",
+    "file": "VibeVoice/VibeVoice-1.5B/model-00002-of-00003.safetensors"
+   },
+   {
+    "fsFolder": "tts",
+    "file": "VibeVoice/VibeVoice-1.5B/model-00003-of-00003.safetensors"
+   }
+  ],
+  "vram": {
+   "estMB": 6500,
+   "basis": "weights: 5.2 GB bf16 (Qwen2.5-1.5B LLM + diffusion head + tokenizers)"
+  },
+  "inputs": [
+   {
+    "kind": "audio",
+    "node": "3",
+    "input": "audio",
+    "label": "Voice sample (a few seconds of speech to clone)",
+    "default": "verify-voice.flac"
+   }
+  ]
+ },
+ "workflow": {
+  "1": {
+   "class_type": "VibeVoiceTTS",
+   "inputs": {
+    "model_name": "VibeVoice-1.5B",
+    "text": "[1] Hello. This is a short test.",
+    "quantize_llm_4bit": false,
+    "attention_mode": "sdpa",
+    "cfg_scale": 1.3,
+    "inference_steps": 10,
+    "seed": 1,
+    "do_sample": true,
+    "temperature": 0.95,
+    "top_p": 0.95,
+    "top_k": 0,
+    "max_new_tokens": 0,
+    "force_offload": true,
+    "device": "cuda",
+    "dtype": "auto",
+    "voice_preset": "None",
+    "speaker_1_voice": [
+     "3",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "VibeVoice TTS #prompt"
+   }
+  },
+  "2": {
+   "class_type": "SaveAudio",
+   "inputs": {
+    "audio": [
+     "1",
+     0
+    ],
+    "filename_prefix": "concept-app/tts_vibevoice"
+   },
+   "_meta": {
+    "title": "Save Audio"
+   }
+  },
+  "3": {
+   "class_type": "LoadAudio",
+   "inputs": {
+    "audio": "verify-voice.flac"
+   },
+   "_meta": {
+    "title": "Voice sample"
+   }
+  }
+ }
+}

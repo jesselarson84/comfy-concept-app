@@ -170,3 +170,39 @@ export function parseReply(text, current = {}) {
   if (!r.reply) r.reply = r.changed ? 'Here is a revised prompt.' : (r.action ? '' : '(no reply)');
   return r;
 }
+
+// ---- proposal tense -----------------------------------------------------------
+// When a reply comes with an action the user still has to confirm (Run), the
+// text must not claim it already happened ("I have increased the resolution").
+// Small models do it anyway, so past/perfect claims are rewritten to the
+// conditional, deterministically: "I have increased" -> "I would increase".
+const BASE = {
+  increased: 'increase', upscaled: 'upscale', enlarged: 'enlarge', doubled: 'double', tripled: 'triple', quadrupled: 'quadruple',
+  added: 'add', applied: 'apply', made: 'make', created: 'create', generated: 'generate', converted: 'convert', turned: 'turn',
+  set: 'set', run: 'run', ran: 'run', started: 'start', queued: 'queue', boosted: 'boost', raised: 'raise', improved: 'improve',
+  sharpened: 'sharpen', changed: 'change', updated: 'update', edited: 'edit', adjusted: 'adjust', resized: 'resize', scaled: 'scale',
+  enhanced: 'enhance', done: 'do', built: 'build', rendered: 'render', transformed: 'transform', processed: 'process', modeled: 'model',
+  modelled: 'model', produced: 'produce', prepared: 'prepare', upgraded: 'upgrade', bumped: 'bump',
+};
+const VERBS = Object.keys(BASE).join('|');
+const GERUND = Object.fromEntries([...new Set(Object.values(BASE))].map((b) => [b === 'set' ? 'setting' : b === 'run' ? 'running' : b.endsWith('e') && b !== 'see' ? b.slice(0, -1) + 'ing' : b + 'ing', b]));
+export function proposalTense(text, { cta = 'Tap Run to start it.' } = {}) {
+  let t = String(text ?? '');
+  const before = t;
+  // "I have increased" / "I've just upscaled" / "I increased" -> "I would increase"
+  t = t.replace(new RegExp(`\\bI(?:'ve| have)?(?: just| now| already)? (${VERBS})\\b`, 'gi'), (_, v) => `I would ${BASE[v.toLowerCase()]}`);
+  // "has been upscaled" / "have been increased" / "was upscaled" -> "would be upscaled"
+  t = t.replace(new RegExp(`\\b(?:has|have) been (${VERBS})\\b`, 'gi'), 'would be $1');
+  t = t.replace(new RegExp(`\\b(?:is|are|was|were) (?:now )?(${VERBS})\\b`, 'gi'), 'would be $1');
+  // "is now 2x" -> "would then be 2x"
+  t = t.replace(/\b(is|are) now\b/gi, 'would then be');
+  // "Upscaling it now." (sounds like it is already running) -> "I would upscale it."
+  t = t.replace(/(^|[.!?]\s+)(\w+ing)(?= (?:it|this|that|the|your)\b)/g, (m, pre, g) => {
+    const base = GERUND[g.toLowerCase()];
+    return base ? `${pre}I would ${base}` : m;
+  }).replace(/\b(I would \w+ (?:it|this|that)) now\b/gi, '$1');
+  // Leading "Done." / "Here you go." / "All set." claims
+  t = t.replace(/^\s*(?:done|all set|here you go|here it is|finished)[.!]\s*/i, '');
+  if (t !== before && cta && !/\btap run\b|\bconfirm\b|nothing has run/i.test(t)) t = t.replace(/\s*$/, '') + ' ' + cta;
+  return t.trim() || before;
+}

@@ -68,7 +68,7 @@ public class MainActivity extends Activity {
     private static final String TAILSCALE_PKG = "com.tailscale.ipn";
     private static final int REQ_FILE_CHOOSER = 1;
     private static final int REQ_STORAGE = 2;
-    private static final int BG_COLOR = 0xFF11131A; // = @color/app_bg = --bg in app/styles.css
+    private static final int BG_COLOR = 0xFF171718; // = @color/app_bg = top bar / action bar colour in app/styles.css
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newFixedThreadPool(2);
@@ -844,7 +844,7 @@ public class MainActivity extends Activity {
     /**
      * Edge-to-edge on every version (Android 15 forces it anyway): the content
      * draws behind the status and navigation bars, and the root view takes the
-     * bar (and keyboard) insets as padding, so its background (#11131A, same as
+     * bar (and keyboard) insets as padding, so its background (#171718, same as
      * the web UI) shows behind the bars and nothing is covered.
      */
     @SuppressWarnings("deprecation")

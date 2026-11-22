@@ -1,6 +1,6 @@
-# Comfy Concept for Android
+# Comfy UI for Android (Comfy Concept app)
 
-A real, installable Android app (package `app.jesse.comfyconcept`, phone and tablet) that wraps the Comfy Concept web app served over Tailscale at `https://my-pc.my-tailnet.ts.net`. It has no browser bar. It also does what the PWA cannot:
+A real, installable Android app (package `app.jesse.comfyconcept`, phone and tablet) that wraps the Comfy Concept web app (shown as **Comfy UI**) served over Tailscale at `https://my-pc.my-tailnet.ts.net`. It has no browser bar. It also does what the PWA cannot:
 - receive shared images
 - save images to the gallery
 - share real image files
@@ -59,22 +59,26 @@ A **release** build (**Build > Generate Signed Bundle/APK**, or the `release` va
 
 Only `https://host[:port]` is accepted, with no path. A bare host gets `https://` added.
 
-**Share in.** In Photos (or after taking a screenshot), choose Share and then **Comfy Concept**. The image goes to `POST /share`, which is the same contract as the PWA (`server/share.js`). The app then opens on *From reference image* with the picture in the slot.
+**Share in.** In Photos (or after taking a screenshot), choose Share and then **Comfy UI**. The image goes to `POST /share`, which is the same contract as the PWA (`server/share.js`). The app then opens on *FLUX.2 Klein 4B Image Edit* with the picture in the slot.
 
 **Save / Share in the viewer.** These buttons use the native side:
-- Save puts the image in **Pictures/Comfy Concept**, where it shows up in the gallery.
+- Save puts the image in **Pictures/Comfy UI**, where it shows up in the gallery. (Builds before batch 1 saved to Pictures/Comfy Concept; those files stay there.)
 - Share opens the Android share sheet with the real PNG.
 
-Other downloads go to the same place. Images go to Pictures/Comfy Concept and everything else goes to Download/Comfy Concept; this includes a workflow `.json` exported from *Advanced* (ComfyUI).
+Other downloads go to the same place. Images go to Pictures/Comfy UI and everything else goes to Download/Comfy UI; this includes a workflow `.json` exported from the *ComfyUI canvas*.
 
 **Keep awake.** The screen stays on while a batch is queued or running, and is released when the queue is idle.
 
-**Swap the icon.** The adaptive icon is built from these files:
-- `app/src/main/res/drawable/ic_launcher_foreground.xml`: the "C" artwork. It is a vector on the 108x108 adaptive grid; keep the important parts inside the central 66-unit circle.
-- `app/src/main/res/values/colors.xml`: `ic_launcher_background` (#1E1730).
-- `app/src/main/res/drawable/ic_launcher_monochrome.xml`: the themed-icon layer for Android 13+. Only its alpha is used.
+**Swap the icon.** The current icon is a yellow-green "C" mark (#F2FF5A) on a dark plum tile (#201A27). It is drawn from these files:
+- `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` and `ic_launcher_round.xml`: the adaptive icon (Android 8+). Each one stacks three layers: background, foreground and monochrome.
+- `app/src/main/res/values/ic_launcher_background.xml`: the tile colour, `ic_launcher_background` = `#FF201A27`. `drawable/ic_launcher_background.xml` is a plain rectangle in that colour.
+- `app/src/main/res/drawable/ic_launcher_foreground.xml`: the "C" mark as a vector path on the 108x108 adaptive grid, filled with #FFF2FF5A. Keep it inside the central 66-unit safe zone. `values/colors.xml` holds the same colour as `ic_launcher_mark`; change both if you recolour it.
+- `app/src/main/res/drawable/ic_launcher_monochrome.xml`: the same path in white, the themed-icon layer for Android 13+. Only its alpha is used.
+- `app/src/main/res/mipmap-mdpi` through `mipmap-xxxhdpi`: PNG renders (`ic_launcher.png`, `ic_launcher_round.png`, `ic_launcher_foreground.png`). These are fallbacks for launchers that do not use the adaptive icon.
+- `icon-preview.png` (in this folder): a 512x512 render of the current icon, for reference only.
+- The PWA uses the same mark: `app/icons/icon-192.png`, `icon-512.png` and `maskable-512.png` (in the web app, not in `android/`). `scripts/make-icons.js` still draws the old placeholder "spark" icon, so do not run it unless you want that icon back.
 
-To use your own artwork, replace the foreground file, or use **File > New > Image Asset** in Studio with the name `ic_launcher`. Also update or delete the monochrome file. The PNGs in `mipmap-*dpi/` are only fallbacks: Android 8+ always uses the adaptive icon. `icon-preview.png` is a 512x512 render of the current icon.
+To use new artwork, replace the foreground and monochrome paths, or use **File > New > Image Asset** in Android Studio with the name `ic_launcher`. Then re-render the mipmap PNGs, the PWA icons and `icon-preview.png` so they all match. The launcher label is `app_name` in `values/strings.xml` ("Comfy UI"). Changing the icon or the label does not change the package (`app.jesse.comfyconcept`), so the app still updates in place.
 
 **Known limits**
 - From a share, only **one reference image** is used. If you share several images, the app takes the first and shows a message.
@@ -87,23 +91,23 @@ To use your own artwork, replace the foreground file, or use **File > New > Imag
 
 Tick these off on the **phone** and on the **tablet**:
 
-1. **First launch**: the address prompt appears and **Connect** loads the app. There is no browser bar, and the status and navigation bars are dark (#11131A) with nothing covered by them.
-2. **Share from Photos**: share a photo to Comfy Concept. The app opens on *From reference image* with that photo in the slot.
+1. **First launch**: the address prompt appears and **Connect** loads the app. There is no browser bar, and the status and navigation bars are dark (#171718) with nothing covered by them.
+2. **Share from Photos**: share a photo to Comfy UI. The app opens on *FLUX.2 Klein 4B Image Edit* with that photo in the slot.
 3. **Share a screenshot**, using the screenshot preview's Share button: same result.
 4. **Share 3 images at once**: a message says only the first is used, and the first is in the slot.
-5. **Camera capture**: on *From reference image*, tap **Camera** in the slot. The camera app opens; take a photo and accept it, and it uploads into the slot. Also test **Pick**: the picker offers Photos/Files plus Camera.
+5. **Camera capture**: on *FLUX.2 Klein 4B Image Edit*, tap **Camera** in the slot. The camera app opens; take a photo and accept it, and it uploads into the slot. Also test **Pick**: the picker offers Photos/Files plus Camera.
 6. **Import workflow** (menu): the file picker lets you choose a `.json` from Downloads.
-7. **Save to gallery**: in the viewer, tap Save. A "Saved to Pictures/Comfy Concept" message appears and the image is in the gallery. On an Android 8/9 device, the first Save asks for storage permission.
+7. **Save to gallery**: in the viewer, tap Save. A "Saved to Pictures/Comfy UI" message appears and the image is in the gallery. On an Android 8/9 device, the first Save asks for storage permission.
 8. **Share out**: in the viewer, tap Share. The share sheet opens, and sending to e.g. Messages or Drive delivers the real image.
 9. **Keep awake during a batch**: set the screen timeout to 30 s, then start a batch of 10. The screen stays on until the batch finishes, then times out normally.
 10. **Rotation**: rotate during a batch. The page does **not** reload, progress continues, and the open viewer stays open.
 11. **Tablet layout**: the panel and the grid sit side by side in landscape. Split-screen and freeform resizing work.
 12. **Keyboard**: typing a prompt pushes the content up, and the Generate button is not hidden behind the keyboard.
-13. **Back button**: in the viewer, Back closes the viewer. In *Advanced*, Back returns to the app. On the main screen, Back exits.
+13. **Back button**: in the viewer, Back closes the viewer. In the *ComfyUI canvas*, Back returns to the app. On the main screen, Back exits.
 14. **Tailscale off**: disconnect Tailscale and reopen the app. The offline screen shows the address and the three buttons. **Open Tailscale** opens the Tailscale app. Reconnect, tap **Retry**, and the app loads.
 15. **Change address**: long-press the launcher icon and choose **Change address**. An invalid entry (e.g. `http://x` or `https://x/path`) shows an error and is not saved. **Default** restores the stock address.
 16. **External links**: a link to another site opens in the browser, not inside the app.
-17. **Advanced, Export (API)**: the exported `.json` lands in Download/Comfy Concept. If it says "Save failed", that ComfyUI build revokes its blob URL too early; this is a known edge (see Decisions).
+17. **ComfyUI canvas, Export (API)**: the exported `.json` lands in Download/Comfy UI. If it says "Save failed", that ComfyUI build revokes its blob URL too early; this is a known edge (see Decisions).
 
 ## Decisions
 
@@ -115,11 +119,11 @@ Tick these off on the **phone** and on the **tablet**:
   - This was chosen over `shouldInterceptRequest`, because that runs on a background thread for every sub-resource and cannot tell an iframe from an image.
   - Residual risk: a cross-origin iframe embedded by a server page would also see the object, but it could only save or share images from your own server. The web app has no iframes.
 - **Offline detection.** The PWA's service worker can serve the cached app shell while the server is down. In that case the WebView reports no error and you would just see the web app's "App server not reachable" banner. So the app also checks `GET <server>/api/config` itself after each load. If that fails, or answers 5xx, the native offline screen is shown. Main-frame load errors, HTTP 5xx and TLS errors also show it, and TLS errors are never bypassed.
-- **Edge-to-edge on every Android version** (Android 15 forces it). The root view takes the system-bar, cutout and keyboard insets as padding, and its background (#11131A, the web UI's background) shows behind the bars. The insets are consumed natively, so the page's `env(safe-area-inset-*)` stays 0 and nothing is padded twice.
+- **Edge-to-edge on every Android version** (Android 15 forces it). The root view takes the system-bar, cutout and keyboard insets as padding, and its background (#171718, the web UI's top/bottom bar colour) shows behind the bars. The insets are consumed natively, so the page's `env(safe-area-inset-*)` stays 0 and nothing is padded twice.
 - **Rotation without reload.** The activity handles the config changes itself (`orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode`). `screenOrientation=fullUser` allows every orientation while respecting the rotation lock.
 - **`launchMode=singleTask`.** A share arrives in the running app (`onNewIntent`) instead of stacking a second copy. A restored activity never re-sends a share: the intent is ignored when restored or launched from Recents.
 - **Back** uses the classic `onBackPressed`. Predictive back is not opted in, so it works the same on API 26-35. It follows the WebView history first, so the web viewer's `history.pushState` makes Back close the viewer.
-- **Downloads.** Images go to Pictures/Comfy Concept and other files to Download/Comfy Concept: MediaStore on Android 10+, and a file plus a media scan on 8-9.
+- **Downloads.** Images go to Pictures/Comfy UI and other files to Download/Comfy UI (the old Comfy Concept folders are left as they are): MediaStore on Android 10+, and a file plus a media scan on 8-9.
   - `blob:` downloads, such as ComfyUI's export, are read by injected JS and handed over as a `data:` URL (the bridge's internal `saveDataUrl`).
   - Downloads from other sites open in the browser.
 - **File chooser.**

@@ -3,6 +3,7 @@
 import { h, toast } from './dom.js';
 import { getHistory } from '../api.js';
 import { viewUrl } from '../comfy-client.js';
+import { fileLabel } from '../lib/outputs.js';
 
 export class HistoryView {
   constructor(openViewer) {
@@ -41,17 +42,17 @@ export class HistoryView {
       // Turn history entries into the same item shape the viewer uses.
       const items = s.entries.filter((e) => e.images.length).map((e) => ({
         key: e.id, historyId: e.id, image: e.images[0], favorite: e.favorite, status: 'done',
-        meta: { prompt: e.prompt, negative: e.negative, seed: e.seed, workflow: e.workflow, width: e.width, height: e.height, strength: e.strength, reference: e.reference, action: e.action, parent: e.parent },
+        meta: { prompt: e.prompt, negative: e.negative, seed: e.seed, workflow: e.workflow, legacyWorkflow: e.legacyWorkflow, width: e.width, height: e.height, strength: e.strength, reference: e.reference, action: e.action, parent: e.parent },
       }));
       // Non-image results (the 3D action's .glb) are download tiles.
       const files = s.entries.filter((e) => !e.images.length && e.files?.length);
       const when = new Date(s.startedAt);
       return h('section.history-session', {},
-        h('h3', {}, `${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, h('span.muted', {}, `  ${items.length} images${files.length ? `, ${files.length} 3D` : ''}`)),
+        h('h3', {}, `${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, h('span.muted', {}, `  ${items.length} images${files.length ? `, ${files.length} files` : ''}`)),
         h('div.thumbs.grid', {}, items.map((it, i) => h('button.thumb.s-done', { onclick: () => this.openViewer(() => items, i), title: it.meta.prompt },
           h('img', { src: viewUrl(it.image, { thumb: true }), loading: 'lazy', alt: '' }), h('span.thumb-label', {}, it.favorite ? '★' : ''))),
           files.map((e) => h('a.thumb.s-done.is-file', { href: viewUrl(e.files[0]), download: e.files[0].filename, title: e.prompt },
-            e.parent?.image ? h('img', { src: viewUrl(e.parent.image, { thumb: true }), loading: 'lazy', alt: '' }) : null, h('span.thumb-label', {}, '3D ↓')))));
+            e.parent?.image ? h('img', { src: viewUrl(e.parent.image, { thumb: true }), loading: 'lazy', alt: '' }) : null, h('span.thumb-label', {}, fileLabel(e.files[0]))))));
     }));
   }
 }

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Same as the bg variable in app/styles.css, so the system bars blend into the web UI. -->
-    <color name="app_bg">#FF11131A</color>
-    <color name="panel">#FF181B24</color>
-    <color name="text_primary">#FFE8EAF2</color>
-    <color name="text_secondary">#FFA3A9BC</color>
-    <color name="accent">#FFCDB8FF</color>
+    <!-- ComfyUI dark theme (app/styles.css): app_bg = the top bar / action bar colour, so the system bars blend into the web UI. -->
+    <color name="app_bg">#FF171718</color>
+    <color name="panel">#FF262729</color>
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FF8A8A8A</color>
+    <color name="accent">#FF0B8CE9</color>
     <!-- Launcher icon tile colour (#201A27) lives in ic_launcher_background.xml. -->
     <color name="ic_launcher_mark">#FFF2FF5A</color>
 </resources>

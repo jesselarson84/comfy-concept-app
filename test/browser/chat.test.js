@@ -17,7 +17,7 @@ async function openPage(base) {
   p.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   p.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text() + ' @ ' + (m.location()?.url || '?')); });
   await p.goto(base + '/');
-  await p.waitForFunction(() => document.querySelectorAll('#preset option').length >= 2);
+  await p.waitForFunction(() => (window.conceptApp?.workflows?.length || 0) >= 2);
   return p;
 }
 before(async () => {
@@ -40,6 +40,12 @@ async function send(text) {
   await page.waitForFunction((n) => document.querySelectorAll('.chat-msg.assistant:not(.chat-thinking)').length > n && !document.querySelector('.chat-thinking'), n, { timeout: 10000 });
 }
 const doneCount = () => page.$$eval('#thumbs .thumb', (els) => els.filter((e) => e.className.includes('s-done')).length);
+
+
+// Preset picker (top bar): open it and tap a row.
+async function pick(id, pg = page) { await pg.click('#preset-btn'); await pg.click(`#picker .ent[data-preset="${id}"]`); await pg.waitForFunction((x) => window.conceptApp.current?.id === x, id); }
+const currentPreset = (pg = page) => pg.evaluate(() => window.conceptApp.current?.id);
+const hasPreset = (id) => (window.conceptApp?.workflows || []).some((w) => w.id === id);
 
 test('assistant sits under the prompt box, lists Ollama models, shows the vision badge', async () => {
   assert.equal(await page.locator('#prompt-tools + #chat-mount #chat').count(), 1);
@@ -153,6 +159,10 @@ test('action: "upscale" -> confirm chip with clamp note; Run wires the image int
   const card = lastAssistant().locator('.chat-action');
   assert.match(await card.textContent(), /Upscale \(scale 4, model 4x-UltraSharp\.safetensors\) on img2\. Run\?/);
   assert.match(await card.textContent(), /outside 1\.5-4/);
+  // the reply proposes; it never claims the upscale already ran
+  const said = await lastAssistant().locator('.chat-text, p').first().textContent().catch(() => '') || await lastAssistant().textContent();
+  assert.match(await lastAssistant().textContent(), /I would upscale it\./);
+  assert.doesNotMatch(said, /^Upscaling|has been upscaled|I have upscaled/);
   assert.equal((await comfyReqs()).filter((r) => r.path === '/prompt').length, promptsBefore, 'nothing queued before Run');
   await page.screenshot({ path: path.join(SHOTS, 'chat-action.png') });
   const n = await doneCount();
@@ -206,7 +216,7 @@ test('chats persist (data/chats.json) and come back after a reload; Versions sur
   const disk = JSON.parse(fs.readFileSync(path.join(s.dataDir, 'chats.json'), 'utf8'));
   assert.ok(disk.chats[0].messages.length >= 10);
   await page.reload();
-  await page.waitForFunction(() => document.querySelectorAll('#preset option').length >= 2);
+  await page.waitForFunction(() => (window.conceptApp?.workflows?.length || 0) >= 2);
   await page.waitForFunction((c) => document.querySelectorAll('.chat-msg').length >= c - 1, count, { timeout: 8000 });
   assert.equal(await page.locator('#chat').getAttribute('open'), '');
   assert.match(await page.textContent('details.versions summary'), /Versions \(\d+\)/);
@@ -218,7 +228,7 @@ test('Ollama offline: clear message + Retry, Send disabled, rest of the app stil
   const p = await openPage(d.base);
   try {
     await p.evaluate(() => localStorage.setItem('conceptChat.open', '1'));
-    await p.reload(); await p.waitForFunction(() => document.querySelectorAll('#preset option').length >= 2);
+    await p.reload(); await p.waitForFunction(() => (window.conceptApp?.workflows?.length || 0) >= 2);
     await p.waitForSelector('.chat-offline:not([hidden])', { timeout: 8000 });
     assert.match(await p.textContent('.chat-offline'), /Start Ollama on the PC/);
     assert.equal(await p.isDisabled('.chat-send'), true);

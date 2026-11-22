@@ -1,7 +1,10 @@
-# One-off generator for the two shipped presets (kept so the graph is easy to read/change).
+# One-off generator for the two original klein presets (kept so the graph is easy to read/change).
+# They used to ship as workflows/fast-concept.json and from-reference-image.json ("App presets");
+# since batch 1 they are only test fixtures (simple folder workflows the tests import), and the
+# picker uses the AI Workflow presets FLUX.2 Klein 4B Text to Image / Image Edit instead.
 import json, os
 here = os.path.dirname(os.path.abspath(__file__))
-wfdir = os.path.join(here, '..', 'workflows')
+wfdir = os.path.join(here, '..', 'test', 'fixtures', 'workflows')
 loaders = {
   "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "flux-2-klein-4b.safetensors", "weight_dtype": "default"}, "_meta": {"title": "Load Diffusion Model"}},
   "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen_3_4b.safetensors", "type": "flux2", "device": "default"}, "_meta": {"title": "Load CLIP"}},
@@ -46,7 +49,7 @@ ref.update({
 })
 ref.update(tail("reference", ["41", 0], ["45", 0], ["60", 1], ["12", 0]))
 
-for name, wf in [("fast-concept.json", fast), ("from-reference-image.json", ref)]:
+for name, wf in [("basic-txt2img.json", fast), ("basic-reference.json", ref)]:
     with open(os.path.join(wfdir, name), "w", newline="\n") as f:
         json.dump(wf, f, indent=2)
         f.write("\n")

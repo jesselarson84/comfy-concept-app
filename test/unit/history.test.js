@@ -11,7 +11,7 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cc-hist-'));
 test('add -> persists to disk -> reload sees it; favorite update persists', async () => {
   const dir = tmp();
   const h = new HistoryStore(dir);
-  const e = await h.add({ prompt: 'fox', seed: 1, workflow: 'fast-concept', width: 1024, height: 1024, images: [{ filename: 'a.png', subfolder: 'concept-app', type: 'output', junk: 1 }] });
+  const e = await h.add({ prompt: 'fox', seed: 1, workflow: 'basic-txt2img', width: 1024, height: 1024, images: [{ filename: 'a.png', subfolder: 'concept-app', type: 'output', junk: 1 }] });
   assert.equal(e.status, 'done');
   assert.deepEqual(e.images, [{ filename: 'a.png', subfolder: 'concept-app', type: 'output' }]);
   await h.update(e.id, { favorite: true });

@@ -28,6 +28,15 @@ function proseReply(msgs, last) {
   return `${seen}Nice idea (turn ${turns}). Here is a prompt you can try:\n\n\`\`\`prompt\nconcept art of ${String(last.content).slice(0, 60).replace(/`/g, '')}, dramatic lighting, wide shot\n\`\`\`\n\nWant a moodier variant?`;
 }
 
+// Setup builder answer (request had the builder schema: `format.properties.blocks`).
+// BADSETUP -> a ControlNet on FLUX.1 schnell (the server must reject it);
+// otherwise FLUX.1 schnell -> 2x upscale, with an over-range step count.
+function builderReply(last) {
+  const text = String(last.content || '');
+  if (/BADSETUP/.test(text)) return JSON.stringify({ name: 'Schnell pose', reply: 'I have built a pose-guided schnell setup.', blocks: [{ type: 'input_image' }, { type: 'load_model', params: { family: 'flux1-schnell' } }, { type: 'controlnet', params: { name: 'Qwen-Image-InstantX-ControlNet-Union' } }, { type: 'txt2img' }] });
+  return JSON.stringify({ name: 'Fast concept 2x', reply: 'Great idea! I have made a schnell setup that upscales 2x.', blocks: [{ type: 'load_model', params: { family: 'flux1-schnell' } }, { type: 'txt2img', params: { width: 1024, height: 1024, steps: 20 } }, { type: 'upscale', params: { scale: 2 } }] });
+}
+
 // Structured answer (request had `format`). Trigger words in the user's text
 // exercise the app's parser and action paths:
 //   NOCHANGE  -> returns the CURRENT prompt (from the system message) = no change
@@ -100,7 +109,7 @@ export function createMockOllama({ tokenMs = 5, extraModels = [], vramFraction =
       const last = [...msgs].reverse().find((x) => x.role === 'user') || { content: '' };
       if (last.images?.length && !m.vision) return json(res, 400, { error: 'this model does not support images' });
       loaded.add(m.name);
-      const reply = body.format ? structuredReply(msgs, last) : proseReply(msgs, last);
+      const reply = body.format?.properties?.blocks ? builderReply(last) : body.format ? structuredReply(msgs, last) : proseReply(msgs, last);
       if (body.stream === false) return json(res, 200, { model: m.name, message: { role: 'assistant', content: reply }, done: true });
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
       const chunks = reply.match(/[\s\S]{1,7}/g);

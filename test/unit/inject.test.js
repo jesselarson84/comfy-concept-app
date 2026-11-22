@@ -12,8 +12,8 @@ import { batchSeeds, MAX_SEED } from '../../app/js/lib/seed.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const load = (p) => JSON.parse(fs.readFileSync(path.resolve(root, p), 'utf8'));
 
-test('fast-concept: prompt, seed, width/height in both nodes, prefix; original untouched', () => {
-  const wf = load('workflows/fast-concept.json');
+test('basic-txt2img fixture (old fast-concept): prompt, seed, width/height in both nodes, prefix; original untouched', () => {
+  const wf = load('test/fixtures/workflows/basic-txt2img.json');
   const before = JSON.stringify(wf);
   const c = detectControls(wf);
   const out = injectParams(wf, c, { prompt: 'a red fox', seed: 777.9, width: 832, height: 1248, steps: 6, outputPrefix: 'concept-app', batchSize: 1 });
@@ -28,8 +28,8 @@ test('fast-concept: prompt, seed, width/height in both nodes, prefix; original u
   assert.deepEqual(out['40'].inputs.clip, ['2', 0], 'links preserved');
 });
 
-test('from-reference-image: image slot + strength', () => {
-  const wf = load('workflows/from-reference-image.json');
+test('basic-reference fixture (old from-reference-image): image slot + strength', () => {
+  const wf = load('test/fixtures/workflows/basic-reference.json');
   const c = detectControls(wf);
   const out = injectParams(wf, c, { prompt: 'x', seed: 1, strength: 0.4, images: { 10: 'pasted (1).png' } });
   assert.equal(out['10'].inputs.image, 'pasted (1).png');
