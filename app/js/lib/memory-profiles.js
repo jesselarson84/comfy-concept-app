@@ -126,9 +126,11 @@ export function decideFreeBeforeQueue({ profile, freeMB, ollamaFreedMB = 0, need
  * Before a ComfyUI queue: unload Ollama's models or keep them?
  * ollamaModels: /api/ps models ([{ name, size, size_vram }]).
  */
-export function decideBeforeQueue({ profile, freeMB, ollamaModels = [], needMB, headroomMB = 0 }) {
+export function decideBeforeQueue({ profile, freeMB, ollamaModels = [], needMB, headroomMB = 0, heavy = false }) {
   const onGpu = ollamaModels.filter((m) => (m.size_vram ?? m.size ?? 0) > 0);
   if (!ollamaModels.length) return { unload: false, reason: 'no chat model loaded' };
+  // Heavy jobs (Pixal3D, >= 12 GB) need the VRAM and the RAM: always keep_alive 0 first.
+  if (heavy) return { unload: true, reason: 'heavy job: unloading the chat model (keep_alive 0)' };
   const mode = profile.unloadOllamaBeforeQueue;
   if (mode === 'always') return { unload: true, reason: `profile ${profile.id}: always unload before ComfyUI` };
   if (mode === 'never') return { unload: false, reason: `profile ${profile.id}: never unload` };

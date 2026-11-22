@@ -23,7 +23,34 @@
     "min": 1,
     "max": 8,
     "default": 4,
-    "label": "Steps"
+    "label": "Steps",
+    "control": "stepper"
+   },
+   "sampler": {
+    "node": "7",
+    "input": "sampler_name",
+    "type": "enum",
+    "options": [
+     "euler",
+     "dpmpp_2m",
+     "uni_pc"
+    ],
+    "default": "euler",
+    "label": "Sampler",
+    "control": "select"
+   },
+   "scheduler": {
+    "node": "7",
+    "input": "scheduler",
+    "type": "enum",
+    "options": [
+     "simple",
+     "beta",
+     "sgm_uniform"
+    ],
+    "default": "simple",
+    "label": "Scheduler",
+    "control": "select"
    }
   },
   "maxBatch": 8,

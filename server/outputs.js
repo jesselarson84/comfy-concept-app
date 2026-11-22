@@ -125,3 +125,44 @@ export function mergeOutputs(lists, { kind, offset = 0, limit = 120 } = {}) {
   all.sort((a, b) => (b.mtime || 0) - (a.mtime || 0) || a.filename.localeCompare(b.filename));
   return { total: all.length, items: all.slice(offset, offset + limit) };
 }
+
+/**
+ * Deletes ONE of the app's result files from ComfyUI's output folder.
+ * Only a regular file that really resolves inside <outputDir>/<outputSubfolder>/
+ * is deleted: type "output", plain name, safe relative subfolder at or below the
+ * app's folder, no absolute paths or "..", no symlink (the file itself, the app
+ * folder or any folder in between) leading out of it. Anything else is refused.
+ * Returns { ok: true, deleted | missing } or { ok: false, reason }.
+ */
+export async function deleteAppFile(ref, { outputDir, outputSubfolder = 'concept-app' } = {}) {
+  const no = (reason) => ({ ok: false, reason });
+  if (!outputDir) return no('ComfyUI output folder is unknown');
+  if (!ref || typeof ref !== 'object') return no('No file given');
+  const filename = ref.filename, subfolder = String(ref.subfolder ?? ''), type = ref.type || 'output';
+  if (type !== 'output') return no('Only saved results can be deleted');
+  if (!safeFileName(filename)) return no('Bad file name');
+  if (!safeSubfolder(subfolder) || subfolder.split('/').some((s) => s === '..' || s === '.')) return no('Bad folder');
+  const root = String(outputSubfolder || '').replace(/^\/+|\/+$/g, '');
+  if (!root || !safeSubfolder(root)) return no('App folder not set');
+  if (!(subfolder === root || subfolder.startsWith(root + '/'))) return no('Not in the app\'s output folder');
+  let base, appRoot;
+  try { base = await fs.promises.realpath(path.resolve(outputDir)); } catch { return no('ComfyUI output folder is missing'); }
+  const appPath = path.resolve(base, ...root.split('/'));
+  try {
+    const st = await fs.promises.lstat(appPath);
+    if (st.isSymbolicLink() || !st.isDirectory()) return no('App folder is not a plain folder');
+    appRoot = await fs.promises.realpath(appPath);
+  } catch { return no('App folder is missing'); }
+  if (!appRoot.startsWith(base + path.sep)) return no('App folder is outside the output folder');
+  const full = path.resolve(base, ...subfolder.split('/'), filename);
+  if (!full.startsWith(appRoot + path.sep)) return no('Outside the app\'s output folder');
+  let st;
+  try { st = await fs.promises.lstat(full); } catch (e) { return e.code === 'ENOENT' ? { ok: true, missing: true } : no(e.message); }
+  if (st.isSymbolicLink()) return no('Refusing to delete a link');
+  if (!st.isFile()) return no('Not a file');
+  let real;
+  try { real = await fs.promises.realpath(full); } catch (e) { return no(e.message); }
+  if (!real.startsWith(appRoot + path.sep)) return no('Resolves outside the app\'s output folder');
+  await fs.promises.unlink(real);
+  return { ok: true, deleted: true };
+}

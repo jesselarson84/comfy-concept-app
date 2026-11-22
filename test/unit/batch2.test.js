@@ -199,6 +199,6 @@ test('hint sweep: no recommendations / upgrade notes / tags / More settings / me
   assert.match(strings, /<string name="address_invalid">Enter an https:\/\/ address with no path<\/string>/);
   assert.match(read('android/app/src/main/java/app/jesse/comfyconcept/MainActivity.java'), /String hint = getString\(R\.string\.err_hint\);\n\s+errorDetail\.setText\(detail == null \|\| detail\.isEmpty\(\) \? hint : detail \+ "\\n\\n" \+ hint\);/);
   // kept: field labels and the Run button
-  assert.match(html, /<span class="label">Steps<\/span>/);
+  assert.match(html, /<details id="settings" class="settings" hidden>\s*<summary><i class="i i-sliders-horizontal" aria-hidden="true"><\/i><span>Settings<\/span>/);
   assert.match(html, /id="btn-generate" class="btn primary run"[^>]*><i class="i i-play"><\/i><span id="run-label">Run<\/span>/);
 });

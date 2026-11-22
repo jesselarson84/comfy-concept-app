@@ -7,14 +7,46 @@
   "output": "audio",
   "description": "English text to speech with the built-in Chatterbox voice. 25 tokens ~ 1 s.",
   "params": {
-   "length": {
+   "voice": {
+    "node": "1",
+    "input": "model_pack_name",
+    "type": "enum",
+    "options": [
+     "chatterbox",
+     "chatterbox-turbo",
+     "chatterbox-multilingual-es-mx-latam",
+     "chatterbox-multilingual-es-es",
+     "chatterbox-multilingual-pt-br",
+     "chatterbox-multilingual-pt-pt",
+     "chatterbox-multilingual-hi",
+     "chatterbox-multilingual-zh-cmn"
+    ],
+    "default": "chatterbox",
+    "label": "Voice model",
+    "control": "select",
+    "labels": {
+     "chatterbox": "Chatterbox (English)",
+     "chatterbox-turbo": "Chatterbox Turbo",
+     "chatterbox-multilingual-es-mx-latam": "Multilingual · Spanish (LatAm)",
+     "chatterbox-multilingual-es-es": "Multilingual · Spanish (Spain)",
+     "chatterbox-multilingual-pt-br": "Multilingual · Portuguese (BR)",
+     "chatterbox-multilingual-pt-pt": "Multilingual · Portuguese (PT)",
+     "chatterbox-multilingual-hi": "Multilingual · Hindi",
+     "chatterbox-multilingual-zh-cmn": "Multilingual · Mandarin"
+    },
+    "span2": true
+   },
+   "seconds": {
     "node": "1",
     "input": "max_new_tokens",
     "type": "int",
-    "min": 64,
-    "max": 2000,
-    "default": 400,
-    "label": "Max length (tokens)"
+    "min": 3,
+    "max": 80,
+    "default": 16,
+    "label": "Max length",
+    "control": "slider",
+    "format": "s",
+    "multiplyBy": 25
    },
    "exaggeration": {
     "node": "1",
@@ -23,7 +55,9 @@
     "min": 0.25,
     "max": 2,
     "default": 0.5,
-    "label": "Expressiveness"
+    "label": "Expressiveness",
+    "control": "slider",
+    "step": 0.05
    },
    "cfg_weight": {
     "node": "1",
@@ -32,7 +66,15 @@
     "min": 0.2,
     "max": 1,
     "default": 0.5,
-    "label": "Pace / adherence"
+    "label": "Pace / adherence",
+    "control": "slider",
+    "step": 0.05,
+    "when": {
+     "param": "voice",
+     "notIn": [
+      "chatterbox-turbo"
+     ]
+    }
    },
    "temperature": {
     "node": "1",
@@ -41,7 +83,47 @@
     "min": 0.05,
     "max": 2,
     "default": 0.8,
-    "label": "Temperature"
+    "label": "Temperature",
+    "control": "slider",
+    "step": 0.05
+   },
+   "repetition": {
+    "node": "1",
+    "input": "repetition_penalty",
+    "type": "number",
+    "min": 1.0,
+    "max": 2.0,
+    "step": 0.1,
+    "default": 1.2,
+    "label": "Repetition penalty",
+    "control": "slider"
+   },
+   "normalize": {
+    "node": "1",
+    "input": "normalize_loudness",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Normalize loudness",
+    "control": "seg",
+    "labels": {
+     "false": "Off",
+     "true": "On"
+    }
+   },
+   "pause": {
+    "node": "1",
+    "input": "silence_between_chunks_ms",
+    "type": "int",
+    "min": 0,
+    "max": 500,
+    "default": 100,
+    "label": "Chunk pause (ms)",
+    "control": "stepper",
+    "step": 25
    }
   },
   "maxBatch": 4,
@@ -62,7 +144,27 @@
   "vram": {
    "estMB": 3500,
    "basis": "weights: 2.0 GB T3 + 1.0 GB S3Gen fp32"
-  }
+  },
+  "inputs": [
+   {
+    "kind": "audio",
+    "node": "3",
+    "input": "audio",
+    "label": "Voice sample",
+    "optional": true
+   }
+  ],
+  "optional": [
+   {
+    "node": "3",
+    "drop": [
+     {
+      "node": "1",
+      "input": "audio_prompt"
+     }
+    ]
+   }
+  ]
  },
  "workflow": {
   "1": {
@@ -90,7 +192,11 @@
     "enable_chunking": true,
     "max_chars_per_chunk": 400,
     "chunk_combination_method": "auto",
-    "silence_between_chunks_ms": 100
+    "silence_between_chunks_ms": 100,
+    "audio_prompt": [
+     "3",
+     0
+    ]
    },
    "_meta": {
     "title": "Chatterbox TTS #prompt"
@@ -107,6 +213,15 @@
    },
    "_meta": {
     "title": "Save Audio"
+   }
+  },
+  "3": {
+   "inputs": {
+    "audio": "voice_sample.wav"
+   },
+   "class_type": "LoadAudio",
+   "_meta": {
+    "title": "Voice sample"
    }
   }
  }

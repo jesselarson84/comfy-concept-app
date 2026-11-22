@@ -35,7 +35,7 @@ test('picker has no App presets section; aspect is a dropdown next to the orient
   assert.doesNotMatch(html, /data-ratio=/);
   assert.match(html, /data-orient="portrait"[\s\S]*data-orient="landscape"/);
   assert.match(html, /id="aspect-size"/);
-  assert.match(read('app/sw.js'), /const VERSION = 'shell-v13';/);
+  assert.match(read('app/sw.js'), /const VERSION = 'shell-v14';/);
   assert.match(read('app/sw.js'), /'\/js\/lib\/preset-choice\.js'/);
   assert.match(read('app/sw.js'), /'\/js\/lib\/legacy-presets\.js'/);
   assert.ok(!fs.existsSync(path.join(ROOT, 'workflows/fast-concept.json')) && !fs.existsSync(path.join(ROOT, 'workflows/from-reference-image.json')));

@@ -33,7 +33,9 @@ export class FileInputs {
   }
 
   set(slot, ref) { this.values[this.key(slot)] = ref; this.render(this.slots); }
-  missing() { return this.slots.filter((s) => !this.values[this.key(s)] && !s.defaultAvailable); }
+  missing() { return this.slots.filter((s) => !this.values[this.key(s)] && !s.defaultAvailable && !s.optional); }
+  /** Nodes of the slots that have a file (optional slots left empty are dropped from the graph). */
+  filled() { return this.slots.filter((s) => this.values[this.key(s)]).map((s) => s.node); }
   /** Write the uploaded names into a graph copy. */
   apply(graph) { for (const s of this.slots) { const v = this.values[this.key(s)]; if (v && graph[s.node]) graph[s.node].inputs[s.input] = v; } return graph; }
 }

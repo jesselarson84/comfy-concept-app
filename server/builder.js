@@ -69,7 +69,7 @@ export function createBuilder({ cfg, comfyInfo, presets, memory, hardware, fetch
     try {
       const r = await fetchImpl(cfg.ollamaUrl + '/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: useModel, stream: false, format: builderSchema(), messages, options: { temperature: 0.2 } }),
+        body: JSON.stringify({ model: useModel, stream: false, format: builderSchema(), messages, options: { temperature: 0.2, ...(memory?.chatOptions?.() || {}) } }),
         signal: AbortSignal.timeout(180000),
       });
       if (!r.ok) throw new Error(`Ollama HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);

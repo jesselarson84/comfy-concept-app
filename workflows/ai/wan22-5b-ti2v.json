@@ -23,7 +23,10 @@
     "min": 17,
     "max": 121,
     "default": 49,
-    "label": "Frames"
+    "label": "Length",
+    "control": "slider",
+    "step": 4,
+    "format": "frames"
    },
    "steps": {
     "node": "3",
@@ -32,14 +35,85 @@
     "min": 10,
     "max": 30,
     "default": 20,
-    "label": "Steps"
+    "label": "Steps",
+    "control": "stepper"
+   },
+   "fps": {
+    "node": "57",
+    "input": "fps",
+    "type": "enum",
+    "options": [
+     16,
+     24
+    ],
+    "default": 24,
+    "label": "FPS",
+    "control": "seg"
+   },
+   "cfg": {
+    "node": "3",
+    "input": "cfg",
+    "type": "number",
+    "min": 1.0,
+    "max": 8.0,
+    "step": 0.5,
+    "default": 5.0,
+    "label": "Guidance",
+    "control": "slider"
+   },
+   "shift": {
+    "node": "48",
+    "input": "shift",
+    "type": "number",
+    "min": 1.0,
+    "max": 12.0,
+    "step": 0.5,
+    "default": 8.0,
+    "label": "Shift",
+    "control": "slider"
+   },
+   "sampler": {
+    "node": "3",
+    "input": "sampler_name",
+    "type": "enum",
+    "options": [
+     "uni_pc",
+     "euler",
+     "dpmpp_2m"
+    ],
+    "default": "uni_pc",
+    "label": "Sampler",
+    "control": "select"
+   },
+   "scheduler": {
+    "node": "3",
+    "input": "scheduler",
+    "type": "enum",
+    "options": [
+     "simple",
+     "beta"
+    ],
+    "default": "simple",
+    "label": "Scheduler",
+    "control": "select"
    }
   },
   "maxBatch": 1,
   "vram": {
    "estMB": 14000,
    "basis": "weights: 10 GB fp16 5B model + 6.7 GB umt5 fp8 (swapped) + video latents (Comfy docs: fits 8 GB with offload)"
-  }
+  },
+  "optional": [
+   {
+    "node": "60",
+    "drop": [
+     {
+      "node": "55",
+      "input": "start_image"
+     }
+    ]
+   }
+  ]
  },
  "workflow": {
   "3": {
@@ -182,6 +256,10 @@
     "vae": [
      "39",
      0
+    ],
+    "start_image": [
+     "60",
+     0
     ]
    },
    "class_type": "Wan22ImageToVideoLatent",
@@ -226,6 +304,15 @@
     "title": "Save Video",
     "cnr_id": "comfy-core",
     "ver": "0.3.45"
+   }
+  },
+  "60": {
+   "inputs": {
+    "image": "start_frame.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Start frame #image"
    }
   }
  }

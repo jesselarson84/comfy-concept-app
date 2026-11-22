@@ -49,6 +49,8 @@ async function runAndWait() {
   const n = await doneCount();
   await page.click('#btn-generate');
   await page.waitForFunction((n) => [...document.querySelectorAll('#thumbs .thumb')].filter((e) => e.className.includes('s-done')).length > n, n, { timeout: 10000 });
+  // batch 3 run lock: the whole run has to end before the preset can change again
+  await page.waitForFunction(() => !document.querySelector('#btn-generate').disabled, null, { timeout: 15000 });
   return app(() => window.conceptApp.queue.items.at(-1));
 }
 const refValue = (node) => app((n) => window.conceptApp.refs.values[n] || null, node);
@@ -66,13 +68,16 @@ const waitToast = (want) => page.waitForFunction(([src, flags, str]) => { const 
 const shot = async (name) => { await page.evaluate(() => document.getElementById('toast')?.classList.remove('show')); await page.waitForTimeout(250); await page.screenshot({ path: path.join(SHOTS, `batch2-${name}.png`) }); };
 const closeOverlay = async (sel) => { await page.click(`${sel} .ov-top button[aria-label="Close"]`); await page.waitForSelector(`${sel}`, { state: 'hidden' }); await page.waitForTimeout(450); };
 
-test('main screen: no preset description box, Steps next to Batch and Seed, no More settings; dark theme + Run unchanged', async () => {
+test('main screen: no preset description box; open row is Aspect, Batch, Seed; Steps is under Settings (batch 3); dark theme + Run unchanged', async () => {
   await pick('ai:klein-4b-t2i');
   assert.equal(await page.locator('#more, details.more, #preset-desc, .preset-desc').count(), 0);
   assert.equal(await page.isVisible('#preset-msg'), false, 'no description / recommendation box');
-  const row = await page.$eval('#steps-field', (f) => [...f.parentElement.querySelectorAll('.field')].filter((x) => !x.hidden).map((x) => x.querySelector('.label')?.textContent));
-  assert.equal(row[row.indexOf('Batch') + 1], 'Steps', JSON.stringify(row));
+  // batch 3 (the owner, Nov 22 10:17): Steps went back under one "Settings" twirl-down
+  const row = await page.$$eval('.quick > .ctl:not([hidden]) > .label > span:first-child', (els) => els.map((x) => x.textContent));
+  assert.deepEqual(row, ['Aspect', 'Batch', 'Seed']);
+  if (!(await page.$eval('#settings', (d) => d.open))) await page.click('#settings > summary');
   assert.equal(await page.isVisible('#steps'), true);
+  await page.click('#settings > summary');
   assert.equal(await page.$eval('#btn-generate', (b) => getComputedStyle(b).backgroundColor), 'rgb(11, 140, 233)');
   assert.doesNotMatch(await page.textContent('#panel'), /More settings|after the upgrade|Recommended|tight on|RAM offload|Results appear here/);
   await shot('main');
@@ -111,7 +116,7 @@ test('Use as reference (current preset has no image input): short list of 3D + I
   await page.click('.viewer button[title="Use as reference"]');
   await page.waitForSelector('.preset-chooser:not([hidden]) .ent');
   const ids = await page.$$eval('.preset-chooser .ent', (els) => els.map((e) => e.dataset.preset));
-  assert.deepEqual(ids, ['ai:hunyuan3d-21', 'ai:moge-mesh', 'ai:pixal3d-trellis2', 'ai:klein-4b-edit', 'ai:qwen-edit-2509']);
+  assert.deepEqual(ids, ['ai:hunyuan3d-21', 'ai:pixal3d-trellis2', 'ai:klein-4b-edit', 'ai:qwen-edit-2509', 'ai:qwen-edit-2511']);
   assert.ok(!ids.some((id) => /upscale|seedvr/.test(id)), 'upscalers are not offered');
   assert.equal(await page.isVisible('.viewer'), false);
   await shot('use-as-reference-list');
@@ -178,8 +183,21 @@ test('Save to Drive from the image viewer: copied into Comfy UI/Images, second s
 
 test('3D viewer: Hunyuan run -> tap the 3D tile -> clay model, counts, Shaded / Wireframe / Shaded+wireframe, reset, Save to Drive', async () => {
   await pick('ai:hunyuan3d-21');
-  assert.ok(await refValue('2'), 'reference from the earlier test');
+  const ref = await refValue('2');
+  assert.ok(ref, 'reference from the earlier test');
   await runAndWait();
+  // batch2-fix1: what ComfyUI got. The reference goes to LoadImage 2 and through
+  // BiRefNet onto white before CLIP vision; Detail 256 -> octree, Steps 30 -> KSampler.
+  const g = Object.values(s.mock.history).map((h) => h.prompt[2]).findLast((w) => Object.values(w).some((n) => n.class_type === 'VAEDecodeHunyuan3D'));
+  assert.equal(g['2'].inputs.image, ref);
+  const enc = Object.values(g).find((n) => n.class_type === 'CLIPVisionEncode');
+  // batch 3: through the "Remove background" switch (On by default); Max faces Full -> DecimateMesh 0
+  const sw = g[enc.inputs.image[0]];
+  assert.equal(sw.class_type, 'ComfySwitchNode'); assert.equal(sw.inputs.switch, true);
+  assert.equal(g[sw.inputs.on_true[0]].class_type, 'ImageCompositeMasked');
+  assert.equal(Object.values(g).find((n) => n.class_type === 'DecimateMesh').inputs.target_face_count, 0);
+  assert.deepEqual(g['21'].inputs.image, ['2', 0]);
+  assert.deepEqual([g['19:8'].inputs.octree_resolution, g['19:8'].inputs.num_chunks, g['19:7'].inputs.steps], [256, 8000, 30]);
   const tile = page.locator('#thumbs .thumb.is-file').last();
   assert.equal((await tile.textContent()).trim(), '3D');
   await tile.click();

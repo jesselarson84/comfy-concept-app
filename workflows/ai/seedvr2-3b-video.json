@@ -22,7 +22,124 @@
     "min": 1,
     "max": 4,
     "default": 2,
-    "label": "Scale"
+    "label": "Scale",
+    "control": "slider",
+    "step": 0.5,
+    "format": "x"
+   },
+   "colorFix": {
+    "node": "66:59",
+    "input": "color_correction_method",
+    "type": "enum",
+    "options": [
+     "none",
+     "lab",
+     "wavelet",
+     "adain"
+    ],
+    "default": "none",
+    "label": "Color fix",
+    "control": "select"
+   },
+   "trim": {
+    "node": "66:81",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": false,
+    "label": "Trim",
+    "control": "seg",
+    "labels": {
+     "false": "Off",
+     "true": "On"
+    },
+    "group": "Clip"
+   },
+   "start": {
+    "node": "66:79",
+    "input": "start_time",
+    "type": "number",
+    "min": 0,
+    "max": 600,
+    "step": 0.5,
+    "default": 0,
+    "label": "Start (s)",
+    "control": "stepper",
+    "when": {
+     "param": "trim",
+     "is": true
+    }
+   },
+   "length": {
+    "node": "66:79",
+    "input": "duration",
+    "type": "number",
+    "min": 0.5,
+    "max": 600,
+    "step": 0.5,
+    "default": 5,
+    "label": "Length (s)",
+    "control": "stepper",
+    "when": {
+     "param": "trim",
+     "is": true
+    }
+   },
+   "tile": {
+    "node": "66:48",
+    "input": "tile_size",
+    "type": "enum",
+    "options": [
+     256,
+     384,
+     512,
+     768,
+     1024
+    ],
+    "default": 512,
+    "label": "VAE tile",
+    "control": "select",
+    "also": [
+     {
+      "node": "66:55",
+      "input": "tile_size"
+     }
+    ],
+    "group": "Memory"
+   },
+   "split": {
+    "node": "66:105",
+    "input": "value",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": false,
+    "label": "Split in chunks",
+    "control": "seg",
+    "labels": {
+     "false": "Off",
+     "true": "On"
+    }
+   },
+   "overlap": {
+    "node": "66:99",
+    "input": "temporal_overlap",
+    "type": "int",
+    "min": 0,
+    "max": 8,
+    "default": 2,
+    "label": "Chunk overlap",
+    "control": "stepper",
+    "when": {
+     "param": "split",
+     "is": true
+    },
+    "offValue": 0
    }
   },
   "maxBatch": 1,

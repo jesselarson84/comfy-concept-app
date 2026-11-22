@@ -7,6 +7,121 @@
   "output": "3d",
   "description": "Textured, remeshed and baked GLB from one object picture (Pixal3D int8 + TRELLIS.2 VAEs). Slow.",
   "params": {
+   "model": {
+    "node": "316",
+    "input": "value",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": false,
+    "label": "Model",
+    "control": "seg",
+    "labels": {
+     "false": "Pixal3D",
+     "true": "TRELLIS.2"
+    },
+    "span2": true
+   },
+   "removeBg": {
+    "node": "248",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Remove background",
+    "control": "seg",
+    "labels": {
+     "false": "Off",
+     "true": "On"
+    }
+   },
+   "shapeRes": {
+    "node": "94",
+    "input": "target_resolution",
+    "type": "enum",
+    "options": [
+     1024,
+     1536,
+     2048
+    ],
+    "default": 1536,
+    "label": "Shape resolution",
+    "control": "select"
+   },
+   "structSteps": {
+    "node": "3",
+    "input": "steps",
+    "type": "int",
+    "min": 8,
+    "max": 30,
+    "default": 12,
+    "label": "Structure steps",
+    "control": "stepper",
+    "group": "Sampling"
+   },
+   "structCfg": {
+    "node": "3",
+    "input": "cfg",
+    "type": "number",
+    "min": 1.0,
+    "max": 10.0,
+    "step": 0.5,
+    "default": 7.5,
+    "label": "Structure guidance",
+    "control": "slider"
+   },
+   "shapeSteps": {
+    "node": "18",
+    "input": "steps",
+    "type": "int",
+    "min": 8,
+    "max": 40,
+    "default": 20,
+    "label": "Shape steps",
+    "control": "stepper"
+   },
+   "shapeCfg": {
+    "node": "18",
+    "input": "cfg",
+    "type": "number",
+    "min": 1.0,
+    "max": 10.0,
+    "step": 0.5,
+    "default": 7.5,
+    "label": "Shape guidance",
+    "control": "slider",
+    "also": [
+     {
+      "node": "23",
+      "input": "cfg"
+     }
+    ]
+   },
+   "refineSteps": {
+    "node": "23",
+    "input": "steps",
+    "type": "int",
+    "min": 6,
+    "max": 24,
+    "default": 12,
+    "label": "Refine steps",
+    "control": "stepper"
+   },
+   "textureSteps": {
+    "node": "12",
+    "input": "steps",
+    "type": "int",
+    "min": 6,
+    "max": 24,
+    "default": 12,
+    "label": "Texture steps",
+    "control": "stepper"
+   },
    "texture": {
     "node": "288",
     "input": "value",
@@ -17,7 +132,15 @@
      4096
     ],
     "default": 2048,
-    "label": "Texture size"
+    "label": "Texture size",
+    "control": "select",
+    "group": "Mesh & texture",
+    "also": [
+     {
+      "node": "224",
+      "input": "resolution"
+     }
+    ]
    },
    "faces": {
     "node": "186",
@@ -26,10 +149,27 @@
     "min": 50000,
     "max": 700000,
     "default": 300000,
-    "label": "Max faces"
+    "label": "Max faces",
+    "step": 10000,
+    "control": "slider",
+    "format": "k"
+   },
+   "remesh": {
+    "node": "241",
+    "input": "resolution",
+    "type": "enum",
+    "options": [
+     512,
+     768,
+     1024
+    ],
+    "default": 768,
+    "label": "Remesh",
+    "control": "select"
    }
   },
   "maxBatch": 1,
+  "heavy": true,
   "vram": {
    "estMB": 12500,
    "basis": "weights: 4.1 GB int8 Pixal3D + 4 GB TRELLIS.2 int8 (switch) + 2x VAEs 1.6 GB + DINOv3-L fp32 1.2 GB + birefnet; 1536 upsample stage peaks highest"

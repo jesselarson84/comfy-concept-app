@@ -50,6 +50,18 @@ public final class NativeBridge {
         });
     }
 
+    /** History multi-select: share several results at once ([{url, name}] as JSON). */
+    @JavascriptInterface
+    public void shareImages(final String json) {
+        if (!allowed || json == null) return;
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                activity.shareOutMany(json);
+            }
+        });
+    }
+
     @JavascriptInterface
     public void keepAwake(final boolean on) {
         if (!allowed) return;
@@ -57,6 +69,21 @@ public final class NativeBridge {
             @Override
             public void run() {
                 activity.setKeepAwake(on);
+            }
+        });
+    }
+
+    /**
+     * Run progress (batch 3): while running, a foreground service shows
+     * "Running current of total"; when it ends the phone vibrates once.
+     */
+    @JavascriptInterface
+    public void runStatus(final int current, final int total, final boolean running, final int done) {
+        if (!allowed) return;
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                activity.setRunStatus(current, total, running, done);
             }
         });
     }

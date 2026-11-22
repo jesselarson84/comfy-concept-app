@@ -27,6 +27,10 @@
           <button id="btn-advanced" class="btn"><i class="i i-workflow"></i>ComfyUI canvas</button>
           <button id="btn-import" class="btn"><i class="i i-folder"></i>Import workflow&hellip;</button>
           <label class="field builder-model"><span class="label">Setup builder model</span><select id="builder-model" aria-label="Setup builder model"></select></label>
+          <div class="menu-switches">
+            <label class="switch"><input type="checkbox" id="mem-te-cpu"> <span>Text encoder on CPU</span></label>
+            <label class="switch"><input type="checkbox" id="mem-ollama-cpu"> <span>Chat on CPU</span></label>
+          </div>
         </div>
       </details>
     </header>
@@ -50,53 +54,56 @@
 
       <div id="refs" class="refs" hidden></div>
       <div id="file-inputs" class="refs" hidden></div>
+      <div id="mask-slot" class="refs" hidden></div>
 
       <div id="strength-field" class="field" hidden>
         <span class="label">Strength <output id="strength-out"></output></span>
         <input type="range" id="strength" min="0.05" max="1" step="0.05">
       </div>
 
-      <div id="aspect-field" class="field" hidden>
-        <span class="label">Aspect <span id="aspect-size" class="val"></span></span>
-        <div class="aspect-row">
-          <label class="ratio-select" title="Aspect ratio">
-            <select id="aspect-ratio" aria-label="Aspect ratio">
-              <option value="1:1">1:1</option>
-              <option value="4:3">4:3</option>
-              <option value="3:2">3:2</option>
-              <option value="16:9">16:9</option>
-            </select>
-            <i class="i i-chevron-down" aria-hidden="true"></i>
-          </label>
-          <div class="seg" role="radiogroup" aria-label="Orientation">
-            <button type="button" data-orient="portrait" role="radio" title="Portrait" aria-label="Portrait"><i class="rect" style="width:10px;height:15px"></i></button>
-            <button type="button" data-orient="landscape" role="radio" title="Landscape" aria-label="Landscape"><i class="rect" style="width:15px;height:10px"></i></button>
-          </div>
-        </div>
-      </div>
+      <div id="params-open" class="params" hidden></div>
 
-      <div class="field-row">
-        <div class="field">
-          <span class="label">Batch</span>
-          <div class="stepper">
-            <button id="batch-minus" class="btn icon" aria-label="Fewer"><i class="i i-minus"></i></button>
-            <input id="batch" type="number" min="1" max="20" inputmode="numeric" aria-label="Batch count">
-            <button id="batch-plus" class="btn icon" aria-label="More"><i class="i i-plus"></i></button>
+      <div class="quick">
+        <div id="aspect-field" class="ctl" hidden>
+          <span class="label"><span>Aspect</span><span id="aspect-size" class="val"></span></span>
+          <div class="aspect-row">
+            <label class="ratio-select">
+              <select id="aspect-ratio" aria-label="Aspect ratio">
+                <option value="1:1">1:1</option>
+                <option value="4:3">4:3</option>
+                <option value="3:2">3:2</option>
+                <option value="16:9">16:9</option>
+              </select>
+              <i class="i i-chevron-down" aria-hidden="true"></i>
+            </label>
+            <div class="seg" role="radiogroup" aria-label="Orientation">
+              <button type="button" data-orient="portrait" role="radio" aria-label="Portrait"><i class="rect" style="width:10px;height:15px"></i></button>
+              <button type="button" data-orient="landscape" role="radio" aria-label="Landscape"><i class="rect" style="width:15px;height:10px"></i></button>
+            </div>
           </div>
         </div>
-        <label id="steps-field" class="field steps-field" hidden><span class="label">Steps</span><input id="steps" type="number" min="1" max="200" inputmode="numeric" aria-label="Steps"></label>
-        <div id="seed-field" class="field seed-field" hidden>
-          <span class="label">Seed</span>
-          <div class="seed">
+        <div id="batch-field" class="ctl">
+          <span class="label"><span>Batch</span></span>
+          <div class="stepper fill">
+            <button id="batch-minus" class="btn icon" type="button" aria-label="Fewer"><i class="i i-minus"></i></button>
+            <input id="batch" class="num" type="number" min="1" max="20" inputmode="numeric" aria-label="Batch count">
+            <button id="batch-plus" class="btn icon" type="button" aria-label="More"><i class="i i-plus"></i></button>
+          </div>
+        </div>
+        <div id="seed-field" class="ctl span2" hidden>
+          <span class="label"><span>Seed</span></span>
+          <div class="seed full">
             <label class="switch toggle"><input type="checkbox" id="seed-lock"> <i class="i i-lock"></i><span>Lock</span></label>
-            <input id="seed" type="number" min="0" inputmode="numeric" aria-label="Seed">
-            <button id="seed-dice" class="btn icon" aria-label="New random seed" title="New random seed"><i class="i i-shuffle"></i></button>
+            <input id="seed" class="seed-val" type="number" min="0" inputmode="numeric" aria-label="Seed">
+            <button id="seed-dice" class="btn icon" type="button" aria-label="New random seed"><i class="i i-shuffle"></i></button>
           </div>
         </div>
       </div>
 
-      <div id="params" class="params"></div>
-      <div id="expose" class="params"></div>
+      <details id="settings" class="settings" hidden>
+        <summary><i class="i i-sliders-horizontal" aria-hidden="true"></i><span>Settings</span><i class="i i-chevron-down chev" aria-hidden="true"></i></summary>
+        <div id="params" class="sgrid"></div>
+      </details>
     </section>
 
     <section id="results" class="results empty">

@@ -5,7 +5,8 @@ import { h } from './dom.js';
 import { viewUrl } from '../comfy-client.js';
 import { fileLabel } from '../lib/outputs.js';
 
-export function renderThumbs(container, items, onOpen) {
+/** modelThumbs (ui/model-thumbs.js): 3D tiles get a rendered preview still. */
+export function renderThumbs(container, items, onOpen, modelThumbs) {
   const existing = new Map([...container.children].map((el) => [el.dataset.key, el]));
   const keep = new Set();
   items.forEach((it, i) => {
@@ -19,6 +20,7 @@ export function renderThumbs(container, items, onOpen) {
     el.title = it.error || it.meta?.prompt || '';
     const img = el.querySelector('img');
     if (it.image && !img.getAttribute('src')) img.src = viewUrl(it.image, { thumb: true });
+    if (modelThumbs && it.status === 'done' && !it.image && it.files?.length && !el._thumb) modelThumbs.attach(el, img, it.files[0], it.meta?.parent?.image || refImage(it.meta?.reference));
     el.querySelector('.thumb-fill').style.width = `${Math.round((it.progress || 0) * 100)}%`;
     el.querySelector('.thumb-label').textContent = {
       submitting: '…', queued: 'queued', running: `${Math.round((it.progress || 0) * 100)}%`,
@@ -27,4 +29,12 @@ export function renderThumbs(container, items, onOpen) {
     if (container.children[i] !== el) container.insertBefore(el, container.children[i] || null);
   });
   for (const [k, el] of existing) if (!keep.has(k)) el.remove();
+}
+
+/** The job's source picture (first LoadImage reference) as a /view ref, if any. */
+function refImage(reference) {
+  const ref = reference && typeof reference === 'object' ? Object.values(reference).find((x) => typeof x === 'string' && x) : null;
+  if (!ref) return null;
+  const i = ref.lastIndexOf('/');
+  return { filename: i >= 0 ? ref.slice(i + 1) : ref, subfolder: i >= 0 ? ref.slice(0, i) : '', type: 'input' };
 }

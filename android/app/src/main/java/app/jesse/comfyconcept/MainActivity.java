@@ -68,6 +68,7 @@ public class MainActivity extends Activity {
     private static final String TAILSCALE_PKG = "com.tailscale.ipn";
     private static final int REQ_FILE_CHOOSER = 1;
     private static final int REQ_STORAGE = 2;
+    private static final int REQ_NOTIFICATIONS = 3;
     private static final int BG_COLOR = 0xFF171718; // = @color/app_bg = top bar / action bar colour in app/styles.css
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -90,6 +91,7 @@ public class MainActivity extends Activity {
     private String lastFailedUrl;
     private boolean clearHistoryOnFinish;
     private int probeGeneration;
+    private boolean runActive;             // a run is going (RunService is in the foreground)
 
     // ---------------------------------------------------------------- lifecycle
 
@@ -162,7 +164,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
-        if (web != null) web.onPause();
+        // While a run is going the WebView keeps working in the background (the
+        // foreground RunService keeps the process alive), so its websocket
+        // still gets the results; otherwise pause it as before.
+        if (web != null && !runActive) web.onPause();
         super.onPause();
     }
 
@@ -178,6 +183,10 @@ public class MainActivity extends Activity {
         if (fileCallback != null) {
             fileCallback.onReceiveValue(null);
             fileCallback = null;
+        }
+        if (runActive) {
+            runActive = false;
+            stopService(new Intent(this, RunService.class));
         }
         destroyWebView();
         io.shutdown();
@@ -752,6 +761,73 @@ public class MainActivity extends Activity {
         });
     }
 
+    /** Several files: download each into the share cache, then one ACTION_SEND_MULTIPLE. */
+    void shareOutMany(final String json) {
+        final java.util.ArrayList<String[]> list = new java.util.ArrayList<>();
+        try {
+            org.json.JSONArray a = new org.json.JSONArray(json);
+            for (int i = 0; i < a.length() && i < 50; i++) {
+                org.json.JSONObject o = a.getJSONObject(i);
+                String url = o.optString("url", null), name = o.optString("name", "file");
+                if (url == null || !ServerConfig.isServerUrl(url, server)) {
+                    toast(getString(R.string.save_blocked));
+                    return;
+                }
+                list.add(new String[] { url, name });
+            }
+        } catch (org.json.JSONException e) {
+            return;
+        }
+        if (list.isEmpty()) return;
+        final Context app = getApplicationContext();
+        io.execute(new Runnable() {
+            @Override
+            public void run() {
+                final java.util.ArrayList<File> files = new java.util.ArrayList<>();
+                try {
+                    for (String[] f : list) files.add(MediaSaver.downloadForShare(app, f[0], f[1]));
+                } catch (Exception e) {
+                    toastFromBackground(app.getString(R.string.share_out_failed, Net.describe(e)));
+                    return;
+                }
+                main.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        startShareIntentMany(files);
+                    }
+                });
+            }
+        });
+    }
+
+    private void startShareIntentMany(java.util.List<File> files) {
+        if (isFinishing()) return;
+        if (files.size() == 1) {
+            startShareIntent(files.get(0));
+            return;
+        }
+        java.util.ArrayList<Uri> uris = new java.util.ArrayList<>();
+        ClipData clip = null;
+        for (File f : files) {
+            Uri uri = CacheFileProvider.uriFor(CacheFileProvider.DIR_SHARED, f.getName());
+            uris.add(uri);
+            if (clip == null) clip = ClipData.newRawUri(f.getName(), uri);
+            else clip.addItem(new ClipData.Item(uri));
+        }
+        Intent send = new Intent(Intent.ACTION_SEND_MULTIPLE);
+        send.setType("*/*");
+        send.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
+        send.setClipData(clip);
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        Intent chooser = Intent.createChooser(send, getString(R.string.share_title));
+        chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            startActivity(chooser);
+        } catch (ActivityNotFoundException e) {
+            toast(getString(R.string.no_app));
+        }
+    }
+
     private void startShareIntent(File f) {
         if (isFinishing()) return;
         Uri uri = CacheFileProvider.uriFor(CacheFileProvider.DIR_SHARED, f.getName());
@@ -770,6 +846,27 @@ public class MainActivity extends Activity {
     }
 
     /** Called from the bridge (UI thread). */
+    /** From the web app (NativeBridge.runStatus): start, update or finish RunService. */
+    void setRunStatus(int current, int total, boolean running, int done) {
+        if (running) {
+            if (!runActive) askForNotifications();
+            runActive = true;
+            RunService.update(this, current, total, true, done);
+        } else if (runActive) {
+            runActive = false;
+            RunService.update(this, current, total, false, done);
+        }
+    }
+
+    /** Android 13+: the run notification needs POST_NOTIFICATIONS (asked once, on the first run). */
+    private void askForNotifications() {
+        if (Build.VERSION.SDK_INT < 33) return;
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return;
+        if (getPreferences(MODE_PRIVATE).getBoolean("askedNotifications", false)) return;
+        getPreferences(MODE_PRIVATE).edit().putBoolean("askedNotifications", true).apply();
+        requestPermissions(new String[] {Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATIONS);
+    }
+
     void setKeepAwake(boolean on) {
         Window w = getWindow();
         if (on) w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -826,6 +923,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == REQ_NOTIFICATIONS) return; // denied = the run goes on without a notification
         if (requestCode != REQ_STORAGE) {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
             return;

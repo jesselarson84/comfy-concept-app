@@ -2,7 +2,7 @@
   "action": {
     "name": "Image to 3D",
     "verb": "Make a 3D model",
-    "description": "Turn the image's main object into a 3D mesh (GLB file, shape only, no texture) with Hunyuan3D 2.1. Works best on a single object on a plain background. Takes a minute or two.",
+    "description": "Turn the image's main object into a 3D mesh (GLB file, shape only, no texture) with Hunyuan3D 2.1. Works best on a single object; the background is removed first. Takes a minute or two.",
     "output": "3d",
     "image": {
       "node": "2"
@@ -66,6 +66,63 @@
         "title": "Object image #image"
       }
     },
+    "20": {
+      "class_type": "LoadBackgroundRemovalModel",
+      "inputs": {
+        "bg_removal_name": "birefnet.safetensors"
+      }
+    },
+    "21": {
+      "class_type": "RemoveBackground",
+      "inputs": {
+        "bg_removal_model": [
+          "20",
+          0
+        ],
+        "image": [
+          "2",
+          0
+        ]
+      }
+    },
+    "22": {
+      "class_type": "InvertMask",
+      "inputs": {
+        "mask": [
+          "21",
+          0
+        ]
+      }
+    },
+    "23": {
+      "class_type": "EmptyImage",
+      "inputs": {
+        "width": 64,
+        "height": 64,
+        "batch_size": 1,
+        "color": 16777215
+      }
+    },
+    "24": {
+      "class_type": "ImageCompositeMasked",
+      "inputs": {
+        "destination": [
+          "2",
+          0
+        ],
+        "source": [
+          "23",
+          0
+        ],
+        "x": 0,
+        "y": 0,
+        "resize_source": true,
+        "mask": [
+          "22",
+          0
+        ]
+      }
+    },
     "3": {
       "class_type": "ModelSamplingAuraFlow",
       "inputs": {
@@ -88,7 +145,7 @@
           1
         ],
         "image": [
-          "2",
+          "24",
           0
         ],
         "crop": "center"

@@ -12,16 +12,49 @@
 import { addHistory, patchHistory } from './api.js';
 import { splitOutputs } from './lib/outputs.js';
 
+// The active run is kept in localStorage (batch 3), so if Android drops the page
+// while the app is in the background, the results are caught up from /history
+// when it comes back.
+const RUN_STORE = 'conceptRun.v1';
+const ACTIVE = ['submitting', 'queued', 'running'];
+/** What is saved per active job: enough to find its result again. */
+export function persistable(items) {
+  return items.filter((i) => ACTIVE.includes(i.status) && i.promptId)
+    .map((i) => ({ key: i.key, promptId: i.promptId, historyId: i.historyId || null, meta: i.meta, run: i.run || null }));
+}
+
 export class JobQueue extends EventTarget {
   constructor(comfy) {
     super();
     this.comfy = comfy;
     this.items = [];
     this.byPrompt = new Map();
+    this.lastRun = [];
     this.#listen();
   }
 
-  #changed(item) { this.dispatchEvent(new CustomEvent('change', { detail: item })); }
+  #changed(item) { this.#persist(); this.dispatchEvent(new CustomEvent('change', { detail: item })); }
+
+  #persist() {
+    try {
+      const keep = persistable(this.items);
+      if (keep.length) localStorage.setItem(RUN_STORE, JSON.stringify(keep)); else localStorage.removeItem(RUN_STORE);
+    } catch { /* storage full or blocked: catch-up just won't survive a reload */ }
+  }
+
+  /** After a reload: bring back the jobs that were still active, then ask /history. */
+  restore() {
+    let saved = [];
+    try { saved = JSON.parse(localStorage.getItem(RUN_STORE)) || []; } catch {}
+    const have = new Set(this.items.map((i) => i.promptId));
+    const back = saved.filter((x) => x?.promptId && !have.has(x.promptId)).map((x) => ({
+      key: x.key || 'r' + Math.random().toString(36).slice(2, 10), promptId: x.promptId, status: 'queued', progress: 0,
+      image: null, extraImages: [], files: [], meta: x.meta || {}, historyId: x.historyId, favorite: false, error: null, restored: true,
+    }));
+    for (const it of back) { this.items.push(it); this.byPrompt.set(it.promptId, it); }
+    if (back.length) { this.lastRun = back; this.#changed(); }
+    return back;
+  }
 
   #listen() {
     const c = this.comfy;
@@ -94,13 +127,33 @@ export class JobQueue extends EventTarget {
     } catch { /* history is best-effort; the server also resolves via /history later */ }
   }
 
+  /** Catch up on missed websocket messages: finished jobs are read from /history.
+   *  A restored job that is neither in /history nor in ComfyUI's queue any more
+   *  was lost (ComfyUI restarted): it is marked cancelled so Run unlocks. */
   async resync() {
-    for (const it of this.items) {
-      if (!['queued', 'running'].includes(it.status) || !it.promptId) continue;
-      const h = await this.comfy.history(it.promptId).catch(() => null);
-      if (h?.status?.completed || Object.keys(h?.outputs || {}).length) this.#finish(it);
-      else if (h?.status?.status_str === 'error') { it.status = 'error'; it.error = 'Failed (see ComfyUI)'; this.#changed(it); }
-    }
+    if (this.syncing) return this.syncing;
+    this.syncing = (async () => {
+      let queue = null;
+      for (const it of this.items) {
+        if (!['queued', 'running'].includes(it.status) || !it.promptId) continue;
+        const h = await this.comfy.history(it.promptId).catch(() => null);
+        if (h?.status?.completed || Object.keys(h?.outputs || {}).length) await this.#finish(it);
+        else if (h?.status?.status_str === 'error') {
+          const interrupted = (h.status.messages || []).some((m) => m?.[0] === 'execution_interrupted');
+          it.status = interrupted ? 'cancelled' : 'error'; if (!interrupted) it.error = 'Failed (see ComfyUI)';
+          this.#record(it); this.#changed(it);
+        } else if (!h && it.restored) {
+          queue ||= await this.comfy.queueState?.().catch(() => null);
+          if (queue && !queue.has(it.promptId)) {
+            // not queued: look once more (it may have finished in between)
+            const h2 = await this.comfy.history(it.promptId).catch(() => null);
+            if (h2?.status?.completed || Object.keys(h2?.outputs || {}).length) await this.#finish(it);
+            else { it.status = 'cancelled'; this.#record(it); this.#changed(it); }
+          }
+        }
+      }
+    })();
+    try { await this.syncing; } finally { this.syncing = null; }
   }
 
   /**
@@ -113,6 +166,7 @@ export class JobQueue extends EventTarget {
       image: null, extraImages: [], files: [], meta, historyId: null, favorite: false, error: null, workflow,
     }));
     this.items.push(...created);
+    this.lastRun = created; // set before the first await: main.js locks Run on these
     this.#changed();
     for (const it of created) {
       if (it.status === 'cancelled') continue;

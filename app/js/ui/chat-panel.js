@@ -261,7 +261,7 @@ export class ChatPanel {
     this.busy = ctrl; this.#paintState();
     const warm = await ollama.isLoaded(this.model);
     const thinking = this.#thinking(warm ? 'Thinking…' : `Loading ${this.model}…`);
-    const req = { model: this.model, messages, format: replySchema(this.actions), options: { temperature: 0.4 }, keep_alive: prep?.keepAlive, signal: ctrl.signal, onChunk: (s) => thinking(`Writing… ${s.length} chars`) };
+    const req = { model: this.model, messages, format: replySchema(this.actions), options: { temperature: 0.4, ...(prep?.chatOptions || {}) }, keep_alive: prep?.keepAlive, signal: ctrl.signal, onChunk: (s) => thinking(`Writing… ${s.length} chars`) };
     let res;
     try {
       try { res = await ollama.chat(req); } catch (e) {

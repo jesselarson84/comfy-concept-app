@@ -23,7 +23,8 @@
     "min": 8,
     "max": 30,
     "default": 20,
-    "label": "Steps"
+    "label": "Steps",
+    "control": "stepper"
    },
    "cfg": {
     "node": "75:63",
@@ -32,7 +33,23 @@
     "min": 1,
     "max": 8,
     "default": 5,
-    "label": "Guidance (cfg)"
+    "label": "Guidance",
+    "control": "slider",
+    "step": 0.5
+   },
+   "sampler": {
+    "node": "75:61",
+    "input": "sampler_name",
+    "type": "enum",
+    "options": [
+     "euler",
+     "euler_ancestral",
+     "dpmpp_2m",
+     "res_multistep"
+    ],
+    "default": "euler",
+    "label": "Sampler",
+    "control": "select"
    }
   },
   "maxBatch": 8,

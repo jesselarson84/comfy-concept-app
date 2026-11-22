@@ -16,20 +16,111 @@
    "multiple": 16
   },
   "params": {
+   "lightning": {
+    "node": "20",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Lightning",
+    "control": "seg",
+    "labels": {
+     "false": "Off",
+     "true": "On"
+    },
+    "span2": true
+   },
    "steps": {
     "node": "9",
     "input": "steps",
     "type": "int",
     "min": 2,
-    "max": 8,
+    "max": 50,
     "default": 4,
-    "label": "Steps"
+    "label": "Steps",
+    "control": "stepper",
+    "modes": {
+     "param": "lightning",
+     "values": {
+      "true": {
+       "min": 2,
+       "max": 8,
+       "default": 4
+      },
+      "false": {
+       "min": 20,
+       "max": 50,
+       "default": 40
+      }
+     }
+    }
+   },
+   "cfg": {
+    "node": "9",
+    "input": "cfg",
+    "type": "number",
+    "min": 1.0,
+    "max": 6.0,
+    "step": 0.5,
+    "default": 4.0,
+    "label": "Guidance",
+    "control": "slider",
+    "when": {
+     "param": "lightning",
+     "is": false
+    },
+    "offValue": 1
+   },
+   "shift": {
+    "node": "3",
+    "input": "shift",
+    "type": "number",
+    "min": 1.0,
+    "max": 6.0,
+    "step": 0.1,
+    "default": 3.1,
+    "label": "Shift",
+    "control": "slider"
+   },
+   "sampler": {
+    "node": "9",
+    "input": "sampler_name",
+    "type": "enum",
+    "options": [
+     "euler",
+     "res_multistep",
+     "dpmpp_2m"
+    ],
+    "default": "euler",
+    "label": "Sampler",
+    "control": "select"
+   },
+   "scheduler": {
+    "node": "9",
+    "input": "scheduler",
+    "type": "enum",
+    "options": [
+     "simple",
+     "beta"
+    ],
+    "default": "simple",
+    "label": "Scheduler",
+    "control": "select"
    }
   },
   "maxBatch": 4,
   "vram": {
    "estMB": 21500,
    "basis": "weights: 20.4 GB fp8 UNet + 7B fp8 text encoder (offloaded after encode) + LoRA; peak while sampling ~20-21 GB"
+  },
+  "gguf": {
+   "node": "1",
+   "unet_name": "qwen-image-2512-Q5_K_M.gguf",
+   "estMB": 16000,
+   "basis": "14.3 GB Q5_K_M GGUF UNet (UnetLoaderGGUF) instead of the 20.4 GB fp8 + LoRA + activations; used on the small-GPU profile"
   }
  },
  "workflow": {
@@ -62,7 +153,7 @@
     "shift": 3.1,
     "sampling": "flow",
     "model": [
-     "2",
+     "20",
      0
     ]
    },
@@ -185,6 +276,23 @@
    "class_type": "SaveImage",
    "_meta": {
     "title": "Save Image"
+   }
+  },
+  "20": {
+   "inputs": {
+    "switch": true,
+    "on_false": [
+     "1",
+     0
+    ],
+    "on_true": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "Lightning on/off"
    }
   }
  }

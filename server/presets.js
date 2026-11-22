@@ -8,6 +8,7 @@ import path from 'node:path';
 import { validatePreset, presetAvailability, comboOptions } from '../app/js/lib/presets.js';
 import { detectControls } from '../app/js/lib/workflow-detect.js';
 import { checkFsFiles } from './comfy-info.js';
+import { ggufPath, isHeavy } from '../app/js/lib/memory-options.js';
 
 export class PresetStore {
   constructor(dir) { this.dir = dir; this.cache = null; }
@@ -27,6 +28,15 @@ export class PresetStore {
 
   get(id) { return this.load().find((p) => p.ok && p.id === String(id).replace(/^ai:/, '')); }
 
+  /** VRAM estimate + heavy flag for the loader path this profile uses. */
+  memoryFor(id, { objectInfo, profileId } = {}) {
+    const p = this.get(id);
+    if (!p) return {};
+    const v = ggufPath(p.workflow, p.manifest, { objectInfo, profileId });
+    const estMB = v.manifest.vram.measuredMB || v.manifest.vram.estMB;
+    return { estMB, heavy: isHeavy(v.manifest, estMB), loader: v.loader };
+  }
+
   /** Live info + file checks for all presets (fs checks only for files /models cannot list). */
   withFs(info) {
     const fsFiles = checkFsFiles(info, this.load().filter((p) => p.ok).flatMap((p) => p.manifest.files));
@@ -43,12 +53,16 @@ export class PresetStore {
     return this.load().map((p) => {
       const id = `ai:${p.id}`;
       if (!p.ok) return { id, file: `ai/${p.id}.json`, label: p.id, ok: false, error: p.error };
-      const manifest = withInputDefaults(p, withInstalledOptions(p, live.objectInfo), live.objectInfo);
-      const controls = presetControls(p.workflow, manifest);
+      // GGUF loader path (Qwen presets): Q5_K_M through UnetLoaderGGUF on the small GPU.
+      const v = ggufPath(p.workflow, p.manifest, { objectInfo: live.objectInfo, profileId: opts?.profileId });
+      const pv = { ...p, workflow: v.workflow, manifest: v.manifest };
+      const manifest = withInputDefaults(pv, withInstalledOptions(pv, live.objectInfo), live.objectInfo);
+      manifest.heavy = isHeavy(manifest);
+      const controls = presetControls(v.workflow, manifest);
       return {
         id, file: `ai/${p.id}.json`, label: manifest.label, description: manifest.description, group: manifest.group,
-        ok: true, controls, workflow: p.workflow, ai: manifest,
-        availability: presetAvailability({ ...p, manifest }, live, hw, opts),
+        ok: true, controls, workflow: v.workflow, ai: manifest, loader: v.loader,
+        availability: presetAvailability({ ...pv, manifest }, live, hw, opts),
       };
     });
   }

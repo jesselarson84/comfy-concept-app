@@ -15,6 +15,7 @@
 //   /api/memory/before-queue POST {workflow}  unload Ollama if this profile/free VRAM says so
 //   /api/memory/before-chat  POST {model}     fit check; maybe ComfyUI /free first (small GPU)
 //   /api/memory/free-for-chat POST           OOM fallback: ComfyUI /free per profile
+//   /api/memory/settings GET, POST {textEncoderCpu, ollamaCpu}  the two memory switches (data/memory-settings.json)
 //   /api/actions    GET   workflow actions (workflows/actions/*.json) for the Chat
 //   /api/workflows?fresh=1 also lists the AI Workflow presets (workflows/ai/*.json,
 //                   availability computed live from ComfyUI /object_info + model
@@ -50,10 +51,12 @@ import { UserPresetStore } from './user-presets.js';
 import { createBuilder } from './builder.js';
 import { detectControls } from '../app/js/lib/workflow-detect.js';
 import { vramFit } from '../app/js/lib/presets.js';
+import { isHeavy } from '../app/js/lib/memory-options.js';
 import { splitOutputs } from '../app/js/lib/outputs.js';
 import { isLegacyPreset, migrateHistoryEntry } from '../app/js/lib/legacy-presets.js';
 import { defaultPreset } from '../app/js/lib/preset-choice.js';
-import { historyOutputs, comfyOutputDir, scanAppFolder, mergeOutputs } from './outputs.js';
+import { historyOutputs, comfyOutputDir, scanAppFolder, mergeOutputs, deleteAppFile } from './outputs.js';
+import { FolderStore } from './folders.js';
 import { saveToDrive } from './drive.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
@@ -64,6 +67,7 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
   const appDir = path.join(ROOT, 'app');
   const workflows = new WorkflowStore(cfg.workflowsDir);
   const history = new HistoryStore(cfg.dataDir, { sessionGapMinutes: cfg.sessionGapMinutes });
+  const folders = new FolderStore(cfg.dataDir);
   const proxy = createComfyProxy(() => cfg.comfyUrl);
   // Some ComfyUI custom-node extensions import "/scripts/app.js" or call
   // "/api/<their-route>" from the ComfyUI root instead of relative to the page,
@@ -102,6 +106,15 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
     const list = [...ai, ...mine, ...folder];
     // default: what a fresh client opens on (same rule as the browser, lib/preset-choice.js).
     return { workflows: list, default: defaultPreset(list), comfy: { reachable: !!info.objectInfo, error: info.error || null } };
+  }
+  /** { estMB, heavy } for the before-queue memory step (GGUF path per profile). */
+  async function memoryFor(id) {
+    if (id.startsWith('ai:')) {
+      const info = await comfyInfo.get().catch(() => ({}));
+      return presets.memoryFor(id, { objectInfo: info?.objectInfo, profileId: await memory.profileId() });
+    }
+    const estMB = await estMBFor(id);
+    return { estMB, heavy: isHeavy(null, estMB ?? 0) };
   }
   async function estMBFor(id) {
     if (id.startsWith('ai:')) { const p = presets.get(id); return p ? (p.manifest.vram.measuredMB || p.manifest.vram.estMB) : undefined; }
@@ -173,7 +186,59 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
     }
     if (p === '/api/history' && req.method === 'GET') {
       await resolvePending();
-      return json(res, 200, { sessions: history.list({ favoritesOnly: url.searchParams.get('favorites') === '1' }) });
+      const fid = url.searchParams.get('folder');
+      const folder = fid ? folders.get(fid) : null;
+      if (fid && !folder) return json(res, 404, { error: 'No such folder' });
+      return json(res, 200, { sessions: history.list({ favoritesOnly: url.searchParams.get('favorites') === '1', only: folder ? new Set(folder.items) : null }) });
+    }
+    // Delete results from the PC (History multi-select). Each file must resolve
+    // inside ComfyUI's output/<outputSubfolder>/ (server/outputs.js deleteAppFile);
+    // an entry leaves History only when all its files are gone.
+    if (p === '/api/history/delete' && req.method === 'POST') {
+      let body;
+      try { body = JSON.parse((await readBody(req, 256 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
+      const ids = Array.isArray(body?.ids) ? body.ids.filter((x) => typeof x === 'string').slice(0, 2000) : [];
+      if (!ids.length) return json(res, 400, { error: 'Nothing to delete' });
+      const outputDir = await comfyOutputDir(cfg);
+      if (!outputDir) return json(res, 409, { error: 'ComfyUI output folder is unknown, nothing was deleted' });
+      const deleted = [], refused = [];
+      for (const id of ids) {
+        const e = history.get(id);
+        if (!e) { refused.push({ id, reason: 'Not found' }); continue; }
+        let ok = true;
+        for (const f of [...(e.images || []), ...(e.files || [])]) {
+          const r = await deleteAppFile(f, { outputDir, outputSubfolder: cfg.outputSubfolder });
+          if (!r.ok) { ok = false; refused.push({ id, file: `${f.subfolder ? f.subfolder + '/' : ''}${f.filename}`, reason: r.reason }); }
+        }
+        if (ok) deleted.push(id);
+      }
+      await history.remove(deleted);
+      await folders.forget(deleted);
+      return json(res, 200, { deleted, refused });
+    }
+    // ---- History folders (labels only) ----
+    if (p === '/api/folders' && req.method === 'GET') {
+      const all = history.list({}).flatMap((s) => s.entries);
+      const byId = new Map(all.map((e) => [e.id, e]));
+      const cover = (entries) => { const e = entries.find((x) => x.images?.length || x.parent?.image || x.files?.length); return e ? (e.images?.[0] || e.parent?.image || e.files?.[0]) : null; };
+      const favs = all.filter((e) => e.favorite);
+      return json(res, 200, {
+        favorites: { count: favs.length, cover: cover(favs) },
+        folders: folders.list().map((f) => { const es = f.items.map((x) => byId.get(x)).filter(Boolean).sort((a, b) => b.createdAt - a.createdAt); return { id: f.id, name: f.name, count: es.length, cover: cover(es) }; }),
+      });
+    }
+    {
+      const fm = /^\/api\/folders(?:\/(f_[\w-]+))?(\/items)?$/.exec(p);
+      if (fm && ['POST', 'PATCH', 'DELETE'].includes(req.method)) {
+        let body = {};
+        if (req.method !== 'DELETE') { try { const t = (await readBody(req, 256 * 1024)).toString('utf8'); body = t ? JSON.parse(t) : {}; } catch { return json(res, 400, { error: 'Bad JSON' }); } }
+        try {
+          if (!fm[1] && req.method === 'POST') return json(res, 201, await folders.create(body.name));
+          if (fm[1] && fm[2] && req.method === 'POST') { const f = await folders.edit(fm[1], { add: Array.isArray(body.add) ? body.add.filter((x) => history.get(x)) : [], remove: Array.isArray(body.remove) ? body.remove : [] }); return f ? json(res, 200, f) : json(res, 404, { error: 'No such folder' }); }
+          if (fm[1] && !fm[2] && req.method === 'PATCH') { const f = await folders.rename(fm[1], body.name); return f ? json(res, 200, f) : json(res, 404, { error: 'No such folder' }); }
+          if (fm[1] && !fm[2] && req.method === 'DELETE') return (await folders.remove(fm[1])) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'No such folder' });
+        } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      }
     }
     if (p === '/api/history' && req.method === 'POST') {
       let body;
@@ -207,12 +272,14 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
     }
     if (p === '/api/actions' && req.method === 'GET') return json(res, 200, { actions: actions.list() });
     if (p === '/api/ollama/unload' && req.method === 'POST') return json(res, 200, await ollama.unloadAll());
+    if (p === '/api/memory/settings' && req.method === 'GET') return json(res, 200, memory.getSettings());
     if (p === '/api/memory' && req.method === 'GET') return json(res, 200, await memory.status({ fresh: url.searchParams.has('fresh') }));
     // The memory profile is always picked automatically from the detected VRAM (no override route).
     if (req.method === 'POST' && p.startsWith('/api/memory/')) {
       let body = {};
       try { const t = (await readBody(req, 64 * 1024)).toString('utf8'); body = t ? JSON.parse(t) : {}; } catch { return json(res, 400, { error: 'Bad JSON' }); }
-      if (p === '/api/memory/before-queue') { const id = String(body.workflow || 'default'); return json(res, 200, await memory.beforeQueue(id, { estMB: await estMBFor(id) })); }
+      if (p === '/api/memory/before-queue') { const id = String(body.workflow || 'default'); return json(res, 200, await memory.beforeQueue(id, await memoryFor(id))); }
+      if (p === '/api/memory/settings') return json(res, 200, memory.setSettings(body));
       if (p === '/api/memory/before-chat') return json(res, 200, await memory.beforeChat(String(body.model || '')));
       if (p === '/api/memory/free-for-chat') return json(res, 200, await memory.freeForChat());
     }
@@ -284,7 +351,7 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
     server.closeAllConnections?.();
     return close(cb);
   };
-  return { server, workflows, history, chats, memory, hardware, cfg, presets, userPresets, builder, comfyInfo };
+  return { server, workflows, history, folders, chats, memory, hardware, cfg, presets, userPresets, builder, comfyInfo };
 }
 
 // Run directly: `node server/index.js` / `npm start` / start.bat

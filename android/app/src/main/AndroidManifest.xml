@@ -6,6 +6,14 @@
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
+    <!-- Batch 3, background runs: RunService is a foreground service (type
+         dataSync: it follows a job on the PC) with a "Running N of M"
+         notification (POST_NOTIFICATIONS, asked on Android 13+) and one
+         vibration when the run ends (VIBRATE). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- No CAMERA permission on purpose: the camera button hands off to the
          system camera app (ACTION_IMAGE_CAPTURE), which needs no permission as
          long as this app does NOT declare CAMERA. See README-ANDROID.md. -->
@@ -69,6 +77,11 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+
+        <service
+            android:name=".RunService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- Tiny in-house replacement for androidx FileProvider (AndroidX is not used).
              Serves cache/shared/ read-only (Share out) and cache/camera/ (camera capture). -->

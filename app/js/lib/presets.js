@@ -56,11 +56,25 @@ export function validatePreset(id, file) {
     } else if (p.type === 'text') {
       if (typeof p.default !== 'string') return fail(`param ${key}: text default must be a string`);
     } else return fail(`param ${key}: type must be int, number, enum or text`);
+    if (p.control && !CONTROLS.includes(p.control)) return fail(`param ${key}: control must be one of ${CONTROLS.join(', ')}`);
+    if (p.when && !(m.params[p.when.param])) return fail(`param ${key}: "when" names unknown param ${p.when.param}`);
+    if (p.modes && !(m.params[p.modes.param])) return fail(`param ${key}: "modes" names unknown param ${p.modes.param}`);
     params[key] = { ...p, label: p.label || key };
+  }
+  // Optional picture/audio slots: when left empty the node and its links are dropped.
+  for (const o of m.optional || []) {
+    if (!wf[o.node]) return fail(`optional slot: node ${o.node} not in workflow`);
+    for (const d of o.drop || []) if (!wf[d.node] || !Array.isArray(wf[d.node].inputs[d.input]) || wf[d.node].inputs[d.input][0] !== String(o.node)) return fail(`optional slot ${o.node}: ${d.node}.${d.input} is not linked to it`);
   }
   if (m.size) {
     const s = m.size;
     if (!Array.isArray(s.base) || s.base.length !== 2 || !(s.min > 0 && s.max >= s.min)) return fail('size needs base [w, h], min and max');
+  }
+  // Painted mask (inpaint presets): a LoadImage the mask editor fills, for the picture in mask.image.
+  if (m.mask) {
+    const mn = wf[m.mask.node], src = wf[m.mask.image];
+    if (!mn || mn.class_type !== 'LoadImage' || !('image' in mn.inputs)) return fail('mask.node must be a LoadImage in the workflow');
+    if (!src || src.class_type !== 'LoadImage') return fail('mask.image must be the LoadImage of the picture');
   }
   for (const inp of m.inputs || []) {
     const n = wf[inp.node];
@@ -73,9 +87,75 @@ export function validatePreset(id, file) {
       output: m.output, description: String(m.description || ''), params, size: m.size || null,
       inputs: (m.inputs || []).map((x) => ({ ...x, node: String(x.node) })), promptFormat: m.promptFormat || null,
       maxBatch: Number.isFinite(m.maxBatch) ? m.maxBatch : 20, vram: { estMB: 0, ...(m.vram || {}) }, files: m.files || [],
+      optional: (m.optional || []).map((o) => ({ node: String(o.node), drop: o.drop || [] })),
+      mask: m.mask ? { node: String(m.mask.node), input: 'image', image: String(m.mask.image) } : null,
+      heavy: m.heavy === true, gguf: m.gguf && wf[m.gguf.node] && typeof m.gguf.unet_name === 'string' ? { ...m.gguf, node: String(m.gguf.node) } : null,
     },
     workflow: wf,
   };
+}
+
+// Manifest param hints for the Settings area (ui/prompt-panel.js):
+//   control  stepper | slider | select | seg | text (else picked from type/range)
+//   group    small group title inside Settings;  span2: full row;  open: on the main screen
+//   labels   { optionValue: 'Shown name' };  format: x | k | s | px | frames (value readout)
+//   when     { param, is | in | notIn }  the setting only applies then (dimmed otherwise;
+//            offValue, if given, is what the graph gets while it doesn't apply)
+//   modes    { param, values: { [value]: { min, max, default } } }  range follows another setting
+//   zeroAtMax  the top of the range sends 0 (e.g. DecimateMesh 0 = full mesh)
+//   multiplyBy / divideBy  unit conversion into the graph (seconds -> tokens, % -> 0..1)
+export const CONTROLS = ['stepper', 'slider', 'select', 'seg', 'text'];
+
+/** Range of a numeric param (it may follow another param, manifest "modes"). */
+export function paramRange(p, values = {}) {
+  const m = p.modes ? p.modes.values?.[String(values[p.modes.param])] : null;
+  return { min: m?.min ?? p.min, max: m?.max ?? p.max, default: m?.default ?? p.default };
+}
+
+/** Does this setting apply with the other values (manifest "when")? */
+export function paramActive(p, values = {}, params = {}) {
+  const w = p.when;
+  if (!w) return true;
+  const v = String(values[w.param] ?? params[w.param]?.default);
+  if ('is' in w) return v === String(w.is);
+  if (w.in) return w.in.map(String).includes(v);
+  if (w.notIn) return !w.notIn.map(String).includes(v);
+  return true;
+}
+
+/** Control a param gets in the Settings area. */
+export function controlFor(p) {
+  if (p.control) return p.control;
+  if (p.type === 'text') return 'text';
+  if (p.type === 'enum') return p.options.length <= 3 ? 'seg' : 'select';
+  if (p.type === 'int' && (p.max - p.min) / (p.step || 1) <= 200) return 'stepper';
+  return 'slider';
+}
+
+/** Value readout for a param ("2.0×", "300k", "16 s", "Full"). */
+export function formatParam(p, v, values = {}) {
+  if (p.zeroAtMax && Number(v) >= p.max) return 'Full';
+  if (p.labels && String(v) in p.labels) return p.labels[String(v)];
+  const n = Number(v);
+  if (p.format === 'x') return `${n.toFixed(1)}×`;
+  if (p.format === 'k') return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
+  if (p.format === 's') return `${n} s`;
+  if (p.format === 'frames') { const fps = Number(values[p.fpsParam || 'fps']) || 24; return `${n} · ${(n / fps).toFixed(1)} s`; }
+  if (p.format === 'px') return `${n} px`;
+  if (p.type === 'int' || !Number.isFinite(n)) return String(v);
+  const st = p.step || 0.01;
+  const dec = st >= 1 ? 0 : Math.min(3, Math.max(1, String(st).split('.')[1]?.length || 1));
+  return n.toFixed(dec);
+}
+
+/** Drop the optional slots (manifest "optional") that were left empty. */
+export function dropEmptyOptional(manifest, workflow, filled = new Set()) {
+  for (const o of manifest.optional || []) {
+    if (filled.has(o.node)) continue;
+    delete workflow[o.node];
+    for (const d of o.drop) if (workflow[d.node]) delete workflow[d.node].inputs[d.input];
+  }
+  return workflow;
 }
 
 /** Clamp the user's values for a preset. Returns { params, size, batch, notes }. */
@@ -83,6 +163,16 @@ export function clampPresetValues(manifest, { params = {}, width, height, batch 
   const numeric = Object.fromEntries(Object.entries(manifest.params).filter(([, d]) => d.type !== 'text'));
   const given = Object.fromEntries(Object.entries(params || {}).filter(([k]) => manifest.params[k]?.type !== 'text'));
   const { params: p, notes } = clampParams({ params: numeric }, given);
+  // Ranges that follow another setting (e.g. Qwen steps 2-8 with Lightning, 20-50 without).
+  for (const [k, d] of Object.entries(manifest.params)) {
+    if (!d.modes || d.type === 'enum' || d.type === 'text') continue;
+    const r = paramRange(d, p);
+    const given = params?.[k];
+    const v = given === undefined || given === null || given === '' ? r.default : p[k];
+    const c = Math.min(r.max, Math.max(r.min, v));
+    if (c !== v && given !== undefined) notes.push(`${d.label}: ${v} is outside ${r.min}-${r.max}, using ${c}`);
+    p[k] = c;
+  }
   // text params: any string, but bounded length
   for (const [k, d] of Object.entries(manifest.params)) {
     if (d.type === 'text') { const v = params[k]; p[k] = typeof v === 'string' ? v.slice(0, 4000) : d.default; }
@@ -111,6 +201,9 @@ export function applyPresetParams(manifest, workflow, params) {
   const out = structuredClone(workflow);
   for (const [key, p] of Object.entries(manifest.params)) {
     let v = params[key] ?? p.default;
+    if (!paramActive(p, params, manifest.params) && 'offValue' in p) v = p.offValue;
+    if (p.zeroAtMax && Number(v) >= p.max) v = 0;
+    if (p.multiplyBy) v = Math.round(v * p.multiplyBy);
     if (p.divideBy) v = Number((v / p.divideBy).toFixed(4));
     for (const t of [p, ...(p.also || [])]) if (out[t.node]) out[t.node].inputs[t.input] = v;
   }

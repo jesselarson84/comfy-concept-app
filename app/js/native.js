@@ -28,3 +28,20 @@ export function setKeepAwake(on) {
   awake = on;
   try { bridge().keepAwake(on); } catch { /* bridge refused (other origin) */ }
 }
+
+let runKey = null; // last run status sent
+/**
+ * Run progress for the Android app (batch 3): while running it shows a
+ * "Running N of M" notification from a foreground service, so the run keeps
+ * going with the app in the background; when it ends the phone vibrates.
+ * Sent only on changes. No-op without the bridge.
+ */
+export function setRunStatus({ current = 0, total = 0, running = false, done = 0 } = {}) {
+  if (!has('runStatus')) return;
+  const key = running ? `${current}/${total}/${done}` : 'idle';
+  if (key === runKey) return;
+  // Nothing to finish if no run was reported yet (first paint).
+  if (!running && runKey === null) { runKey = key; return; }
+  runKey = key;
+  try { bridge().runStatus(current | 0, total | 0, !!running, done | 0); } catch { /* bridge refused */ }
+}

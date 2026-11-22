@@ -1,14 +1,22 @@
 // prompt-panel.js - the left/top form. Shows only the controls the selected
 // preset actually has (from detectControls on the server) and remembers what
 // you typed in localStorage, so reopening the app keeps your prompt.
-// AI Workflow presets also bring their own clamped settings (manifest params:
-// steps, scale, detail...). Steps sits next to Batch and Seed; the other
-// settings follow directly on the main screen (no collapsible).
+// Layout (batch 3, the owner Nov 22 10:17): the open row holds Aspect (+orientation
+// and the size readout), Batch and Seed (full row). Every other setting sits in
+// one "Settings" twirl-down (collapsed by default, open state remembered), in a
+// 2-column grid: steppers for small integer ranges, gray-fill sliders for
+// floats, compact dropdowns for lists, segmented Off/On for switches; group
+// titles for long sets; settings that don't apply are dimmed (manifest hints in
+// lib/presets.js). Lyrics (manifest "open") stay a visible text box.
 import { h, $ } from './dom.js';
 import { randomSeed } from '../lib/seed.js';
 import { parseAspect, aspectKey, sizeFor } from '../lib/aspect.js';
+import { controlFor, formatParam, paramRange, paramActive } from '../lib/presets.js';
 
 const STORE = 'conceptPanel.v1';
+const OPEN_KEY = 'conceptSettingsOpen';
+const pct = (v, min, max) => `${max > min ? Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100)) : 0}%`;
+const decimals = (st) => (st >= 1 ? 0 : String(st).split('.')[1]?.length || 2);
 
 export class PromptPanel {
   constructor() {
@@ -17,7 +25,7 @@ export class PromptPanel {
       msg: $('#preset-msg'), strengthField: $('#strength-field'), strength: $('#strength'), strengthOut: $('#strength-out'),
       aspectField: $('#aspect-field'), aspectSize: $('#aspect-size'), ratio: $('#aspect-ratio'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
       seedField: $('#seed-field'), seedLock: $('#seed-lock'), seed: $('#seed'), seedDice: $('#seed-dice'),
-      stepsField: $('#steps-field'), steps: $('#steps'), expose: $('#expose'), params: $('#params'),
+      params: $('#params'), paramsOpen: $('#params-open'), settings: $('#settings'), batchField: $('#batch-field'),
     };
     this.state = { prompt: '', negative: '', negOn: false, batch: 4, aspect: '1:1', seedMode: 'random', seed: 0, strength: null, steps: {}, expose: {}, params: {}, ...this.#load() };
     // Saved state from before the ratio chips: square/portrait/landscape -> chips.
@@ -51,14 +59,9 @@ export class PromptPanel {
     e.seedLock.addEventListener('change', () => { s.seedMode = e.seedLock.checked ? 'locked' : 'random'; this.#paintSeed(); this.save(); });
     e.seed.addEventListener('input', () => { s.seed = Number(e.seed.value) || 0; this.save(); });
     e.seedDice.addEventListener('click', () => { s.seed = randomSeed(); s.seedMode = 'locked'; this.#paint(); this.save(); });
-    // Steps is either the preset's "steps" param (AI Workflow presets) or the
-    // detected sampler steps of an imported workflow.
-    e.steps.addEventListener('input', () => {
-      if (!this.wf) return;
-      if (this.stepsParam) (s.params[this.wf.id] ||= {}).steps = Number(e.steps.value);
-      else s.steps[this.wf.id] = Number(e.steps.value);
-      this.save();
-    });
+    // The Settings twirl-down: collapsed by default, open state remembered on this device.
+    e.settings.open = localStorage.getItem(OPEN_KEY) === '1';
+    e.settings.addEventListener('toggle', () => localStorage.setItem(OPEN_KEY, e.settings.open ? '1' : '0'));
   }
 
   maxBatch() { return Math.min(20, this.wf?.ai?.maxBatch || 20); }
@@ -136,53 +139,155 @@ export class PromptPanel {
     show(e.aspectField, !!(c?.width.length && c?.height.length));
     this.#paintAspect();
     show(e.seedField, !!c?.seed.length);
-    const sp = wf?.ok ? wf.ai?.params?.steps : null;
-    this.stepsParam = sp && sp.type !== 'enum' && sp.type !== 'text' ? sp : null;
-    show(e.stepsField, !!(this.stepsParam || c?.steps.length));
-    if (this.stepsParam) {
-      e.steps.min = this.stepsParam.min ?? 1; e.steps.max = this.stepsParam.max ?? 200;
-      e.steps.value = s.params[wf.id]?.steps ?? this.stepsParam.default;
-      e.steps.dataset.param = 'steps';
-    } else {
-      e.steps.min = 1; e.steps.max = 200; delete e.steps.dataset.param;
-      if (c?.steps.length) e.steps.value = s.steps[wf.id] ?? c.defaults.steps ?? 4;
-    }
     if (s.batch > this.maxBatch()) { s.batch = this.maxBatch(); e.batch.value = s.batch; }
     e.batch.max = this.maxBatch();
-    // Preset settings with their allowed ranges.
-    e.params.replaceChildren();
-    for (const [key, p] of Object.entries(wf?.ai?.params || {})) {
-      if (key === 'steps' && this.stepsParam) continue; // shown next to Batch and Seed
-      const val = s.params[wf.id]?.[key] ?? p.default;
-      let input;
-      if (p.type === 'enum') {
-        input = h('select', {}, p.options.map((o) => new Option(String(o).replace(/\.(safetensors|pth|gguf)$/, ''), String(o))));
-        input.value = String(val);
-      } else if (p.type === 'text') input = h('textarea', { rows: 3 }, String(val));
-      else input = h('input', { type: 'number', min: p.min, max: p.max, step: p.type === 'int' ? 1 : 'any', value: val, inputmode: p.type === 'int' ? 'numeric' : 'decimal' });
-      input.dataset.param = key;
-      input.addEventListener(p.type === 'enum' ? 'change' : 'input', () => {
-        const v = p.type === 'enum' ? (p.options.find((o) => String(o) === input.value) ?? input.value) : p.type === 'text' ? input.value : Number(input.value);
-        (s.params[wf.id] ||= {})[key] = v; this.save();
-      });
-      e.params.append(h('label.field', {}, h('span.label', {}, p.label), input));
+    // Batch stays visible but grayed for presets that make one result per run.
+    const one = this.maxBatch() <= 1;
+    e.batchField.classList.toggle('is-off', one);
+    e.batchField.querySelector('.stepper').classList.toggle('is-off', one);
+    for (const el of [e.batch, e.batchMinus, e.batchPlus]) el.disabled = one;
+    this.renderSettings();
+  }
+
+  /** Current value of every manifest param of the preset (stored or default). */
+  paramValues() {
+    const wf = this.wf, s = this.state;
+    const ps = wf?.ok ? wf.ai?.params || {} : {};
+    const stored = s.params[wf?.id] || {};
+    const out = {};
+    for (const [k, p] of Object.entries(ps)) if (!p.modes) out[k] = stored[k] ?? p.default;
+    for (const [k, p] of Object.entries(ps)) if (p.modes) { const r = paramRange(p, out); out[k] = Math.min(r.max, Math.max(r.min, stored[k] ?? r.default)); }
+    return out;
+  }
+
+  setParam(key, v) {
+    const wf = this.wf, s = this.state;
+    const ps = wf.ai.params;
+    const bag = (s.params[wf.id] ||= {});
+    bag[key] = v;
+    // Settings whose range follows this one go back to that mode's default.
+    let rerender = false;
+    for (const [k, p] of Object.entries(ps)) {
+      if (p.modes?.param === key) { delete bag[k]; rerender = true; }
+      if (p.when?.param === key) rerender = true;
     }
-    // Generic "#expose" controls.
-    e.expose.replaceChildren();
+    this.save();
+    if (rerender) this.renderSettings();
+  }
+
+  /** Builds the Settings grid (and the open text boxes, e.g. Lyrics). */
+  renderSettings() {
+    const e = this.el, s = this.state, wf = this.wf;
+    const c = wf?.ok ? wf.controls : null;
+    const ps = wf?.ok ? wf.ai?.params || {} : {};
+    const vals = this.paramValues();
+    e.params.replaceChildren(); e.paramsOpen.replaceChildren();
+    let group = null;
+    const add = (el, p) => {
+      if (p?.group && p.group !== group) { group = p.group; e.params.append(h('div.sg-h', {}, p.group)); }
+      e.params.append(el);
+    };
+    // Steps of an imported workflow (detected sampler steps).
+    if (c?.steps.length && !ps.steps) {
+      const v = s.steps[wf.id] ?? c.defaults.steps ?? 4;
+      add(this.#stepper({ label: 'Steps', min: 1, max: 200, step: 1, value: v, id: 'steps', onChange: (n) => { s.steps[wf.id] = n; this.save(); } }));
+    }
+    for (const [key, p] of Object.entries(ps)) {
+      const active = paramActive(p, vals, ps);
+      const el = this.#paramControl(key, p, vals);
+      el.classList.toggle('is-off', !active);
+      el.querySelectorAll('input, select, textarea, button').forEach((x) => { x.disabled = !active; });
+      if (p.open) { e.paramsOpen.append(el); continue; }
+      add(el, p);
+    }
+    // Generic "#expose" controls of imported workflows.
     for (const x of c?.expose || []) {
       const key = `${x.node}.${x.input}`;
       const val = s.expose[wf.id]?.[key] ?? x.value;
-      const input = x.type === 'boolean' ? h('input', { type: 'checkbox', checked: !!val })
-        : x.type === 'number' ? h('input', { type: 'number', step: 'any', value: val })
-          : h('input', { type: 'text', value: val });
-      input.addEventListener('input', () => {
-        (s.expose[wf.id] ||= {})[key] = x.type === 'boolean' ? input.checked : x.type === 'number' ? Number(input.value) : input.value;
-        this.save();
-      });
-      e.expose.append(h('label.field', {}, h('span.label', {}, x.label), input));
+      const set = (v) => { (s.expose[wf.id] ||= {})[key] = v; this.save(); };
+      let el;
+      if (x.type === 'boolean') el = this.#seg({ label: x.label, options: [false, true], labels: { false: 'Off', true: 'On' }, value: !!val, onChange: set });
+      else if (x.type === 'number') el = this.#stepper({ label: x.label, min: -1e9, max: 1e9, step: Number.isInteger(val) ? 1 : 0.01, value: val, onChange: set });
+      else el = h('label.ctl.span2', {}, h('span.label', {}, h('span', {}, x.label)), h('input', { type: 'text', value: val, oninput: (ev) => set(ev.target.value) }));
+      add(el);
     }
-    show(e.params, !!e.params.children.length);
-    show(e.expose, !!e.expose.children.length);
+    e.settings.hidden = !e.params.children.length;
+    e.paramsOpen.hidden = !e.paramsOpen.children.length;
+  }
+
+  #label(text, readout) {
+    return h('span.label', {}, h('span', {}, text), readout === undefined ? null : h('span.val', {}, readout));
+  }
+
+  #paramControl(key, p, vals) {
+    const v = vals[key];
+    const onChange = (nv) => this.setParam(key, nv);
+    const kind = controlFor(p);
+    let el;
+    if (kind === 'text') {
+      const ta = h('textarea', { rows: 3, dataset: { param: key }, oninput: (ev) => onChange(ev.target.value) }, String(v ?? ''));
+      el = h('label.ctl.span2', {}, this.#label(p.label), ta);
+      if (p.open) el.classList.add('field');
+    } else if (kind === 'seg' && p.type === 'enum') {
+      el = this.#seg({ label: p.label, options: p.options, labels: p.labels, value: v, onChange, param: key });
+    } else if (kind === 'select' && p.type === 'enum') {
+      el = this.#select({ label: p.label, options: p.options, labels: p.labels, value: v, onChange, param: key });
+    } else if (kind === 'stepper') {
+      const r = paramRange(p, vals);
+      el = this.#stepper({ label: p.label, min: r.min, max: r.max, step: p.step || 1, value: v, onChange, param: key, id: key === 'steps' ? 'steps' : undefined, int: p.type === 'int' });
+    } else {
+      const r = paramRange(p, vals);
+      el = this.#slider({ label: p.label, min: r.min, max: r.max, step: p.step || (p.type === 'int' ? 1 : 0.05), value: v, onChange, param: key, fmt: (x) => formatParam(p, x, this.paramValues()) });
+    }
+    if (p.span2) el.classList.add('span2');
+    el.dataset.key = key;
+    return el;
+  }
+
+  #stepper({ label, min, max, step = 1, value, onChange, param, id, int = true }) {
+    const dec = decimals(step);
+    const clamp = (n) => {
+      let x = Math.min(max, Math.max(min, Number.isFinite(n) ? n : min));
+      x = Math.round((x - min) / step) * step + min;
+      return Number(x.toFixed(int ? 0 : dec));
+    };
+    const input = h('input.num', { type: 'number', min, max, step, value: Number(value).toFixed(int ? 0 : dec), inputmode: int ? 'numeric' : 'decimal', 'aria-label': label });
+    if (id) input.id = id;
+    if (param) input.dataset.param = param;
+    const set = (n) => { const x = clamp(n); input.value = x.toFixed(int ? 0 : dec); onChange(x); };
+    input.addEventListener('change', () => set(Number(input.value)));
+    input.addEventListener('input', () => { const n = Number(input.value); if (Number.isFinite(n) && n >= min && n <= max) onChange(n); });
+    const btn = (icon, d, aria) => h('button.btn.icon', { type: 'button', 'aria-label': aria, onclick: () => set(Number(input.value) + d) }, h(`i.i.${icon}`));
+    return h('div.ctl', {}, this.#label(label), h('div.stepper.fill', {}, btn('i-minus', -step, 'Less'), input, btn('i-plus', step, 'More')));
+  }
+
+  #slider({ label, min, max, step, value, onChange, param, fmt }) {
+    const out = h('span.val', {}, fmt(value));
+    const input = h('input.sl', { type: 'range', min, max, step, value, 'aria-label': label });
+    if (param) input.dataset.param = param;
+    const paint = () => { input.style.setProperty('--p', pct(Number(input.value), min, max)); out.textContent = fmt(Number(input.value)); };
+    input.addEventListener('input', () => { paint(); onChange(Number(input.value)); });
+    paint();
+    return h('div.ctl', {}, h('span.label', {}, h('span', {}, label), out), h('div.slider-box', {}, input));
+  }
+
+  #select({ label, options, labels = {}, value, onChange, param }) {
+    const sel = h('select', { 'aria-label': label }, options.map((o) => new Option(labels[String(o)] ?? String(o).replace(/\.(safetensors|pth|gguf)$/, ''), String(o))));
+    sel.value = String(value);
+    if (param) sel.dataset.param = param;
+    sel.addEventListener('change', () => onChange(options.find((o) => String(o) === sel.value) ?? sel.value));
+    return h('div.ctl', {}, this.#label(label), h('label.cselect', {}, sel, h('i.i.i-chevron-down', { 'aria-hidden': 'true' })));
+  }
+
+  #seg({ label, options, labels = {}, value, onChange, param }) {
+    const seg = h('div.seg.text', { role: 'radiogroup', 'aria-label': label });
+    if (param) seg.dataset.param = param;
+    const paint = (v) => { for (const b of seg.children) { const on = b.dataset.value === String(v); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); } };
+    for (const o of options) {
+      seg.append(h('button', { type: 'button', role: 'radio', dataset: { value: String(o) }, onclick: () => { paint(o); onChange(o); } }, labels[String(o)] ?? String(o)));
+    }
+    paint(value);
+    return h('div.ctl', {}, this.#label(label), seg);
   }
 
   /** Values the user chose, for this preset. */
@@ -192,9 +297,9 @@ export class PromptPanel {
       prompt: s.prompt, negative: c?.negative.length && s.negOn ? s.negative : (c?.negative.length ? '' : undefined),
       batch: Math.min(s.batch, this.maxBatch()), aspect: s.aspect, seedMode: s.seedMode, seed: s.seed,
       strength: c?.strength.length ? Number(this.el.strength.value) : undefined,
-      steps: c?.steps.length && !this.stepsParam ? Number(this.el.steps.value) : undefined,
+      steps: c?.steps.length && !this.wf?.ai?.params?.steps ? Number(this.state.steps[this.wf.id] ?? c.defaults.steps ?? 4) : undefined,
       expose: s.expose[this.wf?.id] || {},
-      params: { ...(s.params[this.wf?.id] || {}) },
+      params: this.wf?.ai ? this.paramValues() : {},
     };
   }
 

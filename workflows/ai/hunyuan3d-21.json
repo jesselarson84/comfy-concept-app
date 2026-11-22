@@ -5,8 +5,25 @@
   "menuPath": "3D/Hunyuan3D 2.1 Image to Model",
   "source": "ComfyUI-AIWorkflowMenu 3d/hunyuan3d_21_image_to_model.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "3d",
-  "description": "Untextured mesh (GLB) from one object picture. Same pipeline as the Chat 3D action.",
+  "description": "Untextured mesh (GLB) from one object picture. The background is removed first (BiRefNet), so a photo or render on any backdrop works. Same pipeline as the Chat 3D action.",
   "params": {
+   "removeBg": {
+    "node": "25",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Remove background",
+    "control": "seg",
+    "labels": {
+     "false": "Off",
+     "true": "On"
+    },
+    "span2": true
+   },
    "steps": {
     "node": "19:7",
     "input": "steps",
@@ -14,22 +31,77 @@
     "min": 10,
     "max": 50,
     "default": 30,
-    "label": "Steps"
+    "label": "Steps",
+    "control": "stepper",
+    "step": 5
+   },
+   "cfg": {
+    "node": "19:7",
+    "input": "cfg",
+    "type": "number",
+    "min": 1.0,
+    "max": 10.0,
+    "step": 0.5,
+    "default": 5.0,
+    "label": "Guidance",
+    "control": "slider"
    },
    "detail": {
     "node": "19:8",
     "input": "octree_resolution",
-    "type": "int",
-    "min": 128,
-    "max": 384,
+    "type": "enum",
+    "options": [
+     192,
+     256,
+     320,
+     384
+    ],
     "default": 256,
-    "label": "Detail"
+    "label": "Detail",
+    "control": "select",
+    "group": "Shape"
+   },
+   "surface": {
+    "node": "19:9",
+    "input": "threshold",
+    "type": "number",
+    "min": 0.3,
+    "max": 0.9,
+    "step": 0.05,
+    "default": 0.6,
+    "label": "Surface level",
+    "control": "slider"
+   },
+   "method": {
+    "node": "19:9",
+    "input": "algorithm",
+    "type": "enum",
+    "options": [
+     "surface net",
+     "basic"
+    ],
+    "default": "surface net",
+    "label": "Surface method",
+    "control": "select"
+   },
+   "faces": {
+    "node": "26",
+    "input": "target_face_count",
+    "type": "int",
+    "min": 20000,
+    "max": 520000,
+    "step": 20000,
+    "default": 520000,
+    "label": "Max faces",
+    "control": "slider",
+    "format": "k",
+    "zeroAtMax": true
    }
   },
   "maxBatch": 2,
   "vram": {
    "estMB": 9000,
-   "basis": "weights: 7.4 GB checkpoint (DiT + VAE + DINO); octree 256 decode ~1-2 GB"
+   "basis": "weights: 7.4 GB checkpoint (DiT + VAE + DINO); octree 256 decode ~1-2 GB; BiRefNet background removal (~0.9 GB) runs first and can be offloaded before sampling"
   }
  },
  "workflow": {
@@ -44,12 +116,93 @@
     "ver": "0.3.59"
    }
   },
+  "20": {
+   "inputs": {
+    "bg_removal_name": "birefnet.safetensors"
+   },
+   "class_type": "LoadBackgroundRemovalModel",
+   "_meta": {
+    "title": "Load Background Removal Model",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "21": {
+   "inputs": {
+    "bg_removal_model": [
+     "20",
+     0
+    ],
+    "image": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "RemoveBackground",
+   "_meta": {
+    "title": "Remove Background",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "22": {
+   "inputs": {
+    "mask": [
+     "21",
+     0
+    ]
+   },
+   "class_type": "InvertMask",
+   "_meta": {
+    "title": "Background mask",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "23": {
+   "inputs": {
+    "width": 64,
+    "height": 64,
+    "batch_size": 1,
+    "color": 16777215
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "White",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "24": {
+   "inputs": {
+    "destination": [
+     "2",
+     0
+    ],
+    "source": [
+     "23",
+     0
+    ],
+    "x": 0,
+    "y": 0,
+    "resize_source": true,
+    "mask": [
+     "22",
+     0
+    ]
+   },
+   "class_type": "ImageCompositeMasked",
+   "_meta": {
+    "title": "Object on white",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
   "10": {
    "inputs": {
     "filename_prefix": "concept-app/hunyuan3d",
-    "image": "",
     "mesh": [
-     "19:9",
+     "26",
      0
     ]
    },
@@ -95,7 +248,7 @@
      1
     ],
     "image": [
-     "2",
+     "25",
      0
     ]
    },
@@ -198,6 +351,37 @@
     "title": "Voxel to Mesh",
     "cnr_id": "comfy-core",
     "ver": "0.3.59"
+   }
+  },
+  "25": {
+   "inputs": {
+    "switch": true,
+    "on_false": [
+     "2",
+     0
+    ],
+    "on_true": [
+     "24",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "Remove background on/off"
+   }
+  },
+  "26": {
+   "inputs": {
+    "target_face_count": 0,
+    "placement_mode": "midpoint",
+    "mesh": [
+     "19:9",
+     0
+    ]
+   },
+   "class_type": "DecimateMesh",
+   "_meta": {
+    "title": "Max faces (0 = full)"
    }
   }
  }
