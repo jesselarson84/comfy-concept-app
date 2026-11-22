@@ -7,13 +7,15 @@
 // A preset file is { "preset": <manifest>, "workflow": <API graph> }, the same
 // pattern as workflows/actions/*.json:
 //   manifest = {
-//     group: "3D" | "Image" | "Video" | "Audio", label, menuPath, source,
+//     group: "3D" | "Image" | "Video" | "Audio", label, menuPath, menuOrder, source,
 //     output: "image" | "video" | "audio" | "3d", description,
 //     size:   { base: [w, h], min, max, multiple }   (aspect chips -> clamped size)
 //     params: { key: { node, input, also?: [{node,input}], type: "int"|"number"|"enum"|"text",
 //                      min, max, default, options, label, divideBy } }
 //     inputs: [{ kind: "video", node, input, label }]   file slots other than LoadImage
 //     promptFormat: { unless: regex, template: "[1] {text}" }
+//     info:   { prompt | negative | image | image.<node> | video | audio | ...: text }
+//             and params.<key>.info: the (i) texts (lib/setting-info.js)
 //     maxBatch, vram: { estMB, basis, measuredMB }, files: [{ folder, file }]
 //   }
 // Prompt / negative / seed / reference images / width+height are found by
@@ -24,6 +26,18 @@
 import { clampParams } from './actions.js';
 
 export const GROUPS = ['3D', 'Image', 'Video', 'Audio'];
+// Sub sections of a group in the picker (batch 4), in this order. A preset is in
+// one when its menuPath is "<group>/<sub section>/<short name>", e.g.
+// "Image/Text to Image/Z-Image Turbo"; the short name is what the row shows
+// (the full label stays the preset's name everywhere else).
+export const SUBGROUPS = { Image: ['Text to Image', 'Image Edit', 'Inpainting', 'Upscale'] };
+
+/** { subgroup, short } from a menuPath ("Video/Wan 2.2 5B Text/Image to Video" has no sub section). */
+export function menuParts(group, menuPath, label) {
+  const parts = String(menuPath || '').split('/');
+  if (parts[0] === group && parts.length >= 3 && SUBGROUPS[group]?.includes(parts[1])) return { subgroup: parts[1], short: parts.slice(2).join('/').trim() || label };
+  return { subgroup: null, short: label };
+}
 export const OUTPUTS = ['image', 'video', 'audio', '3d'];
 // Literal inputs that name a model file: checked against ComfyUI's model lists.
 export const MODEL_EXT = /\.(safetensors|gguf|pth|pt|ckpt|bin|sft)$/i;
@@ -60,6 +74,7 @@ export function validatePreset(id, file) {
     if (p.when && !(m.params[p.when.param])) return fail(`param ${key}: "when" names unknown param ${p.when.param}`);
     if (p.modes && !(m.params[p.modes.param])) return fail(`param ${key}: "modes" names unknown param ${p.modes.param}`);
     if (p.auto && (p.auto !== 'key' || !p.options.includes('auto'))) return fail(`param ${key}: auto must be "key" with an "auto" option`);
+    if (p.info !== undefined && typeof p.info !== 'string') return fail(`param ${key}: info must be a string`);
     if (p.installed && !((p.installed.folder && p.installed.prefix) || (p.installed.fsFolder && p.installed.dir))) return fail(`param ${key}: "installed" needs folder + prefix or fsFolder + dir`);
     params[key] = { ...p, label: p.label || key };
   }
@@ -78,6 +93,8 @@ export function validatePreset(id, file) {
     if (!mn || mn.class_type !== 'LoadImage' || !('image' in mn.inputs)) return fail('mask.node must be a LoadImage in the workflow');
     if (!src || src.class_type !== 'LoadImage') return fail('mask.image must be the LoadImage of the picture');
   }
+  // Info texts for the (i) icons (lib/setting-info.js): { controlKey: text }.
+  if (m.info !== undefined && (!m.info || typeof m.info !== 'object' || Object.values(m.info).some((t) => typeof t !== 'string'))) return fail('info must be { key: text }');
   for (const inp of m.inputs || []) {
     const n = wf[inp.node];
     if (!n || !(inp.input in n.inputs)) return fail(`input slot ${inp.kind}: node ${inp.node}.${inp.input} not in workflow`);
@@ -86,11 +103,13 @@ export function validatePreset(id, file) {
     ok: true, id,
     manifest: {
       group: m.group, label: m.label.trim(), menuPath: m.menuPath || `${m.group}/${m.label}`, source: String(m.source || ''),
+      ...menuParts(m.group, m.menuPath, m.label.trim()), menuOrder: Number.isFinite(m.menuOrder) ? m.menuOrder : 999,
       output: m.output, description: String(m.description || ''), params, size: m.size || null,
       inputs: (m.inputs || []).map((x) => ({ ...x, node: String(x.node) })), promptFormat: m.promptFormat || null,
       maxBatch: Number.isFinite(m.maxBatch) ? m.maxBatch : 20, vram: { estMB: 0, ...(m.vram || {}) }, files: m.files || [],
       optional: (m.optional || []).map((o) => ({ node: String(o.node), drop: o.drop || [] })),
       mask: m.mask ? { node: String(m.mask.node), input: 'image', image: String(m.mask.image) } : null,
+      info: { ...(m.info || {}) },
       heavy: m.heavy === true, gguf: m.gguf && wf[m.gguf.node] && typeof m.gguf.unet_name === 'string' ? { ...m.gguf, node: String(m.gguf.node) } : null,
     },
     workflow: wf,

@@ -7,8 +7,9 @@
 // Nothing else in ComfyUI's output folder is listed or copied.
 //
 // ComfyUI's output folder on disk: config "comfyOutputDir", else the
-// --output-directory ComfyUI was started with (GET /system_stats argv, only when
-// ComfyUI runs on this PC). Without it, the list comes from history.json alone.
+// --output-directory (or --base-directory + output) ComfyUI was started with
+// (GET /system_stats argv, only when ComfyUI runs on this PC), else the last
+// folder found that way. Without it, the list comes from history.json alone.
 // The browser loads every file through ComfyUI's own /view (via /comfy/), so
 // the server never serves output files itself.
 import fs from 'node:fs';
@@ -64,18 +65,75 @@ export function historyOutputs(history) {
   return list;
 }
 
-/** ComfyUI's output folder on disk, or null. */
-export async function comfyOutputDir(cfg, { fetchImpl = fetch } = {}) {
+/**
+ * ComfyUI's output folder from its command line (system_stats argv), or null.
+ * Accepts "--output-directory X", "--output-directory=X", and falls back to
+ * "--base-directory X" (or "=X") + "output", which is what Comfy Desktop passes:
+ * its output folder is <base>\output.
+ */
+export function outputDirFromArgv(argv) {
+  if (!Array.isArray(argv)) return null;
+  const flag = (name) => {
+    for (let i = 0; i < argv.length; i++) {
+      const a = argv[i];
+      if (typeof a !== 'string') continue;
+      if (a === name && typeof argv[i + 1] === 'string' && argv[i + 1] && !argv[i + 1].startsWith('--')) return argv[i + 1];
+      if (a.startsWith(name + '=') && a.length > name.length + 1) return a.slice(name.length + 1).replace(/^"(.*)"$/, '$1');
+    }
+    return null;
+  };
+  const out = flag('--output-directory');
+  if (out) return path.resolve(out);
+  const base = flag('--base-directory');
+  return base ? path.resolve(base, 'output') : null;
+}
+
+/**
+ * ComfyUI's output folder on disk, or null. Order:
+ *   1. config "comfyOutputDir" (config.local.json / COMFY_OUTPUT_DIR), always wins;
+ *   2. ComfyUI's command line from GET /system_stats (only when ComfyUI runs on this PC),
+ *      8 s timeout: a busy ComfyUI (loading a model) can be slow to answer;
+ *   3. the last folder found that way (kept in memory and in data/comfy-output-dir.json,
+ *      used only while that folder still exists).
+ * Without any of them, deleting refuses (409) and "From Comfy UI" lists history only.
+ * opts.cache: { get(), set(dir) } (createOutputDirCache); opts.log for failures.
+ */
+export async function comfyOutputDir(cfg, { fetchImpl = fetch, timeoutMs = 8000, cache = null, log = null } = {}) {
   if (cfg.comfyOutputDir) return path.resolve(cfg.comfyOutputDir);
   if (!isLocal(cfg.comfyUrl)) return null;
+  const fallback = (why) => {
+    const last = cache?.get();
+    if (last && fs.existsSync(last)) { log?.(`ComfyUI output folder: ${why}; using the last known ${last}`); return last; }
+    log?.(`ComfyUI output folder unknown: ${why}. Set "comfyOutputDir" in config.local.json.`);
+    return null;
+  };
   try {
-    const r = await fetchImpl(cfg.comfyUrl + '/system_stats', { signal: AbortSignal.timeout(2000) });
+    const r = await fetchImpl(cfg.comfyUrl + '/system_stats', { signal: AbortSignal.timeout(timeoutMs) });
+    if (!r.ok) return fallback(`/system_stats answered ${r.status}`);
     const argv = (await r.json())?.system?.argv;
-    if (!Array.isArray(argv)) return null;
-    const i = argv.indexOf('--output-directory');
-    if (i >= 0 && typeof argv[i + 1] === 'string') return path.resolve(argv[i + 1]);
-  } catch { /* ComfyUI offline */ }
-  return null;
+    const dir = outputDirFromArgv(argv);
+    if (!dir) return fallback(Array.isArray(argv) ? 'no --output-directory or --base-directory in ComfyUI\'s command line' : 'no argv in /system_stats');
+    cache?.set(dir);
+    return dir;
+  } catch (e) {
+    return fallback(e?.name === 'TimeoutError' ? `/system_stats took longer than ${timeoutMs / 1000} s` : `ComfyUI not reachable (${e?.message || e})`);
+  }
+}
+
+/** Last good output folder, in memory and in <dataDir>/comfy-output-dir.json. */
+export function createOutputDirCache(dataDir) {
+  const file = dataDir ? path.join(dataDir, 'comfy-output-dir.json') : null;
+  let dir = null;
+  try { const d = JSON.parse(fs.readFileSync(file, 'utf8')); if (typeof d?.dir === 'string' && d.dir) dir = d.dir; } catch { /* none yet */ }
+  return {
+    get: () => dir,
+    set(v) {
+      if (!v || v === dir) return;
+      dir = v;
+      if (!file) return;
+      try { fs.mkdirSync(dataDir, { recursive: true }); fs.writeFileSync(file + '.tmp', JSON.stringify({ dir: v, at: Date.now() })); fs.renameSync(file + '.tmp', file); } catch { /* memory copy still works */ }
+    },
+  };
 }
 
 const IMAGE_EXT = /\.(png|jpe?g|webp)$/i;
@@ -132,9 +190,10 @@ export function mergeOutputs(lists, { kind, offset = 0, limit = 120 } = {}) {
  * is deleted: type "output", plain name, safe relative subfolder at or below the
  * app's folder, no absolute paths or "..", no symlink (the file itself, the app
  * folder or any folder in between) leading out of it. Anything else is refused.
- * Returns { ok: true, deleted | missing } or { ok: false, reason }.
+ * Returns { ok: true, deleted | missing } or { ok: false, reason }. Never throws
+ * for a locked file: see unlinkWithRetry. unlink / wait are test seams.
  */
-export async function deleteAppFile(ref, { outputDir, outputSubfolder = 'concept-app' } = {}) {
+export async function deleteAppFile(ref, { outputDir, outputSubfolder = 'concept-app', unlink, wait } = {}) {
   const no = (reason) => ({ ok: false, reason });
   if (!outputDir) return no('ComfyUI output folder is unknown');
   if (!ref || typeof ref !== 'object') return no('No file given');
@@ -163,6 +222,28 @@ export async function deleteAppFile(ref, { outputDir, outputSubfolder = 'concept
   let real;
   try { real = await fs.promises.realpath(full); } catch (e) { return no(e.message); }
   if (!real.startsWith(appRoot + path.sep)) return no('Resolves outside the app\'s output folder');
-  await fs.promises.unlink(real);
-  return { ok: true, deleted: true };
+  return unlinkWithRetry(real, { unlink, wait });
+}
+
+// Windows keeps a file locked while any program has it open (a 3D viewer, Explorer's
+// preview pane, or ComfyUI itself still streaming it to a phone through /view). Deleting
+// it then fails with EBUSY or EPERM. The lock is usually gone within a second, so try a
+// few times with a growing pause (0.1 + 0.2 + 0.3 + 0.4 s = 1 s of waiting, 5 tries)
+// before giving up with a message that says what to do.
+export const LOCKED_CODES = new Set(['EBUSY', 'EPERM', 'EACCES']);
+export const IN_USE = 'File is in use (open in a viewer or another app), try again';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export async function unlinkWithRetry(file, { unlink = fs.promises.unlink, wait = sleep, tries = 5, stepMs = 100 } = {}) {
+  for (let i = 1; ; i++) {
+    try {
+      await unlink(file);
+      return { ok: true, deleted: true };
+    } catch (e) {
+      if (e?.code === 'ENOENT') return { ok: true, missing: true }; // gone in the meantime
+      if (!LOCKED_CODES.has(e?.code)) return { ok: false, reason: e?.message || String(e) };
+      if (i >= tries) return { ok: false, reason: IN_USE, code: e.code };
+      await wait(stepMs * i);
+    }
+  }
 }

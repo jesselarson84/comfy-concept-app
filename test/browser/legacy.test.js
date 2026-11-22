@@ -56,7 +56,8 @@ test('saved preset "fast-concept" opens FLUX.2 Klein 4B Text to Image; no saved 
     const { ctx, page } = await openWith(st);
     try {
       assert.equal(await page.evaluate(() => window.conceptApp.current.id), 'ai:klein-4b-t2i');
-      assert.match(await page.textContent('#preset-name'), /FLUX\.2 Klein 4B Text to Image/);
+      assert.match(await page.getAttribute('#preset-btn', 'title'), /FLUX\.2 Klein 4B Text to Image/);
+      assert.equal(await page.textContent('#preset-crumb'), 'Image › Text to Image ›');
     } finally { await ctx.close(); }
   }
 });

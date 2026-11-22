@@ -363,12 +363,13 @@ test('without the bridge: Save is a browser download again and keepAwake is neve
   assert.deepEqual(await bridgeCalls(), []);
 });
 
-test('ComfyUI canvas (menu) opens the proxied ComfyUI UI in the same tab', async () => {
-  await page.click('.menu summary');
-  assert.equal((await page.textContent('#btn-advanced')).trim(), 'ComfyUI canvas');
-  await page.click('#btn-advanced');
-  await page.waitForURL(/\/comfy\/$/);
-  assert.match(await page.textContent('h1'), /Mock ComfyUI/);
+test('ComfyUI canvas (top bar toggle, batch 4) shows the proxied ComfyUI UI without leaving the app', async () => {
+  await page.click('#btn-canvas');
+  const frame = page.frameLocator('#node-view iframe');
+  assert.match(await frame.locator('h1').textContent(), /Mock ComfyUI/);
+  assert.equal(new URL(page.url()).pathname, '/');
+  await page.click('#btn-canvas');
+  assert.equal(await page.isVisible('#node-view'), false);
 });
 
 test('no page errors during the run', () => {

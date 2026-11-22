@@ -75,7 +75,8 @@ test('header says Comfy UI; Run button is the only blue element; picker has 3D /
   assert.equal((await wan.textContent()).trim(), 'Wan 2.2 5B Text/Image to Video');
   assert.equal(await wan.getAttribute('aria-disabled'), 'true');
   assert.ok(await wan.evaluate((e) => e.classList.contains('dis') && Number(getComputedStyle(e).opacity) < 1));
-  assert.equal((await page.locator('#picker .ent[data-preset="ai:qwen-2512-t2i"]').textContent()).trim(), 'Qwen 2512 Text to Image');
+  // Batch 4: Image rows sit in sub sections and show their short name there.
+  assert.equal((await page.locator('#picker .ent[data-preset="ai:qwen-2512-t2i"]').textContent()).trim(), 'Qwen 2512');
   assert.equal(await page.locator('#picker .tg').count(), 0);
   assert.equal((await page.textContent('#picker .mt')).trim(), 'AI Workflow');
   assert.doesNotMatch(await page.textContent('#picker'), /tight on|RAM offload|needs download|same list/);
@@ -88,8 +89,8 @@ test('header says Comfy UI; Run button is the only blue element; picker has 3D /
 
 test('AI preset: params shown with ranges; out-of-range values are clamped before queueing; ratio dropdown + orientation flip', async () => {
   await pick('ai:klein-4b-t2i');
-  assert.match(await page.textContent('#preset-name'), /FLUX\.2 Klein 4B Text to Image/);
-  assert.match(await page.textContent('#preset-crumb'), /Image/);
+  assert.equal(await page.textContent('#preset-name'), 'FLUX.2 Klein 4B');
+  assert.equal(await page.textContent('#preset-crumb'), 'Image › Text to Image ›');
   // Steps is under the Settings twirl-down (batch 3).
   assert.equal(await page.locator('#more').count(), 0);
   if (!(await page.$eval('#settings', (d) => d.open))) await page.click('#settings > summary');

@@ -1,0 +1,10 @@
+/* comfy-tweaks.css - added to ComfyUI's own page (/comfy/) by the app's proxy.
+   js/comfy-tweaks.js hides the Comfy Agent button and toasts (by text, since
+   ComfyUI's class names change between versions) and puts "concept-embedded"
+   on <html> when the page runs in the app's node view (iframe).
+
+   ComfyUI's own top bar inside the node view is NOT hidden: its selectors could
+   not be checked against the real page from the dev VM, and that bar holds the
+   Workflow menu (Export (API)) and Queue. To hide part of it later, add a rule
+   here, e.g.  html.concept-embedded .some-tab-strip { display: none; }  */
+[data-concept-hidden] { display: none !important; }

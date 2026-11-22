@@ -2,7 +2,8 @@
  "preset": {
   "group": "Image",
   "label": "FLUX.1 Schnell Text to Image (GGUF)",
-  "menuPath": "Image/FLUX.1 Schnell Text to Image (GGUF)",
+  "menuPath": "Image/Text to Image/FLUX.1 Schnell (GGUF)",
+  "menuOrder": 5,
   "source": "ComfyUI-AIWorkflowMenu image/flux1_schnell_gguf.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "image",
   "description": "FLUX.1 schnell Q5_K_S GGUF, 4 steps. Apache-2.0.",
@@ -24,7 +25,8 @@
     "max": 8,
     "default": 4,
     "label": "Steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "How many refinement passes. FLUX.1 Schnell is distilled for about 4 steps (the default); 1-8 are allowed. More rarely helps."
    },
    "sampler": {
     "node": "7",

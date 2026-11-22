@@ -41,7 +41,7 @@ test('menu has no GPU & memory section or profile setting (always Auto); an old 
     assert.equal(await p.locator('.memory, .memory-select, #memory, #memory-mount').count(), 0);
     assert.doesNotMatch(await p.textContent('.menu-pop'), /GPU & memory|Profile|Auto|Under 12 GB|16 GB\+|Refresh/);
     // batch 3: two plain switches (CPU text encoder, Ollama CPU mode); still no GPU/memory readout or profile
-    assert.deepEqual(await p.$$eval('.menu-pop > *', (els) => els.map((e) => e.id || e.className)), ['btn-advanced', 'btn-import', 'field builder-model', 'menu-switches']);
+    assert.deepEqual(await p.$$eval('.menu-pop > *', (els) => els.map((e) => e.id || e.className)), ['btn-import', 'field builder-model', 'menu-switches'], 'batch 4: ComfyUI canvas moved to the top bar toggle');
     assert.deepEqual(await p.$$eval('.menu-switches input', (els) => els.map((e) => e.id)), ['mem-te-cpu', 'mem-ollama-cpu']);
     assert.equal(await p.locator('.builder-model small, #builder-model-note').count(), 0, 'builder model is a plain picker');
     await p.screenshot({ path: path.join(SHOTS, 'memory-menu.png') });

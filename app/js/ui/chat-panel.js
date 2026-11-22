@@ -76,7 +76,7 @@ export class ChatPanel {
     this.input = h('textarea.chat-input', { rows: 2, placeholder: 'Describe an idea…', enterkeyhint: 'send' });
     this.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.send(); } });
     this.sendBtn = h('button.btn.icon.chat-send', { type: 'button', 'aria-label': 'Send', title: 'Send', onclick: () => this.send() }, h('i.i.i-arrow-up'));
-    this.stopBtn = h('button.btn.danger.chat-stop', { type: 'button', hidden: true, onclick: () => this.busy?.abort() }, 'Stop');
+    this.stopBtn = h('button.btn.danger.chat-stop', { type: 'button', hidden: true, dataset: { keepLive: '' }, onclick: () => this.busy?.abort() }, 'Stop');
     this.root = h('details.chat', {},
       h('summary', {}, h('i.i.i-sparkles'), h('span', {}, 'Prompt assistant'), ' ', this.status, h('i.i.i-chevron-down.chat-chev')),
       h('div.chat-bar', {}, this.modelSel, this.threadSel, h('button.btn.text', { type: 'button', onclick: () => this.newChat() }, h('i.i.i-plus'), 'New chat')),

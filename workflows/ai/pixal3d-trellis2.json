@@ -22,7 +22,8 @@
      "false": "Pixal3D",
      "true": "TRELLIS.2"
     },
-    "span2": true
+    "span2": true,
+    "info": "Which model builds the shape: Pixal3D (the default) or TRELLIS.2. Both use the TRELLIS.2 decoders; try the other one if a result looks wrong."
    },
    "removeBg": {
     "node": "248",
@@ -38,7 +39,8 @@
     "labels": {
      "false": "Off",
      "true": "On"
-    }
+    },
+    "info": "Cuts the object out of its background first, so a photo or render on any backdrop works. Turn it off only if the picture already has a plain background."
    },
    "shapeRes": {
     "node": "94",
@@ -51,7 +53,8 @@
     ],
     "default": 1536,
     "label": "Shape resolution",
-    "control": "select"
+    "control": "select",
+    "info": "Resolution the shape is refined to. Higher keeps finer detail but is slower and needs more memory."
    },
    "structSteps": {
     "node": "3",
@@ -62,7 +65,8 @@
     "default": 12,
     "label": "Structure steps",
     "control": "stepper",
-    "group": "Sampling"
+    "group": "Sampling",
+    "info": "Passes for the first stage, which finds the rough structure (where the object is in 3D space). 12 is the default."
    },
    "structCfg": {
     "node": "3",
@@ -73,7 +77,8 @@
     "step": 0.5,
     "default": 7.5,
     "label": "Structure guidance",
-    "control": "slider"
+    "control": "slider",
+    "info": "How closely the rough structure follows the picture."
    },
    "shapeSteps": {
     "node": "18",
@@ -83,7 +88,8 @@
     "max": 40,
     "default": 20,
     "label": "Shape steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "Passes for the second stage, which builds the detailed shape. 20 is the default."
    },
    "shapeCfg": {
     "node": "18",
@@ -100,7 +106,8 @@
       "node": "23",
       "input": "cfg"
      }
-    ]
+    ],
+    "info": "How closely the detailed shape follows the picture."
    },
    "refineSteps": {
     "node": "23",
@@ -110,7 +117,8 @@
     "max": 24,
     "default": 12,
     "label": "Refine steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "Passes for the stage that refines the shape at the higher resolution."
    },
    "textureSteps": {
     "node": "12",
@@ -120,7 +128,8 @@
     "max": 24,
     "default": 12,
     "label": "Texture steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "Passes for the stage that makes the surface colours (texture)."
    },
    "texture": {
     "node": "288",
@@ -140,7 +149,8 @@
       "node": "224",
       "input": "resolution"
      }
-    ]
+    ],
+    "info": "Size of the baked texture image in pixels. 2048 is a good balance; 4096 is sharper but slower and makes bigger files."
    },
    "faces": {
     "node": "186",
@@ -152,7 +162,8 @@
     "label": "Max faces",
     "step": 10000,
     "control": "slider",
-    "format": "k"
+    "format": "k",
+    "info": "Upper limit on the number of triangles in the saved model; the mesh is simplified down to this."
    },
    "remesh": {
     "node": "241",
@@ -165,7 +176,8 @@
     ],
     "default": 768,
     "label": "Remesh",
-    "control": "select"
+    "control": "select",
+    "info": "Resolution of the clean, even mesh made before the texture is baked. Higher keeps more detail."
    }
   },
   "maxBatch": 1,
@@ -173,6 +185,9 @@
   "vram": {
    "estMB": 12500,
    "basis": "weights: 4.1 GB int8 Pixal3D + 4 GB TRELLIS.2 int8 (switch) + 2x VAEs 1.6 GB + DINOv3-L fp32 1.2 GB + birefnet; 1536 upsample stage peaks highest"
+  },
+  "info": {
+   "image": "A picture of one object (a photo or a render). The model builds a textured 3D model of it."
   }
  },
  "workflow": {

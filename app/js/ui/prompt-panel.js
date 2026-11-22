@@ -12,6 +12,8 @@ import { h, $ } from './dom.js';
 import { randomSeed } from '../lib/seed.js';
 import { parseAspect, aspectKey, sizeFor } from '../lib/aspect.js';
 import { controlFor, formatParam, paramRange, paramActive } from '../lib/presets.js';
+import { infoFor } from '../lib/setting-info.js';
+import { infoButton } from './info-tip.js';
 
 const STORE = 'conceptPanel.v1';
 const OPEN_KEY = 'conceptSettingsOpen';
@@ -128,6 +130,7 @@ export class PromptPanel {
     e.msg.textContent = msgs.join(' ');
     e.msg.hidden = !msgs.length;
     e.msg.classList.toggle('warn', !!msgs.length);
+    this.#staticInfo();
     show(e.prompt.closest('.field'), !!c?.prompt.length || !c);
     show(e.negRow, !!c?.negative.length);
     e.negative.hidden = !(c?.negative.length && s.negOn);
@@ -147,6 +150,27 @@ export class PromptPanel {
     e.batchField.querySelector('.stepper').classList.toggle('is-off', one);
     for (const el of [e.batch, e.batchMinus, e.batchPlus]) el.disabled = one;
     this.renderSettings();
+  }
+
+  /** (i) buttons of the fixed controls; texts can differ per preset (manifest info). */
+  #staticInfo() {
+    const e = this.el, m = this.wf?.ok ? this.wf.ai : null;
+    const spots = [
+      ['prompt', e.prompt.closest('.field').querySelector('.label'), 'Prompt'],
+      ['negative', e.negRow, 'Negative prompt'],
+      ['aspect', e.aspectField.querySelector('.label'), 'Aspect'],
+      ['batch', e.batchField.querySelector('.label'), 'Batch'],
+      ['seed', e.seedField.querySelector('.label'), 'Seed'],
+      ['strength', e.strengthField.querySelector('.label'), 'Strength'],
+    ];
+    for (const [key, spot, label] of spots) {
+      spot.querySelector(':scope > .info-btn')?.remove();
+      const b = infoButton(label, infoFor(key, { manifest: m }));
+      if (!b) continue;
+      const first = spot.firstElementChild;
+      if (first) first.after(b); else spot.append(b);
+      b.dataset.key = key;
+    }
   }
 
   /** Current value of every manifest param of the preset (stored or default). */
@@ -190,13 +214,13 @@ export class PromptPanel {
     // Steps of an imported workflow (detected sampler steps).
     if (c?.steps.length && !ps.steps) {
       const v = s.steps[wf.id] ?? c.defaults.steps ?? 4;
-      add(this.#stepper({ label: 'Steps', min: 1, max: 200, step: 1, value: v, id: 'steps', onChange: (n) => { s.steps[wf.id] = n; this.save(); } }));
+      add(this.#stepper({ label: 'Steps', info: infoFor('steps'), min: 1, max: 200, step: 1, value: v, id: 'steps', onChange: (n) => { s.steps[wf.id] = n; this.save(); } }));
     }
     for (const [key, p] of Object.entries(ps)) {
       const active = paramActive(p, vals, ps);
       const el = this.#paramControl(key, p, vals);
       el.classList.toggle('is-off', !active);
-      el.querySelectorAll('input, select, textarea, button').forEach((x) => { x.disabled = !active; });
+      el.querySelectorAll('input, select, textarea, button:not(.info-btn)').forEach((x) => { x.disabled = !active; }); // (i) stays: it explains why it is off
       if (p.open) { e.paramsOpen.append(el); continue; }
       add(el, p);
     }
@@ -206,45 +230,47 @@ export class PromptPanel {
       const val = s.expose[wf.id]?.[key] ?? x.value;
       const set = (v) => { (s.expose[wf.id] ||= {})[key] = v; this.save(); };
       let el;
-      if (x.type === 'boolean') el = this.#seg({ label: x.label, options: [false, true], labels: { false: 'Off', true: 'On' }, value: !!val, onChange: set });
-      else if (x.type === 'number') el = this.#stepper({ label: x.label, min: -1e9, max: 1e9, step: Number.isInteger(val) ? 1 : 0.01, value: val, onChange: set });
-      else el = h('label.ctl.span2', {}, h('span.label', {}, h('span', {}, x.label)), h('input', { type: 'text', value: val, oninput: (ev) => set(ev.target.value) }));
+      const info = infoFor('expose', { input: x.input, label: x.label });
+      if (x.type === 'boolean') el = this.#seg({ label: x.label, info, options: [false, true], labels: { false: 'Off', true: 'On' }, value: !!val, onChange: set });
+      else if (x.type === 'number') el = this.#stepper({ label: x.label, info, min: -1e9, max: 1e9, step: Number.isInteger(val) ? 1 : 0.01, value: val, onChange: set });
+      else el = h('label.ctl.span2', {}, this.#label(x.label, undefined, info), h('input', { type: 'text', value: val, 'aria-label': x.label, oninput: (ev) => set(ev.target.value) }));
       add(el);
     }
     e.settings.hidden = !e.params.children.length;
     e.paramsOpen.hidden = !e.paramsOpen.children.length;
   }
 
-  #label(text, readout) {
-    return h('span.label', {}, h('span', {}, text), readout === undefined ? null : h('span.val', {}, readout));
+  #label(text, readout, info) {
+    return h('span.label', {}, h('span', {}, text), infoButton(text, info), readout === undefined ? null : h('span.val', {}, readout));
   }
 
   #paramControl(key, p, vals) {
     const v = vals[key];
     const onChange = (nv) => this.setParam(key, nv);
     const kind = controlFor(p);
+    const info = infoFor(key, { param: p, manifest: this.wf?.ai });
     let el;
     if (kind === 'text') {
       const ta = h('textarea', { rows: 3, dataset: { param: key }, oninput: (ev) => onChange(ev.target.value) }, String(v ?? ''));
-      el = h('label.ctl.span2', {}, this.#label(p.label), ta);
+      el = h('label.ctl.span2', {}, this.#label(p.label, undefined, info), ta);
       if (p.open) el.classList.add('field');
     } else if (kind === 'seg' && p.type === 'enum') {
-      el = this.#seg({ label: p.label, options: p.options, labels: p.labels, value: v, onChange, param: key });
+      el = this.#seg({ label: p.label, info, options: p.options, labels: p.labels, value: v, onChange, param: key });
     } else if (kind === 'select' && p.type === 'enum') {
-      el = this.#select({ label: p.label, options: p.options, labels: p.labels, value: v, onChange, param: key });
+      el = this.#select({ label: p.label, info, options: p.options, labels: p.labels, value: v, onChange, param: key });
     } else if (kind === 'stepper') {
       const r = paramRange(p, vals);
-      el = this.#stepper({ label: p.label, min: r.min, max: r.max, step: p.step || 1, value: v, onChange, param: key, id: key === 'steps' ? 'steps' : undefined, int: p.type === 'int' });
+      el = this.#stepper({ label: p.label, info, min: r.min, max: r.max, step: p.step || 1, value: v, onChange, param: key, id: key === 'steps' ? 'steps' : undefined, int: p.type === 'int' });
     } else {
       const r = paramRange(p, vals);
-      el = this.#slider({ label: p.label, min: r.min, max: r.max, step: p.step || (p.type === 'int' ? 1 : 0.05), value: v, onChange, param: key, fmt: (x) => formatParam(p, x, this.paramValues()) });
+      el = this.#slider({ label: p.label, info, min: r.min, max: r.max, step: p.step || (p.type === 'int' ? 1 : 0.05), value: v, onChange, param: key, fmt: (x) => formatParam(p, x, this.paramValues()) });
     }
     if (p.span2) el.classList.add('span2');
     el.dataset.key = key;
     return el;
   }
 
-  #stepper({ label, min, max, step = 1, value, onChange, param, id, int = true }) {
+  #stepper({ label, info, min, max, step = 1, value, onChange, param, id, int = true }) {
     const dec = decimals(step);
     const clamp = (n) => {
       let x = Math.min(max, Math.max(min, Number.isFinite(n) ? n : min));
@@ -258,28 +284,28 @@ export class PromptPanel {
     input.addEventListener('change', () => set(Number(input.value)));
     input.addEventListener('input', () => { const n = Number(input.value); if (Number.isFinite(n) && n >= min && n <= max) onChange(n); });
     const btn = (icon, d, aria) => h('button.btn.icon', { type: 'button', 'aria-label': aria, onclick: () => set(Number(input.value) + d) }, h(`i.i.${icon}`));
-    return h('div.ctl', {}, this.#label(label), h('div.stepper.fill', {}, btn('i-minus', -step, 'Less'), input, btn('i-plus', step, 'More')));
+    return h('div.ctl', {}, this.#label(label, undefined, info), h('div.stepper.fill', {}, btn('i-minus', -step, 'Less'), input, btn('i-plus', step, 'More')));
   }
 
-  #slider({ label, min, max, step, value, onChange, param, fmt }) {
+  #slider({ label, info, min, max, step, value, onChange, param, fmt }) {
     const out = h('span.val', {}, fmt(value));
     const input = h('input.sl', { type: 'range', min, max, step, value, 'aria-label': label });
     if (param) input.dataset.param = param;
     const paint = () => { input.style.setProperty('--p', pct(Number(input.value), min, max)); out.textContent = fmt(Number(input.value)); };
     input.addEventListener('input', () => { paint(); onChange(Number(input.value)); });
     paint();
-    return h('div.ctl', {}, h('span.label', {}, h('span', {}, label), out), h('div.slider-box', {}, input));
+    return h('div.ctl', {}, h('span.label', {}, h('span', {}, label), infoButton(label, info), out), h('div.slider-box', {}, input));
   }
 
-  #select({ label, options, labels = {}, value, onChange, param }) {
+  #select({ label, info, options, labels = {}, value, onChange, param }) {
     const sel = h('select', { 'aria-label': label }, options.map((o) => new Option(labels[String(o)] ?? String(o).replace(/\.(safetensors|pth|gguf)$/, ''), String(o))));
     sel.value = String(value);
     if (param) sel.dataset.param = param;
     sel.addEventListener('change', () => onChange(options.find((o) => String(o) === sel.value) ?? sel.value));
-    return h('div.ctl', {}, this.#label(label), h('label.cselect', {}, sel, h('i.i.i-chevron-down', { 'aria-hidden': 'true' })));
+    return h('div.ctl', {}, this.#label(label, undefined, info), h('label.cselect', {}, sel, h('i.i.i-chevron-down', { 'aria-hidden': 'true' })));
   }
 
-  #seg({ label, options, labels = {}, value, onChange, param }) {
+  #seg({ label, info, options, labels = {}, value, onChange, param }) {
     const seg = h('div.seg.text', { role: 'radiogroup', 'aria-label': label });
     if (param) seg.dataset.param = param;
     const paint = (v) => { for (const b of seg.children) { const on = b.dataset.value === String(v); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); } };
@@ -287,7 +313,7 @@ export class PromptPanel {
       seg.append(h('button', { type: 'button', role: 'radio', dataset: { value: String(o) }, onclick: () => { paint(o); onChange(o); } }, labels[String(o)] ?? String(o)));
     }
     paint(value);
-    return h('div.ctl', {}, this.#label(label), seg);
+    return h('div.ctl', {}, this.#label(label, undefined, info), seg);
   }
 
   /** Values the user chose, for this preset. */

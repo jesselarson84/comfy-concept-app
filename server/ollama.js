@@ -28,7 +28,7 @@ const ALLOW = new Map([
 ]);
 
 export function createOllama(getUrl) {
-  const proxy = createComfyProxy(getUrl, '/ollama', { label: 'Ollama' });
+  const proxy = createComfyProxy(getUrl, '/ollama', { label: 'Ollama', idleMs: 0 }) // a model can take long to load on CPU;
 
   /** Handle a request under /ollama/. Returns nothing; always answers. */
   function web(req, res) {

@@ -39,6 +39,10 @@ import { OutputPicker } from './ui/output-picker.js';
 import { PresetChooser } from './ui/preset-chooser.js';
 import { afterBack } from './ui/overlay.js';
 import { RunLock, runProgress } from './lib/run-lock.js';
+import { lockControls } from './ui/form-lock.js';
+import { ConnectionBanner } from './lib/conn-banner.js';
+import { infoFor } from './lib/setting-info.js';
+import { NodeView } from './ui/node-view.js';
 import { textEncoderOnCpu, tiledVaeDecode, hasVaeDecode, wantTiledDecode, isOom } from './lib/memory-options.js';
 
 const comfy = new ComfyClient();
@@ -59,10 +63,14 @@ let current = null;
 const lock = new RunLock();
 const isLocked = () => lock.locked() || queue.active.length > 0;
 const busy = () => { toast('Running'); };
+// Node view (canvas button): ComfyUI's graph in an iframe under the top bar,
+// kept alive between toggles; the workflow dropdown is greyed out meanwhile.
+const nodeView = new NodeView({ button: $('#btn-canvas'), host: $('#node-view'), onChange: () => { picker.close(); paintThumbs(); } });
 
 const viewer = new Viewer({
   onFavorite: (it) => (it.historyId ? api.patchHistory(it.historyId, { favorite: it.favorite }) : Promise.reject(new Error('not saved yet'))),
   onReuse: (it) => {
+    if (isLocked()) return busy(); // Reuse rewrites the form: wait for the run to end
     // Switch back to the preset that made it (if it still exists). Results made
     // with the retired Fast concept / From reference image presets map to the
     // Klein 4B presets (lib/legacy-presets.js; history.json is not rewritten).
@@ -123,12 +131,12 @@ const takesPicture = (w) => isUsable(w) && !!w.controls?.images?.length;
 const referencePresets = () => workflows.filter((w) => takesPicture(w) && isAiWorkflow(w) && (w.group === '3D' || (w.group === 'Image' && /edit/i.test(w.label))));
 async function useAsReference(img) {
   if (!img) return;
+  if (isLocked()) { busy(); return null; } // the reference slots are locked during a run
   if (!viewer.root.hidden) { viewer.close(); await afterBack(); }
   const load = async () => { const ref = await refs.useImage(refs.targetNode(), img); if (ref) toast('Reference image ready'); return ref; };
   if (current && takesPicture(current)) return load();
   const list = referencePresets();
   if (!list.length) { toast('No preset with a reference image slot'); return null; }
-  if (isLocked()) { busy(); return null; }
   presetChooser.open(list, async (w) => { if (isLocked()) return busy(); selectPreset(w.id); await afterBack(); await load(); });
   return null;
 }
@@ -163,8 +171,9 @@ function selectPreset(id, { remember = true } = {}) {
   panel.setWorkflow(current);
   // Optional slots (Wan start frame, Chatterbox voice sample) can stay empty.
   const optional = new Set((current?.ok ? current.ai?.optional || [] : []).map((o) => o.node));
-  refs.render(current?.ok && current.controls ? current.controls.images.map((s) => (optional.has(s.node) ? { ...s, optional: true } : s)) : []);
-  fileInputs.render(current?.ok ? current.ai?.inputs || [] : []);
+  const m = current?.ok ? current.ai : null; // (i) texts: lib/setting-info.js
+  refs.render(current?.ok && current.controls ? current.controls.images.map((s) => ({ ...s, ...(optional.has(s.node) ? { optional: true } : {}), info: infoFor('image', { manifest: m, node: s.node }) })) : []);
+  fileInputs.render((m?.inputs || []).map((f) => ({ ...f, info: infoFor(f.kind, { manifest: m }) })));
   paintMask();
   $('#btn-generate').classList.toggle('is-unavailable', current?.availability?.status === 'unavailable');
 }
@@ -338,7 +347,10 @@ function paintThumbs() {
   const run = $('#btn-generate');
   run.disabled = locked;
   run.classList.toggle('is-running', locked);
-  $('#preset-btn').disabled = locked;
+  $('#preset-btn').disabled = locked || nodeView.on;
+  // The whole form is read-only during a run (ui/form-lock.js); the menu still
+  // opens but its switches and Import wait too (Import could switch the preset).
+  lockControls([$('#panel'), $('.menu-pop')], locked);
   const pr = runProgress(lock.run.length ? lock.run : queue.active);
   $('#run-label').textContent = locked && pr.total ? `Running ${pr.current} of ${pr.total}` : 'Run';
   // Android: foreground service with "Running N of M"; vibrates when the run ends.
@@ -393,11 +405,6 @@ $('#builder-model').addEventListener('change', async (e) => { try { await api.se
 
 // ---- menu: history, advanced (real ComfyUI), import -------------------------
 $('#btn-history').addEventListener('click', () => historyView.open());
-$('#btn-advanced').addEventListener('click', () => {
-  // Same tab, so it works inside the installed PWA too. Come back with the
-  // browser/Android back button; presets reload when the app is shown again.
-  location.href = '/comfy/';
-});
 $('#btn-import').addEventListener('click', () => $('#import-file').click());
 $('#import-file').addEventListener('change', async (e) => {
   const f = e.target.files[0];
@@ -408,7 +415,12 @@ $('#import-file').addEventListener('change', async (e) => {
 
 // ---- connection banner -------------------------------------------------------
 function banner(text) { const b = $('#banner'); b.textContent = text || ''; b.hidden = !text; }
-comfy.addEventListener('connection', (e) => banner(e.detail.connected ? '' : 'Not connected to ComfyUI - retrying…'));
+// Shown only when the socket has been down for 4 s (lib/conn-banner.js), so a
+// normal reconnect after switching apps never flashes it.
+const connBanner = new ConnectionBanner({ show: () => banner('Not connected to ComfyUI - retrying…'), hide: () => banner('') });
+comfy.addEventListener('connection', (e) => {
+  if (e.detail.connected) { banner(''); connBanner.connected(); } else connBanner.disconnected();
+});
 
 // ---- arriving from the Android share sheet (/share redirects here) --------
 async function handleLaunchParams() {
@@ -433,8 +445,21 @@ async function handleLaunchParams() {
 }
 
 // ---- back from the background: reconnect at once, then catch up -------------
+// Called on visibilitychange (visible), focus, pageshow, online and by the
+// Android app's onResume. Several of these fire together, so one resume per
+// second. After more than 10 s hidden the socket is replaced even if it still
+// says "open": Android often leaves a dead socket that only notices later.
+let hiddenAt = 0, lastResume = 0, started = false;
+document.addEventListener('visibilitychange', () => { if (document.hidden) hiddenAt = Date.now(); });
 function resume() {
-  comfy.reconnectNow();
+  if (!started || document.hidden) return; // start() opens the first socket itself
+  const now = Date.now();
+  if (now >= lastResume && now - lastResume < 1000) return; // (clock going back: never stuck)
+  lastResume = now;
+  const longAway = hiddenAt && now - hiddenAt > 10000;
+  hiddenAt = 0;
+  connBanner.resume();
+  comfy.reconnectNow({ force: longAway });
   queue.resync().then(() => paintThumbs());
 }
 
@@ -449,12 +474,14 @@ async function start() {
   const back = queue.restore();
   if (back.length) lock.started(back);
   comfy.connect();
+  started = true;
   paintThumbs();
   if (back.length) queue.resync();
   // The server watches workflows/ and pushes an event when it changes.
   try { new EventSource('/api/events').addEventListener('workflows', () => loadWorkflows(current?.id)); } catch {}
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { resume(); loadWorkflows(current?.id); } });
   window.addEventListener('pageshow', (e) => { if (e.persisted) resume(); });
+  window.addEventListener('focus', resume);
   window.addEventListener('online', resume);
   // Restored jobs belong to the old page's websocket client: poll /history for them.
   setInterval(() => { if (!document.hidden && queue.active.some((i) => i.restored)) queue.resync(); }, 4000);
@@ -463,4 +490,4 @@ async function start() {
 start();
 // For tests and poking around from DevTools.
 window.conceptApp = { maskSlot, modelThumbs, historyView, isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, chat, versions, picker, selectPreset, loadWorkflows,
-  lock, resume, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };
+  lock, resume, connBanner, nodeView, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };

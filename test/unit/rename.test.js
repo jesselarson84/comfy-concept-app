@@ -18,9 +18,10 @@ test('Android saves go to Pictures/Comfy UI and Download/Comfy UI; the Saved-to 
   assert.equal((ms.match(/\.delete\(/g) || []).length, 3, 'only the app cache tidy-up and the two failed-save cleanups (unchanged)');
 });
 
-test('menu item is "ComfyUI canvas" (was "Advanced (ComfyUI)")', () => {
+test('ComfyUI canvas is the node view toggle in the top bar (batch 4; was the menu item "ComfyUI canvas", before that "Advanced (ComfyUI)")', () => {
   const html = read('app/index.html');
-  assert.match(html, /id="btn-advanced"[^>]*>.*ComfyUI canvas<\/button>/);
+  assert.match(html, /id="btn-canvas"[^>]*aria-pressed="false"[^>]*aria-label="Node view \(ComfyUI canvas\)"/);
+  assert.doesNotMatch(html, /id="btn-advanced"/);
   assert.doesNotMatch(html, /Advanced \(ComfyUI\)/);
 });
 
@@ -35,7 +36,7 @@ test('picker has no App presets section; aspect is a dropdown next to the orient
   assert.doesNotMatch(html, /data-ratio=/);
   assert.match(html, /data-orient="portrait"[\s\S]*data-orient="landscape"/);
   assert.match(html, /id="aspect-size"/);
-  assert.match(read('app/sw.js'), /const VERSION = 'shell-v14';/);
+  assert.match(read('app/sw.js'), /const VERSION = 'shell-v15';/);
   assert.match(read('app/sw.js'), /'\/js\/lib\/preset-choice\.js'/);
   assert.match(read('app/sw.js'), /'\/js\/lib\/legacy-presets\.js'/);
   assert.ok(!fs.existsSync(path.join(ROOT, 'workflows/fast-concept.json')) && !fs.existsSync(path.join(ROOT, 'workflows/from-reference-image.json')));

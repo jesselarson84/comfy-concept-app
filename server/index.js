@@ -55,20 +55,30 @@ import { isHeavy } from '../app/js/lib/memory-options.js';
 import { splitOutputs } from '../app/js/lib/outputs.js';
 import { isLegacyPreset, migrateHistoryEntry } from '../app/js/lib/legacy-presets.js';
 import { defaultPreset } from '../app/js/lib/preset-choice.js';
-import { historyOutputs, comfyOutputDir, scanAppFolder, mergeOutputs, deleteAppFile } from './outputs.js';
+import { historyOutputs, comfyOutputDir, createOutputDirCache, scanAppFolder, mergeOutputs, deleteAppFile } from './outputs.js';
 import { FolderStore } from './folders.js';
 import { saveToDrive } from './drive.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
+const COMFY_SNIPPET = '<link rel="stylesheet" href="/comfy-tweaks.css" data-concept-tweaks><script src="/js/comfy-tweaks.js" data-concept-tweaks></script>';
 
-const json = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
+// Written to stdout/stderr, which start-background.vbs sends to data\server.log.
+const log = (...a) => console.error(new Date().toISOString(), ...a);
 
-export function createApp(cfg, { runSmi, os, env } = {}) {
+const json = (res, status, body) => {
+  if (status === 409 || status >= 500) log(`answered ${status}:`, body?.error || '', body?.detail || '');
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body));
+};
+
+export function createApp(cfg, opts = {}) {
+  const { runSmi, os, env } = opts;
   const appDir = path.join(ROOT, 'app');
   const workflows = new WorkflowStore(cfg.workflowsDir);
   const history = new HistoryStore(cfg.dataDir, { sessionGapMinutes: cfg.sessionGapMinutes });
   const folders = new FolderStore(cfg.dataDir);
-  const proxy = createComfyProxy(() => cfg.comfyUrl);
+  // /comfy/ page: + app/comfy-tweaks.css and app/js/comfy-tweaks.js (hide the Agent
+  // button / toasts, node-view mode); framing allowed for the app's node view.
+  const proxy = createComfyProxy(() => cfg.comfyUrl, '/comfy', { injectHtml: COMFY_SNIPPET, frameable: true });
   // Some ComfyUI custom-node extensions import "/scripts/app.js" or call
   // "/api/<their-route>" from the ComfyUI root instead of relative to the page,
   // which under /comfy/ would hit this app. Forward those unchanged.
@@ -83,6 +93,9 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
   const userPresets = new UserPresetStore(cfg.dataDir);
   const builder = createBuilder({ cfg, comfyInfo, presets, memory, hardware });
   const sseClients = new Set();
+  // ComfyUI's output folder (delete, "From Comfy UI"): last good value cached in data/.
+  const outDirCache = createOutputDirCache(cfg.dataDir);
+  const outputDirOf = () => comfyOutputDir(cfg, { cache: outDirCache, log, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
 
   // Everything the preset picker shows: AI Workflow presets (live
   // availability), saved builder setups (re-validated live) and workflows
@@ -199,21 +212,36 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
       try { body = JSON.parse((await readBody(req, 256 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
       const ids = Array.isArray(body?.ids) ? body.ids.filter((x) => typeof x === 'string').slice(0, 2000) : [];
       if (!ids.length) return json(res, 400, { error: 'Nothing to delete' });
-      const outputDir = await comfyOutputDir(cfg);
-      if (!outputDir) return json(res, 409, { error: 'ComfyUI output folder is unknown, nothing was deleted' });
-      const deleted = [], refused = [];
-      for (const id of ids) {
-        const e = history.get(id);
-        if (!e) { refused.push({ id, reason: 'Not found' }); continue; }
-        let ok = true;
-        for (const f of [...(e.images || []), ...(e.files || [])]) {
-          const r = await deleteAppFile(f, { outputDir, outputSubfolder: cfg.outputSubfolder });
-          if (!r.ok) { ok = false; refused.push({ id, file: `${f.subfolder ? f.subfolder + '/' : ''}${f.filename}`, reason: r.reason }); }
+      const outputDir = await outputDirOf();
+      if (!outputDir) return json(res, 409, { error: 'ComfyUI output folder is unknown, nothing was deleted. Set "comfyOutputDir" in config.local.json (see README).' });
+      const deleted = [], refused = [], trimmed = new Map();
+      // One locked or refused file never stops the rest of the selection, and
+      // History always ends up matching the disk: an entry whose files are all
+      // gone is removed; an entry with some files left keeps only those (finally,
+      // so this also happens if something unexpected throws half way).
+      try {
+        for (const id of ids) {
+          const e = history.get(id);
+          if (!e) { refused.push({ id, reason: 'Not found' }); continue; }
+          const left = { images: [], files: [] };
+          for (const key of ['images', 'files']) {
+            for (const f of e[key] || []) {
+              let r;
+              try { r = await deleteAppFile(f, { outputDir, outputSubfolder: cfg.outputSubfolder, unlink: opts.unlink, wait: opts.wait }); } catch (err) { r = { ok: false, reason: err.message }; }
+              if (r.ok) continue;
+              left[key].push(f);
+              refused.push({ id, file: `${f.subfolder ? f.subfolder + '/' : ''}${f.filename}`, reason: r.reason });
+            }
+          }
+          if (!left.images.length && !left.files.length) deleted.push(id);
+          else if (left.images.length + left.files.length < (e.images?.length || 0) + (e.files?.length || 0)) trimmed.set(id, left);
         }
-        if (ok) deleted.push(id);
+      } finally {
+        await history.remove(deleted);
+        for (const [id, left] of trimmed) await history.update(id, left);
+        await folders.forget(deleted);
       }
-      await history.remove(deleted);
-      await folders.forget(deleted);
+      if (refused.length) log(`delete: ${refused.length} not deleted (${refused.slice(0, 3).map((x) => `${x.file || x.id}: ${x.reason}`).join('; ')})`);
       return json(res, 200, { deleted, refused });
     }
     // ---- History folders (labels only) ----
@@ -288,7 +316,7 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
       const kind = url.searchParams.get('kind') || undefined;
       const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
       const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 120));
-      const dir = await comfyOutputDir(cfg);
+      const dir = await outputDirOf();
       return json(res, 200, { ...mergeOutputs([historyOutputs(history), scanAppFolder(dir, cfg.outputSubfolder)], { kind, offset, limit }), scanned: !!dir });
     }
     if (p === '/api/drive/save' && req.method === 'POST') {
@@ -331,6 +359,7 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
       if (req.method === 'GET' && !path.extname(url.pathname)) { req.url = '/'; if (serveStatic(appDir, req, res)) return; }
       json(res, 404, { error: 'Not found' });
     } catch (e) {
+      if (!e.status || e.status >= 500) log(`${req.method} ${url.pathname} failed:`, e.stack || e.message);
       if (!res.headersSent) json(res, e.status || 500, { error: e.message });
       else res.end();
     }

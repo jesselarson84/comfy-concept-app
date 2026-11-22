@@ -2,7 +2,8 @@
  "preset": {
   "group": "Image",
   "label": "4x Model Upscale",
-  "menuPath": "Image/4x Model Upscale",
+  "menuPath": "Image/Upscale/4x Model",
+  "menuOrder": 2,
   "source": "ComfyUI-AIWorkflowMenu image/upscale_4x_model.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "image",
   "description": "Plain 4x upscale with an upscale model (fast, no diffusion).",
@@ -27,7 +28,8 @@
      "4x_NMKD-Siax_200k.pth": "NMKD-Siax",
      "4x_foolhardy_Remacri.pth": "Remacri",
      "RealESRGAN_x4plus.safetensors": "RealESRGAN x4plus"
-    }
+    },
+    "info": "Which upscale model to use. They differ in style: UltraSharp and Remacri keep edges crisp, ClearReality and NMKD-Siax suit photos, RealESRGAN is a good all-rounder."
    },
    "scale": {
     "node": "5",
@@ -43,13 +45,17 @@
     "labels": {
      "0.5": "2×",
      "1": "4×"
-    }
+    },
+    "info": "The model always enlarges 4×; 2× then shrinks that result by half."
    }
   },
   "maxBatch": 4,
   "vram": {
    "estMB": 1500,
    "basis": "67 MB model; tiled upscale, ~1-2 GB activations"
+  },
+  "info": {
+   "image": "The picture to upscale. A plain, fast enlargement (no AI repainting)."
   }
  },
  "workflow": {

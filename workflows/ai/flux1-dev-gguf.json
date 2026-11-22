@@ -2,7 +2,8 @@
  "preset": {
   "group": "Image",
   "label": "FLUX.1 Dev Text to Image (GGUF)",
-  "menuPath": "Image/FLUX.1 Dev Text to Image (GGUF)",
+  "menuPath": "Image/Text to Image/FLUX.1 Dev (GGUF)",
+  "menuOrder": 4,
   "source": "ComfyUI-AIWorkflowMenu image/flux1_dev_gguf.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "image",
   "description": "FLUX.1 dev Q5_K_S GGUF, 20 steps. Non-commercial license.",
@@ -24,7 +25,8 @@
     "max": 30,
     "default": 20,
     "label": "Steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "How many refinement passes. FLUX.1 Dev is usually run at about 20 (the default); fewer is faster but softer, more rarely helps."
    },
    "guidance": {
     "node": "5",
@@ -35,7 +37,8 @@
     "default": 3.5,
     "label": "Guidance",
     "control": "slider",
-    "step": 0.1
+    "step": 0.1,
+    "info": "FLUX.1 Dev has guidance built in (it is a \"distilled guidance\" model): this number is fed to the model instead of classic CFG. 3.5 is the usual default; lower looks looser and more natural, higher follows the prompt more literally."
    },
    "sampler": {
     "node": "8",
@@ -78,7 +81,8 @@
      "flux1-dev-Q5_K_S.gguf": "Q5_K_S",
      "flux1-dev-Q4_K_S.gguf": "Q4_K_S"
     },
-    "span2": true
+    "span2": true,
+    "info": "Which compressed (GGUF) copy of the model to load. Q5_K_S is closer to the original quality; Q4_K_S is smaller and needs less memory, at slightly lower quality."
    }
   },
   "maxBatch": 8,

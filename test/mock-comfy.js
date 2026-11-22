@@ -23,6 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { encodePng } from '../scripts/png.js';
 import { readFileSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { readBody, parseMultipart } from '../server/multipart.js';
 
 import { makeGlb, makeWav, makeVideo } from './fixtures/media.js';
@@ -203,8 +204,28 @@ export function createMockComfy({ stepMs = Number(process.env.MOCK_STEP_MS) || 1
     if (p === '/mock/requests') return json(res, 200, requests);
     if (p === '/mock/state') return json(res, 200, { queue: queue.length, running: running?.prompt_id || null, files: [...files.keys()] });
     if (p === '/' || p === '/index.html') {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      return res.end('<!doctype html><title>ComfyUI (mock)</title><h1>Mock ComfyUI</h1><p>The real ComfyUI web UI appears here.</p>');
+      // A stand-in for ComfyUI's frontend: a top bar with an "Agent" button, an
+      // "unsaved changes" beforeunload prompt, and (after 300 ms) a Comfy Agent
+      // error toast next to an ordinary one, like the real PrimeVue toasts.
+      // Served gzip-compressed when the client accepts it (like aiohttp can).
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>ComfyUI (mock)</title>
+<style>body{margin:0;font:14px sans-serif;background:#202020;color:#ddd}.comfyui-body-top{display:flex;gap:8px;padding:6px;background:#353535}.graph{height:300px}</style></head>
+<body><div class="comfyui-body-top"><span class="workflow-tab">Unsaved Workflow</span><button class="p-button" aria-label="Queue">Queue</button><button class="p-button"><span class="p-button-label">Agent</span></button></div>
+<h1>Mock ComfyUI</h1><p>The real ComfyUI web UI appears here.</p><div class="graph" id="graph">graph canvas</div>
+<div class="p-toast p-component" id="toasts"></div>
+<script>
+window.__unloadPrompt = 0;
+window.addEventListener('beforeunload', function (e) { window.__unloadPrompt++; e.preventDefault(); e.returnValue = ''; });
+setTimeout(function () {
+  var t = document.getElementById('toasts');
+  t.insertAdjacentHTML('beforeend', '<div class="p-toast-message p-toast-message-error" role="alert"><div class="p-toast-summary">Comfy Agent error</div><div class="p-toast-detail">Comfy Agent hit a server error</div></div>');
+  t.insertAdjacentHTML('beforeend', '<div class="p-toast-message p-toast-message-info" role="alert"><div class="p-toast-summary">Queued</div><div class="p-toast-detail">Prompt queued</div></div>');
+}, 300);
+</script></body></html>`;
+      const gz = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+      const body = gz ? gzipSync(html) : Buffer.from(html);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, ...(gz ? { 'Content-Encoding': 'gzip' } : {}), 'X-Frame-Options': 'DENY' });
+      return res.end(body);
     }
     json(res, 404, { error: 'mock: unknown ' + p });
   });

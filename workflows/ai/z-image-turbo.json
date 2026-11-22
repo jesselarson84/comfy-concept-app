@@ -2,7 +2,8 @@
  "preset": {
   "group": "Image",
   "label": "Z-Image Turbo Text to Image",
-  "menuPath": "Image/Z-Image Turbo Text to Image",
+  "menuPath": "Image/Text to Image/Z-Image Turbo",
+  "menuOrder": 1,
   "source": "ComfyUI-AIWorkflowMenu image/z_image_turbo.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "image",
   "description": "Z-Image Turbo (bf16, 8 steps). Photographic look, fast at 1 MP.",
@@ -24,7 +25,8 @@
     "max": 12,
     "default": 8,
     "label": "Steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "How many refinement passes. Z-Image Turbo is a distilled (\"turbo\") model tuned for about 8 steps, the default. Fewer can look unfinished; more rarely helps and takes longer."
    },
    "shift": {
     "node": "57:11",
@@ -35,7 +37,8 @@
     "step": 0.1,
     "default": 3.0,
     "label": "Shift",
-    "control": "slider"
+    "control": "slider",
+    "info": "How the model splits its effort between the overall layout and the fine detail; higher spends more of the steps on layout. 3 is this preset's default. Leave it unless you are experimenting."
    },
    "sampler": {
     "node": "57:3",
@@ -50,7 +53,8 @@
     ],
     "default": "res_multistep",
     "label": "Sampler",
-    "control": "select"
+    "control": "select",
+    "info": "The method used to take each step; it changes the look subtly. res_multistep is the default this preset was set up with."
    },
    "scheduler": {
     "node": "57:3",

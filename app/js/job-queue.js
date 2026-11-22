@@ -61,7 +61,7 @@ export class JobQueue extends EventTarget {
     const job = (d) => this.byPrompt.get(d?.prompt_id);
     c.addEventListener('execution_start', (e) => { const it = job(e.detail); if (it && it.status === 'queued') { it.status = 'running'; this.#changed(it); } });
     c.addEventListener('progress', (e) => {
-      const it = job(e.detail); if (!it) return;
+      const it = job(e.detail); if (!it || ['done', 'error', 'cancelled'].includes(it.status)) return; // never revive a finished job
       it.status = 'running';
       it.progress = e.detail.max ? e.detail.value / e.detail.max : 0;
       this.#changed(it);
@@ -173,7 +173,15 @@ export class JobQueue extends EventTarget {
       try {
         const r = await this.comfy.queuePrompt(it.workflow);
         it.promptId = r.prompt_id;
-        it.status = it.status === 'submitting' ? 'queued' : it.status;
+        if (it.status === 'cancelled') {
+          // Cancel was tapped while this POST was on its way: ComfyUI has the job
+          // now, so take it back out (or stop it) instead of letting it run.
+          await this.comfy.deleteQueued([it.promptId]).catch(() => {});
+          await this.comfy.interrupt(it.promptId).catch(() => {});
+          delete it.workflow; this.#changed(it);
+          continue;
+        }
+        it.status = 'queued';
         this.byPrompt.set(it.promptId, it);
         it.historyReady = addHistory({ ...it.meta, promptId: it.promptId, status: 'queued' })
           .then((e) => { it.historyId = e.id; if (['done', 'error', 'cancelled'].includes(it.status)) this.#record(it); })

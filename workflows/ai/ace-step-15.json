@@ -14,7 +14,8 @@
     "default": "[instrumental]",
     "label": "Lyrics",
     "open": true,
-    "control": "text"
+    "control": "text",
+    "info": "The words to sing. Put [instrumental] for no vocals. Section markers such as [verse] and [chorus] on their own lines help structure the song."
    },
    "seconds": {
     "node": "98",
@@ -32,7 +33,8 @@
     "label": "Length",
     "control": "slider",
     "step": 5,
-    "format": "s"
+    "format": "s",
+    "info": "Length of the song in seconds. Longer takes longer to make."
    },
    "bpm": {
     "node": "94",
@@ -42,7 +44,8 @@
     "max": 200,
     "default": 120,
     "label": "BPM",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "Tempo in beats per minute. 120 is a typical pop tempo; lower is slower."
    },
    "key": {
     "node": "94",
@@ -81,7 +84,8 @@
     "auto": "key",
     "labels": {
      "auto": "Auto"
-    }
+    },
+    "info": "The musical key. Auto uses a key named in the style tags (\"... in A minor\") if there is one, otherwise picks one from the seed (same seed, same key)."
    },
    "time": {
     "node": "94",
@@ -95,7 +99,8 @@
     ],
     "default": "4",
     "label": "Time",
-    "control": "seg"
+    "control": "seg",
+    "info": "Beats per bar: 4 suits most pop and rock, 3 a waltz, 6 a lilting feel, 2 a march."
    },
    "language": {
     "node": "94",
@@ -114,7 +119,8 @@
     ],
     "default": "en",
     "label": "Language",
-    "control": "select"
+    "control": "select",
+    "info": "The language the lyrics are written in, so the words are sung with the right pronunciation."
    },
    "tagCfg": {
     "node": "94",
@@ -125,7 +131,8 @@
     "step": 0.1,
     "default": 2.0,
     "label": "Tag adherence",
-    "control": "slider"
+    "control": "slider",
+    "info": "How strongly the style tags steer the song. Higher follows the tags more closely; too high can sound forced."
    },
    "temperature": {
     "node": "94",
@@ -136,7 +143,8 @@
     "step": 0.05,
     "default": 0.85,
     "label": "Temperature",
-    "control": "slider"
+    "control": "slider",
+    "info": "How much randomness goes in. Lower is more predictable; higher is more varied."
    },
    "steps": {
     "node": "3",
@@ -146,13 +154,17 @@
     "max": 16,
     "default": 8,
     "label": "Steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "How many refinement passes. This preset uses the ACE-Step 1.5 turbo model, set up for 8 steps."
    }
   },
   "maxBatch": 2,
   "vram": {
    "estMB": 7000,
    "basis": "weights: ~4.8 GB turbo DiT + 0.6/1.7B Qwen encoders + VAE (ACE-Step 1.5 docs: runs on <8 GB)"
+  },
+  "info": {
+   "prompt": "Describe the music: genre, instruments, mood, vocals and tempo, as a sentence or comma-separated tags (\"lo-fi hip hop, mellow piano, female vocals\")."
   }
  },
  "workflow": {

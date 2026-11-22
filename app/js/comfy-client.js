@@ -58,26 +58,37 @@ export class ComfyClient extends EventTarget {
   }
 
   /** Back from the background (or the network came back): reconnect now
-   *  instead of waiting out the back-off. A socket that is still open stays. */
-  reconnectNow() {
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return false;
+   *  instead of waiting out the back-off. A socket that is open stays, unless
+   *  force (the page was hidden long enough that an "open" socket may be dead
+   *  without knowing it yet). A socket stuck connecting for more than 3 s is
+   *  replaced too. Returns true when a new socket was started. */
+  reconnectNow({ force = false } = {}) {
+    const ws = this.ws;
+    const open = ws?.readyState === WebSocket.OPEN;
+    const connecting = ws?.readyState === WebSocket.CONNECTING && Date.now() - (this.startedAt || 0) < 3000;
+    if (!force && (open || connecting)) return false;
     clearTimeout(this.timer);
     this.retry = Math.max(1, this.retry); // counts as a reconnect: the queue resyncs from /history
+    if (ws) { this.ws = null; try { ws.close(); } catch { /* already closing */ } } // its close event is ignored (replaced)
     this.connect();
     return true;
   }
 
   connect() {
     clearTimeout(this.timer);
+    // Never two sockets for one client: the old one would deliver every message twice.
+    if (this.ws) { const old = this.ws; this.ws = null; try { old.close(); } catch { /* closing */ } }
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}${BASE}/ws?clientId=${encodeURIComponent(this.clientId)}`);
-    this.ws = ws;
+    this.ws = ws; this.startedAt = Date.now();
     ws.addEventListener('open', () => {
+      if (this.ws !== ws) return;
       const wasRetry = this.retry > 0;
       this.retry = 0; this.connected = true;
       this.dispatchEvent(new CustomEvent('connection', { detail: { connected: true, reconnected: wasRetry } }));
     });
     ws.addEventListener('message', (ev) => {
+      if (this.ws !== ws) return; // a replaced socket
       if (typeof ev.data !== 'string') return; // binary preview frame
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }

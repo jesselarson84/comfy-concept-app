@@ -22,7 +22,8 @@
      "false": "Off",
      "true": "On"
     },
-    "span2": true
+    "span2": true,
+    "info": "Cuts the object out of its background first (BiRefNet), so a photo or render on any backdrop works. Turn it off only if the picture already shows the object on a plain background."
    },
    "steps": {
     "node": "19:7",
@@ -33,7 +34,8 @@
     "default": 30,
     "label": "Steps",
     "control": "stepper",
-    "step": 5
+    "step": 5,
+    "info": "How many refinement passes when building the shape. 30 is the default; fewer is faster but less accurate."
    },
    "cfg": {
     "node": "19:7",
@@ -44,7 +46,8 @@
     "step": 0.5,
     "default": 5.0,
     "label": "Guidance",
-    "control": "slider"
+    "control": "slider",
+    "info": "How closely the shape follows the picture. 5 is the default; very high values can make the shape noisy."
    },
    "detail": {
     "node": "19:8",
@@ -59,7 +62,8 @@
     "default": 256,
     "label": "Detail",
     "control": "select",
-    "group": "Shape"
+    "group": "Shape",
+    "info": "Resolution of the 3D grid the surface is taken from. Higher captures finer detail but is slower and needs more memory."
    },
    "surface": {
     "node": "19:9",
@@ -70,7 +74,8 @@
     "step": 0.05,
     "default": 0.6,
     "label": "Surface level",
-    "control": "slider"
+    "control": "slider",
+    "info": "Where the surface is placed in the model's 3D density. Lower makes the shape fuller and thicker; higher makes it thinner and can open holes. 0.6 is the default."
    },
    "method": {
     "node": "19:9",
@@ -82,7 +87,8 @@
     ],
     "default": "surface net",
     "label": "Surface method",
-    "control": "select"
+    "control": "select",
+    "info": "How the 3D grid is turned into a mesh. \"surface net\" gives smooth surfaces; \"basic\" gives a blocky, voxel look."
    },
    "faces": {
     "node": "26",
@@ -95,13 +101,17 @@
     "label": "Max faces",
     "control": "slider",
     "format": "k",
-    "zeroAtMax": true
+    "zeroAtMax": true,
+    "info": "Upper limit on the number of triangles; the mesh is simplified down to this. At the top of the slider (Full) nothing is removed."
    }
   },
   "maxBatch": 2,
   "vram": {
    "estMB": 9000,
    "basis": "weights: 7.4 GB checkpoint (DiT + VAE + DINO); octree 256 decode ~1-2 GB; BiRefNet background removal (~0.9 GB) runs first and can be offloaded before sampling"
+  },
+  "info": {
+   "image": "A picture of one object (a photo or a render). The model builds an untextured 3D mesh of it."
   }
  },
  "workflow": {

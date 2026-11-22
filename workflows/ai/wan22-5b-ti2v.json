@@ -26,7 +26,8 @@
     "label": "Length",
     "control": "slider",
     "step": 4,
-    "format": "frames"
+    "format": "frames",
+    "info": "Length of the clip in frames (the readout shows the seconds at the chosen FPS). Longer clips take much longer and need more memory."
    },
    "steps": {
     "node": "3",
@@ -36,7 +37,8 @@
     "max": 30,
     "default": 20,
     "label": "Steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "How many refinement passes. 20 is the default for Wan 2.2 5B; fewer is faster but rougher."
    },
    "fps": {
     "node": "57",
@@ -48,7 +50,8 @@
     ],
     "default": 24,
     "label": "FPS",
-    "control": "seg"
+    "control": "seg",
+    "info": "Frames per second of the saved video. The same frames are made either way: 24 plays them at normal speed (the model's native rate), 16 plays them slower and longer."
    },
    "cfg": {
     "node": "3",
@@ -59,7 +62,8 @@
     "step": 0.5,
     "default": 5.0,
     "label": "Guidance",
-    "control": "slider"
+    "control": "slider",
+    "info": "How strictly the video follows the prompt and avoids the negative prompt. 5 is the default."
    },
    "shift": {
     "node": "48",
@@ -70,7 +74,8 @@
     "step": 0.5,
     "default": 8.0,
     "label": "Shift",
-    "control": "slider"
+    "control": "slider",
+    "info": "How the model splits its effort between the overall layout and motion and the fine detail. 8 is this preset's default; leave it unless you are experimenting."
    },
    "sampler": {
     "node": "3",
@@ -83,7 +88,8 @@
     ],
     "default": "uni_pc",
     "label": "Sampler",
-    "control": "select"
+    "control": "select",
+    "info": "The method used to take each step. uni_pc is the default this preset was set up with."
    },
    "scheduler": {
     "node": "3",
@@ -113,7 +119,12 @@
      }
     ]
    }
-  ]
+  ],
+  "info": {
+   "prompt": "Describe the scene and what happens in it: subject, action, camera movement, lighting, style.",
+   "negative": "Things the video should avoid (the preset starts with a standard list for Wan).",
+   "image": "Optional start frame: leave empty to make the clip from the prompt alone, or add a picture to animate it."
+  }
  },
  "workflow": {
   "3": {
