@@ -7,7 +7,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startStack } from './helpers.js';
+import http from 'node:http';
 import { deleteAppFile, unlinkWithRetry, IN_USE } from '../../server/outputs.js';
+import { createComfyProxy } from '../../server/proxy.js';
 
 function tempOutput() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-del4-'));
@@ -74,4 +76,56 @@ test('API delete: a locked file does not stop the batch; History keeps exactly w
     const folders = await (await fetch(st.base + '/api/folders')).json();
     assert.equal(folders.folders[0].count, 2);
   } finally { await st.close(); }
+});
+
+// ---- 2. proxy lets go of ComfyUI when the phone disconnects ----------------------
+const listen = (srv) => new Promise((r) => srv.listen(0, '127.0.0.1', () => r(srv.address().port)));
+
+test('proxy: a client that disconnects mid-download destroys the upstream request and response', async () => {
+  let upstreamClosed, sawRequest;
+  const closed = new Promise((r) => { upstreamClosed = r; });
+  const got = new Promise((r) => { sawRequest = r; });
+  // "ComfyUI" streaming a big file slowly, forever.
+  const comfy = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'model/gltf-binary' });
+    const t = setInterval(() => res.write(Buffer.alloc(16 * 1024)), 5);
+    res.on('close', () => { clearInterval(t); upstreamClosed(); });
+    sawRequest();
+  });
+  const cport = await listen(comfy);
+  const proxy = createComfyProxy(() => `http://127.0.0.1:${cport}`);
+  const app = http.createServer((req, res) => proxy.web(req, res));
+  const aport = await listen(app);
+  try {
+    const ctrl = new AbortController();
+    const r = await fetch(`http://127.0.0.1:${aport}/comfy/view?filename=big.glb`, { signal: ctrl.signal });
+    await got;
+    const reader = r.body.getReader();
+    await reader.read();
+    ctrl.abort();
+    const t0 = Date.now();
+    await Promise.race([closed, new Promise((_, rej) => setTimeout(() => rej(new Error('upstream still open 3 s after the client left')), 3000))]);
+    assert.ok(Date.now() - t0 < 3000);
+  } finally {
+    comfy.closeAllConnections(); app.closeAllConnections();
+    await new Promise((r) => comfy.close(r)); await new Promise((r) => app.close(r));
+  }
+});
+
+test('proxy: an idle upstream is dropped after idleMs with a 502; a normal response is untouched', async () => {
+  const comfy = http.createServer((req, res) => { if (req.url === '/hang') return; res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('ok'); });
+  const cport = await listen(comfy);
+  const proxy = createComfyProxy(() => `http://127.0.0.1:${cport}`, '/comfy', { idleMs: 150 });
+  const app = http.createServer((req, res) => proxy.web(req, res));
+  const aport = await listen(app);
+  try {
+    const ok = await fetch(`http://127.0.0.1:${aport}/comfy/x`);
+    assert.equal(ok.status, 200); assert.equal(await ok.text(), 'ok');
+    const r = await fetch(`http://127.0.0.1:${aport}/comfy/hang`);
+    assert.equal(r.status, 502);
+    assert.match((await r.json()).detail, /no answer/);
+  } finally {
+    comfy.closeAllConnections(); app.closeAllConnections();
+    await new Promise((r) => comfy.close(r)); await new Promise((r) => app.close(r));
+  }
 });

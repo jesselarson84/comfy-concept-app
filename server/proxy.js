@@ -25,7 +25,9 @@ import https from 'node:https';
 const HOP = new Set(['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']);
 
 // opts.label names the upstream in the 502 error ("ComfyUI" or "Ollama").
-export function createComfyProxy(getTarget, prefix = '/comfy', { label = 'ComfyUI' } = {}) {
+// opts.idleMs: an upstream request that sends nothing for this long is dropped
+// (0 = never; long enough for ComfyUI-Manager installs that answer only at the end).
+export function createComfyProxy(getTarget, prefix = '/comfy', { label = 'ComfyUI', idleMs = 10 * 60e3 } = {}) {
   function buildOptions(req, keepUpgrade) {
     const target = new URL(getTarget());
     const path = req.url.slice(prefix.length) || '/';
@@ -47,7 +49,9 @@ export function createComfyProxy(getTarget, prefix = '/comfy', { label = 'ComfyU
   function web(req, res) {
     const { target, options } = buildOptions(req, false);
     const lib = target.protocol === 'https:' ? https : http;
-    const up = lib.request(options, (upRes) => {
+    let upRes = null;
+    const up = lib.request(options, (r) => {
+      upRes = r;
       const headers = {};
       for (const [k, v] of Object.entries(upRes.headers)) if (!HOP.has(k)) headers[k] = v;
       // A redirect to "/x" from ComfyUI must become "/comfy/x" for the browser.
@@ -55,8 +59,21 @@ export function createComfyProxy(getTarget, prefix = '/comfy', { label = 'ComfyU
       res.writeHead(upRes.statusCode, headers);
       upRes.pipe(res);
     });
+    // The phone went away (app switched, screen off, tab closed, viewer closed
+    // half way through a big .glb): drop the upstream request too. Without this
+    // ComfyUI keeps streaming the file into a dead pipe and keeps it open, and
+    // on Windows an open file cannot be deleted (EBUSY) until that ends.
+    res.on('close', () => {
+      if (res.writableFinished) return;
+      upRes?.destroy();
+      up.destroy();
+    });
+    // Nothing from ComfyUI for idleMs: give up instead of holding the socket forever.
+    if (idleMs > 0) up.setTimeout(idleMs, () => up.destroy(Object.assign(new Error(`no answer for ${Math.round(idleMs / 1000)} s`), { code: 'ETIMEDOUT' })));
     up.on('error', (err) => {
+      if (res.destroyed) return;
       if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json' });
+      else return res.destroy(); // half-sent body: cut it so the browser sees an error, not a short file
       res.end(JSON.stringify({ error: `${label} unreachable`, detail: err.message, [label === 'ComfyUI' ? 'comfyUrl' : 'url']: getTarget() }));
     });
     req.pipe(up);
