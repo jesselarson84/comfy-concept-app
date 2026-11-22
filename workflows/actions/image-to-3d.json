@@ -15,7 +15,8 @@
         "min": 10,
         "max": 50,
         "default": 30,
-        "label": "steps"
+        "label": "steps",
+        "info": "How many refinement passes when building the shape. 30 is the default."
       },
       "detail": {
         "node": "8",
@@ -24,7 +25,8 @@
         "min": 128,
         "max": 384,
         "default": 256,
-        "label": "detail"
+        "label": "detail",
+        "info": "Resolution of the 3D grid the surface is taken from. Higher captures finer detail but is slower."
       },
       "seed": {
         "node": "7",
@@ -33,7 +35,8 @@
         "min": 0,
         "max": 4294967295,
         "default": 12345,
-        "label": "seed"
+        "label": "seed",
+        "info": "The random number the shape starts from; the same picture and seed give the same shape."
       }
     },
     "keywords": [

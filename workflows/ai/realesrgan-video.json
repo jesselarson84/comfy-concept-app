@@ -29,7 +29,8 @@
     "labels": {
      "4x-UltraSharp.safetensors": "UltraSharp",
      "RealESRGAN_x4plus.safetensors": "RealESRGAN x4plus"
-    }
+    },
+    "info": "Which upscale model to use. RealESRGAN x4plus is a good all-rounder; UltraSharp keeps edges crisper."
    },
    "scale": {
     "node": "13",
@@ -45,13 +46,17 @@
     "labels": {
      "0.5": "2×",
      "1": "4×"
-    }
+    },
+    "info": "The model always enlarges 4×; 2× then shrinks that result by half (smaller file, still sharper than the original)."
    }
   },
   "maxBatch": 1,
   "vram": {
    "estMB": 2500,
    "basis": "64 MB model; all frames are held in RAM, VRAM ~1-3 GB"
+  },
+  "info": {
+   "video": "The clip to upscale, frame by frame. The sound is kept."
   }
  },
  "workflow": {

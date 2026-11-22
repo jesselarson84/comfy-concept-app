@@ -25,7 +25,8 @@
     "label": "Scale",
     "control": "slider",
     "step": 0.5,
-    "format": "x"
+    "format": "x",
+    "info": "How much bigger the video is (2× = twice the width and height). Higher takes much longer."
    },
    "colorFix": {
     "node": "66:59",
@@ -39,7 +40,8 @@
     ],
     "default": "none",
     "label": "Color fix",
-    "control": "select"
+    "control": "select",
+    "info": "Corrects colour shifts the upscaler can introduce by matching the colours of the original. lab, wavelet and adain are different ways of doing that; none keeps the colours as the model made them."
    },
    "trim": {
     "node": "66:81",
@@ -56,7 +58,8 @@
      "false": "Off",
      "true": "On"
     },
-    "group": "Clip"
+    "group": "Clip",
+    "info": "Upscale only part of the clip: switch on, then set where it starts and how long it is. Off = the whole clip."
    },
    "start": {
     "node": "66:79",
@@ -71,7 +74,8 @@
     "when": {
      "param": "trim",
      "is": true
-    }
+    },
+    "info": "Where the trimmed part starts, in seconds from the beginning of the clip."
    },
    "length": {
     "node": "66:79",
@@ -86,7 +90,8 @@
     "when": {
      "param": "trim",
      "is": true
-    }
+    },
+    "info": "How long the trimmed part is, in seconds."
    },
    "tile": {
     "node": "66:48",
@@ -108,7 +113,8 @@
       "input": "tile_size"
      }
     ],
-    "group": "Memory"
+    "group": "Memory",
+    "info": "The frames are encoded and decoded in tiles of this size to save graphics memory. Smaller uses less memory but is slower."
    },
    "split": {
     "node": "66:105",
@@ -124,7 +130,8 @@
     "labels": {
      "false": "Off",
      "true": "On"
-    }
+    },
+    "info": "Works through the clip in chunks of frames instead of all at once, to save memory on longer clips."
    },
    "overlap": {
     "node": "66:99",
@@ -139,13 +146,17 @@
      "param": "split",
      "is": true
     },
-    "offValue": 0
+    "offValue": 0,
+    "info": "Frames shared between neighbouring chunks, so the joins between chunks are smooth. Only used with Split in chunks on."
    }
   },
   "maxBatch": 1,
   "vram": {
    "estMB": 8000,
    "basis": "weights: 3.6 GB int8 3B DiT + VAE; tiled; grows with frames x output size"
+  },
+  "info": {
+   "video": "The clip to upscale. Keep it short: every frame goes through the model."
   }
  },
  "workflow": {

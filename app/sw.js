@@ -12,7 +12,7 @@ const SHELL = [
   '/js/native.js', '/js/ollama-client.js',
   '/js/lib/chat-reply.js', '/js/lib/chat-context.js', '/js/lib/prompt-diff.js', '/js/lib/actions.js',
   '/js/lib/presets.js', '/js/lib/builder.js', '/js/lib/outputs.js', '/js/lib/legacy-presets.js', '/js/lib/preset-choice.js',
-  '/js/lib/run-lock.js', '/js/lib/memory-options.js', '/js/lib/mask-paint.js', '/js/ui/mask-editor.js',
+  '/js/lib/run-lock.js', '/js/ui/form-lock.js', '/js/lib/conn-banner.js', '/js/lib/setting-info.js', '/js/ui/info-tip.js', '/js/lib/memory-options.js', '/js/lib/mask-paint.js', '/js/ui/mask-editor.js',
   '/js/lib/thumb-cache.js', '/js/ui/model-thumbs.js',
   '/js/ui/workflow-picker.js', '/js/ui/file-inputs.js',
   '/js/ui/chat-panel.js', '/js/ui/prompt-versions.js',

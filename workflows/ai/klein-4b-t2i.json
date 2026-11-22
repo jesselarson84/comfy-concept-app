@@ -24,7 +24,8 @@
     "max": 30,
     "default": 20,
     "label": "Steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "How many refinement passes. This preset uses the Klein 4B base model (not the 4-step distilled one), set up for about 20 steps. Fewer is faster but rougher."
    },
    "cfg": {
     "node": "75:63",
@@ -35,7 +36,8 @@
     "default": 5,
     "label": "Guidance",
     "control": "slider",
-    "step": 0.5
+    "step": 0.5,
+    "info": "How strictly the model follows the prompt and avoids the negative prompt (real CFG, which is why this preset has a negative prompt). 5 is the default; higher sticks closer to the words but can look harsh."
    },
    "sampler": {
     "node": "75:61",
@@ -56,6 +58,9 @@
   "vram": {
    "estMB": 9000,
    "basis": "weights: 7.8 GB bf16 base UNet + Qwen3-4B encoder (swapped) + activations at 1 MP; cfg 5 doubles the batch"
+  },
+  "info": {
+   "negative": "Things you do NOT want in the picture (for example: blurry, text, watermark). This preset uses real guidance (CFG 5), so the negative prompt does take effect when it is switched on."
   }
  },
  "workflow": {

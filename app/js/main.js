@@ -41,6 +41,7 @@ import { afterBack } from './ui/overlay.js';
 import { RunLock, runProgress } from './lib/run-lock.js';
 import { lockControls } from './ui/form-lock.js';
 import { ConnectionBanner } from './lib/conn-banner.js';
+import { infoFor } from './lib/setting-info.js';
 import { textEncoderOnCpu, tiledVaeDecode, hasVaeDecode, wantTiledDecode, isOom } from './lib/memory-options.js';
 
 const comfy = new ComfyClient();
@@ -166,8 +167,9 @@ function selectPreset(id, { remember = true } = {}) {
   panel.setWorkflow(current);
   // Optional slots (Wan start frame, Chatterbox voice sample) can stay empty.
   const optional = new Set((current?.ok ? current.ai?.optional || [] : []).map((o) => o.node));
-  refs.render(current?.ok && current.controls ? current.controls.images.map((s) => (optional.has(s.node) ? { ...s, optional: true } : s)) : []);
-  fileInputs.render(current?.ok ? current.ai?.inputs || [] : []);
+  const m = current?.ok ? current.ai : null; // (i) texts: lib/setting-info.js
+  refs.render(current?.ok && current.controls ? current.controls.images.map((s) => ({ ...s, ...(optional.has(s.node) ? { optional: true } : {}), info: infoFor('image', { manifest: m, node: s.node }) })) : []);
+  fileInputs.render((m?.inputs || []).map((f) => ({ ...f, info: infoFor(f.kind, { manifest: m }) })));
   paintMask();
   $('#btn-generate').classList.toggle('is-unavailable', current?.availability?.status === 'unavailable');
 }

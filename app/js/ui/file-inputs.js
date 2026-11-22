@@ -3,6 +3,7 @@
 // stores any file in input/; ComfyUI's own frontend uploads videos the same
 // way) and the returned name is written into the node's input.
 import { h, toast } from './dom.js';
+import { infoButton } from './info-tip.js';
 
 const ACCEPT = { video: 'video/*', audio: 'audio/*' };
 
@@ -19,7 +20,7 @@ export class FileInputs {
       const k = this.key(s), set = this.values[k];
       const fileIn = h('input', { type: 'file', accept: ACCEPT[s.kind] || '*/*', hidden: true, onchange: (e) => e.target.files[0] && this.upload(s, e.target.files[0]) });
       this.container.append(h('div.ref-slot', { dataset: { input: k } },
-        h('div.ref-head', {}, h('span', {}, s.label || s.kind), set ? h('button.link', { onclick: () => { delete this.values[k]; this.render(this.slots); } }, 'clear') : null),
+        h('div.ref-head', {}, h('span.ref-title', {}, h('span', {}, s.label || s.kind), infoButton(s.label || s.kind, s.info)), set ? h('button.link', { onclick: () => { delete this.values[k]; this.render(this.slots); } }, 'clear') : null),
         h('div.ref-body', {}, h('span.ref-empty', {}, set ? set : s.defaultAvailable ? `Using ${s.default}` : '')),
         h('div.ref-buttons.one', {}, h('button.btn', { onclick: () => fileIn.click() }, `Pick ${s.kind}`)),
         fileIn));

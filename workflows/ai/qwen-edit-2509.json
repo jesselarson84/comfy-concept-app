@@ -22,7 +22,8 @@
      "false": "Off",
      "true": "On"
     },
-    "span2": true
+    "span2": true,
+    "info": "Lightning is a speed-up add-on (a LoRA). On (the default): about 4 steps at guidance 1, a few seconds per image. Off: the full model, 20-50 steps; Guidance and the negative prompt only take effect when it is off."
    },
    "steps": {
     "node": "10",
@@ -47,7 +48,8 @@
        "default": 40
       }
      }
-    }
+    },
+    "info": "How many refinement passes. With Lightning on the range is 2-8 (4 is what it is made for); with Lightning off it is 20-50 (40 by default). More takes longer and rarely helps past that."
    },
    "cfg": {
     "node": "10",
@@ -63,7 +65,8 @@
      "param": "lightning",
      "is": false
     },
-    "offValue": 1
+    "offValue": 1,
+    "info": "How strictly the model follows the prompt and avoids the negative prompt. Only used with Lightning off; with Lightning on it runs at 1 and this is greyed out."
    },
    "shift": {
     "node": "3",
@@ -74,7 +77,8 @@
     "step": 0.1,
     "default": 3.1,
     "label": "Shift",
-    "control": "slider"
+    "control": "slider",
+    "info": "How the model splits its effort between the overall layout and the fine detail; higher spends more of the steps on layout. 3.1 is this preset's default. Leave it unless you are experimenting."
    },
    "sampler": {
     "node": "10",
@@ -140,7 +144,14 @@
      }
     ]
    }
-  ]
+  ],
+  "info": {
+   "prompt": "The edit instruction: say what to change, in plain words (\"make the jacket red\", \"remove the people in the background\"). Things you do not mention should stay as they are. You can refer to the extra reference pictures, for example \"put the hat from picture 2 on the person\".",
+   "negative": "Things the edit should avoid. Only takes effect with Lightning off.",
+   "image.6": "The picture to edit. The edit is made on this picture; the other two are optional extras.",
+   "image.21": "Optional second picture (a person, an object, a style) the edit can bring in. Leave empty if you do not need it.",
+   "image.22": "Optional third picture the edit can bring in. Leave empty if you do not need it."
+  }
  },
  "workflow": {
   "1": {

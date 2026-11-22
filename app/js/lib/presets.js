@@ -14,6 +14,8 @@
 //                      min, max, default, options, label, divideBy } }
 //     inputs: [{ kind: "video", node, input, label }]   file slots other than LoadImage
 //     promptFormat: { unless: regex, template: "[1] {text}" }
+//     info:   { prompt | negative | image | image.<node> | video | audio | ...: text }
+//             and params.<key>.info: the (i) texts (lib/setting-info.js)
 //     maxBatch, vram: { estMB, basis, measuredMB }, files: [{ folder, file }]
 //   }
 // Prompt / negative / seed / reference images / width+height are found by
@@ -60,6 +62,7 @@ export function validatePreset(id, file) {
     if (p.when && !(m.params[p.when.param])) return fail(`param ${key}: "when" names unknown param ${p.when.param}`);
     if (p.modes && !(m.params[p.modes.param])) return fail(`param ${key}: "modes" names unknown param ${p.modes.param}`);
     if (p.auto && (p.auto !== 'key' || !p.options.includes('auto'))) return fail(`param ${key}: auto must be "key" with an "auto" option`);
+    if (p.info !== undefined && typeof p.info !== 'string') return fail(`param ${key}: info must be a string`);
     if (p.installed && !((p.installed.folder && p.installed.prefix) || (p.installed.fsFolder && p.installed.dir))) return fail(`param ${key}: "installed" needs folder + prefix or fsFolder + dir`);
     params[key] = { ...p, label: p.label || key };
   }
@@ -78,6 +81,8 @@ export function validatePreset(id, file) {
     if (!mn || mn.class_type !== 'LoadImage' || !('image' in mn.inputs)) return fail('mask.node must be a LoadImage in the workflow');
     if (!src || src.class_type !== 'LoadImage') return fail('mask.image must be the LoadImage of the picture');
   }
+  // Info texts for the (i) icons (lib/setting-info.js): { controlKey: text }.
+  if (m.info !== undefined && (!m.info || typeof m.info !== 'object' || Object.values(m.info).some((t) => typeof t !== 'string'))) return fail('info must be { key: text }');
   for (const inp of m.inputs || []) {
     const n = wf[inp.node];
     if (!n || !(inp.input in n.inputs)) return fail(`input slot ${inp.kind}: node ${inp.node}.${inp.input} not in workflow`);
@@ -91,6 +96,7 @@ export function validatePreset(id, file) {
       maxBatch: Number.isFinite(m.maxBatch) ? m.maxBatch : 20, vram: { estMB: 0, ...(m.vram || {}) }, files: m.files || [],
       optional: (m.optional || []).map((o) => ({ node: String(o.node), drop: o.drop || [] })),
       mask: m.mask ? { node: String(m.mask.node), input: 'image', image: String(m.mask.image) } : null,
+      info: { ...(m.info || {}) },
       heavy: m.heavy === true, gguf: m.gguf && wf[m.gguf.node] && typeof m.gguf.unet_name === 'string' ? { ...m.gguf, node: String(m.gguf.node) } : null,
     },
     workflow: wf,

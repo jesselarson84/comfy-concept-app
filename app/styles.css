@@ -556,3 +556,16 @@ input[type=range].sl::-moz-range-thumb { width: 14px; height: 14px; border-radiu
 /* ---- batch 4 B: form locked during a run (ui/form-lock.js) ---- */
 .is-run-locked [data-run-lock="on"] { opacity: .5; cursor: default; }
 .is-run-locked textarea[data-run-lock="on"] { color: var(--c-muted, var(--muted)); }
+
+/* ---- batch 4 D: (i) info buttons + popover (ui/info-tip.js) ---- */
+.info-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: -6px -4px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--c-muted, var(--muted)); cursor: pointer; touch-action: manipulation; pointer-events: auto; opacity: 1; }
+.info-btn .i { width: 14px; height: 14px; }
+.info-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: -2px; }
+.info-btn.on, .info-btn:not(:disabled):active { color: var(--c-fg, var(--text)); background: #ffffff14; }
+.ctl.is-off .info-btn { pointer-events: auto; }
+.ctl > .label > span:first-child { flex: 0 1 auto; }
+.ref-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+#neg-row { align-items: center; gap: 6px; }
+.info-pop { position: fixed; z-index: 120; max-width: calc(100vw - 16px); background: var(--c-card, var(--raised)); color: var(--c-fg, var(--text)); border: 1px solid var(--c-border, var(--line)); border-radius: 10px; box-shadow: 0 10px 30px #0009; padding: 10px 12px; font-size: 14px; line-height: 1.45; }
+.info-pop-title { font-weight: 600; margin-bottom: 4px; }
+.info-pop-body { color: var(--c-node-fg, var(--text)); }

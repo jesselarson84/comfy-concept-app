@@ -11,6 +11,9 @@ import http from 'node:http';
 import { deleteAppFile, unlinkWithRetry, IN_USE, outputDirFromArgv, comfyOutputDir, createOutputDirCache } from '../../server/outputs.js';
 import { createComfyProxy } from '../../server/proxy.js';
 import { ConnectionBanner, GRACE_MS } from '../../app/js/lib/conn-banner.js';
+import { exposedControls, infoFor, GLOSSARY } from '../../app/js/lib/setting-info.js';
+import { validatePreset } from '../../app/js/lib/presets.js';
+import { validateAction } from '../../app/js/lib/actions.js';
 
 function tempOutput() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-del4-'));
@@ -243,4 +246,71 @@ test('banner: resume() hides it and starts a fresh grace period', () => {
   assert.deepEqual(log, ['show', 'hide', 'show']);
   b.connected(); b.resume();
   assert.equal(t.pending, 0, 'connected + resume arms nothing');
+});
+
+// ---- D. an info text for every control every bundled workflow exposes -------------
+
+test('info: every control of every bundled AI preset (19) has a plain-language text', async () => {
+  const st = await startStack({ folderWorkflows: false });
+  try {
+    const list = (await (await fetch(st.base + '/api/workflows')).json()).workflows.filter((w) => w.id.startsWith('ai:'));
+    const files = fs.readdirSync(path.join(st.wfDir, 'ai')).filter((f) => f.endsWith('.json'));
+    assert.equal(files.length, 19);
+    assert.equal(list.length, 19, 'all 19 presets are listed');
+    const missing = [];
+    for (const w of list) {
+      assert.ok(w.ok, `${w.id}: ${w.error}`);
+      const ctl = exposedControls(w);
+      assert.ok(ctl.length >= 2, w.id);
+      for (const c of ctl) {
+        if (!c.info) missing.push(`${w.id} › ${c.label} (${c.key})`);
+        else assert.ok(c.info.length >= 25 && /[.)]$/.test(c.info), `${w.id} › ${c.label}: write a full sentence`);
+      }
+      // every manifest param is covered by its own text or the glossary
+      for (const key of Object.keys(w.ai.params)) assert.ok(ctl.some((c) => c.key === key && c.info), `${w.id} param ${key}`);
+    }
+    assert.deepEqual(missing, [], 'controls without an (i) text');
+  } finally { await st.close(); }
+});
+
+test('info: every parameter of the 2 workflow actions has a text', () => {
+  const dir = new URL('../../workflows/actions/', import.meta.url);
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
+  assert.equal(files.length, 2);
+  for (const f of files) {
+    const a = validateAction(f, JSON.parse(fs.readFileSync(new URL(f, dir), 'utf8')));
+    assert.ok(a.ok, a.error);
+    for (const [k, p] of Object.entries(a.manifest.params)) assert.ok(infoFor(k, { param: p }), `${f} ${k}`);
+  }
+});
+
+test('info: preset texts match what the presets really do (spot checks against the graphs)', () => {
+  const load = (f) => validatePreset(f, JSON.parse(fs.readFileSync(new URL(`../../workflows/ai/${f}.json`, import.meta.url), 'utf8')));
+  const z = load('z-image-turbo');
+  assert.equal(z.manifest.params.steps.default, 8);
+  assert.match(infoFor('steps', { param: z.manifest.params.steps, manifest: z.manifest }), /about 8 steps/);
+  const q = load('qwen-2512-t2i');
+  assert.equal(q.manifest.params.cfg.when.is, false, 'guidance only applies with Lightning off');
+  assert.equal(q.manifest.params.cfg.offValue, 1);
+  assert.match(infoFor('cfg', { param: q.manifest.params.cfg }), /Lightning off/);
+  assert.match(infoFor('negative', { manifest: q.manifest }), /Lightning off/);
+  const fd = load('flux1-dev-gguf');
+  assert.equal(fd.workflow[fd.manifest.params.guidance.node].class_type, 'FluxGuidance');
+  assert.match(infoFor('guidance', { param: fd.manifest.params.guidance }), /instead of classic CFG/);
+  const k = load('klein-4b-edit');
+  assert.equal(k.workflow[k.manifest.params.megapixels.node].class_type, 'ImageScaleToTotalPixels');
+  const h3 = load('hunyuan3d-21');
+  assert.equal(h3.manifest.params.faces.zeroAtMax, true);
+  assert.match(infoFor('faces', { param: h3.manifest.params.faces }), /Full/);
+  const w = load('wan22-5b-ti2v');
+  assert.equal(w.workflow[w.manifest.params.fps.node].class_type, 'CreateVideo', 'fps only changes playback, not the frames made');
+  // glossary from the owner's notes
+  assert.match(GLOSSARY.aspect, /portrait/); assert.match(GLOSSARY.batch, /own seed/); assert.match(GLOSSARY.seed, /same result/);
+  assert.match(GLOSSARY.scheduler, /default/); assert.match(GLOSSARY.shift, /layout/);
+  // #expose controls of imported workflows: by input name, else a generic text
+  assert.equal(infoFor('expose', { input: 'denoise', label: 'Denoise' }), GLOSSARY.denoise);
+  assert.match(infoFor('expose', { input: 'tile_overlap', label: 'Tile overlap' }), /#expose.*Tile overlap/);
+  // a workflow can override any text
+  assert.equal(infoFor('batch', { manifest: { info: { batch: 'Mine.' } } }), 'Mine.');
+  assert.equal(validatePreset('x', { preset: { group: 'Image', label: 'x', output: 'image', info: { prompt: 3 } }, workflow: { 1: { class_type: 'A', inputs: {} } } }).ok, false, 'info must be text');
 });

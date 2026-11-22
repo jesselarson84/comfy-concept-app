@@ -41,7 +41,7 @@ const formState = () => app(() => {
   return {
     prompt: q('#prompt'), ratio: q('#aspect-ratio'), orient: q('[data-orient="portrait"]'), batch: q('#batch'), batchPlus: q('#batch-plus'),
     seedLock: q('#seed-lock'), seedDice: q('#seed-dice'), seedVal: q('#seed'),
-    params: [...document.querySelectorAll('#params input, #params select, #params button')].map(st),
+    params: [...document.querySelectorAll('#params input, #params select, #params button:not(.info-btn)')].map(st),
     chatInput: q('.chat-input'), menuSwitch: q('#mem-te-cpu'), importBtn: q('#btn-import'),
     cancel: q('#btn-cancel'), history: q('#btn-history'), canvas: q('#btn-canvas'),
   };
@@ -163,4 +163,63 @@ test('C: when ComfyUI really is gone the banner appears after the grace period, 
   await page.waitForFunction(() => window.conceptApp.comfy.connected, null, { timeout: 4000 });
   assert.equal(await bannerShown(), false);
   await app(() => { window.WebSocket = window.__RealWS; });
+});
+
+// ---- D. (i) info popovers ------------------------------------------------------
+test('D: every visible setting has an (i) button; tap opens a plain-language popover, outside tap / Escape close it', async () => {
+  await pick('ai:z-image-turbo');
+  await app(() => { document.querySelector('#settings').open = true; });
+  const names = await page.$$eval('#panel .info-btn', (bs) => bs.filter((b) => b.offsetParent).map((b) => b.getAttribute('aria-label')));
+  for (const n of ['About Prompt', 'About Aspect', 'About Batch', 'About Seed', 'About Steps', 'About Shift', 'About Sampler', 'About Scheduler']) assert.ok(names.includes(n), `${n} in ${names.join(', ')}`);
+  // every labelled control in the Settings grid and the quick row has one
+  const bare = await page.$$eval('#params .ctl, .quick .ctl', (cs) => cs.filter((c) => c.offsetParent && !c.querySelector('.info-btn')).map((c) => c.textContent.trim()));
+  assert.deepEqual(bare, []);
+  await page.click('#params .info-btn[aria-label="About Steps"]');
+  await page.waitForSelector('#info-pop:not([hidden])');
+  assert.match(await page.textContent('#info-pop'), /about 8 steps/);
+  assert.equal(await page.getAttribute('#params .info-btn[aria-label="About Steps"]', 'aria-expanded'), 'true');
+  assert.equal(await page.getAttribute('#info-pop', 'role'), 'dialog');
+  await shot('info-popover');
+  // the popover stays on screen
+  const box = await page.$eval('#info-pop', (p) => { const r = p.getBoundingClientRect(); return { l: r.left, r: r.right, w: innerWidth }; });
+  assert.ok(box.l >= 0 && box.r <= box.w, JSON.stringify(box));
+  await page.click('#panel', { position: { x: 4, y: 4 } }); // outside
+  await page.waitForSelector('#info-pop', { state: 'hidden' });
+  await page.click('.quick .info-btn[aria-label="About Seed"]');
+  assert.match(await page.textContent('#info-pop'), /same prompt, settings and seed/);
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('#info-pop', { state: 'hidden' });
+  // tapping the same (i) again closes it too
+  await page.click('.quick .info-btn[aria-label="About Batch"]');
+  await page.click('.quick .info-btn[aria-label="About Batch"]');
+  await page.waitForSelector('#info-pop', { state: 'hidden' });
+});
+
+test('D: texts follow the preset, dimmed settings still explain themselves, and (i) works during a run', async () => {
+  await pick('ai:qwen-2512-t2i');
+  await app(() => { document.querySelector('#settings').open = true; });
+  // Guidance is dimmed with Lightning on, but its (i) still opens
+  const g = '#params .ctl[data-key="cfg"] .info-btn';
+  assert.equal(await page.$eval('#params .ctl[data-key="cfg"]', (c) => c.classList.contains('is-off')), true);
+  await page.click(g);
+  assert.match(await page.textContent('#info-pop'), /Lightning off/);
+  await page.keyboard.press('Escape');
+  await pick('ai:klein-4b-edit');
+  await page.click('#refs .info-btn');
+  assert.match(await page.textContent('#info-pop'), /picture to edit/i);
+  await page.keyboard.press('Escape');
+  await page.click('label.prompt-field .info-btn');
+  assert.match(await page.textContent('#info-pop'), /edit instruction/);
+  await page.keyboard.press('Escape');
+  // during a run
+  await pick('ai:z-image-turbo');
+  await page.fill('#prompt', 'info during a run');
+  await setBatch(2);
+  await page.click('#btn-generate');
+  await page.waitForFunction(() => document.querySelector('#prompt').readOnly);
+  assert.equal(await page.isEnabled('.quick .info-btn[aria-label="About Seed"]'), true);
+  await page.click('.quick .info-btn[aria-label="About Seed"]');
+  await page.waitForSelector('#info-pop:not([hidden])');
+  await page.keyboard.press('Escape');
+  await idle();
 });

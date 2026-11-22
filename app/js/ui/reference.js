@@ -5,6 +5,7 @@
 // server/share.js). Either way the full-resolution file is uploaded to
 // ComfyUI's /upload/image and the returned name is what the LoadImage node gets.
 import { h, toast } from './dom.js';
+import { infoButton } from './info-tip.js';
 import { inputViewUrl, viewUrl } from '../comfy-client.js';
 
 export class ReferenceSlots {
@@ -36,7 +37,7 @@ export class ReferenceSlots {
       const camIn = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: (e) => e.target.files[0] && this.upload(slot.node, e.target.files[0]) });
       const label = slots.length > 1 || slot.optional ? (slot.title || `Image ${slot.node}`).replace(/#\w+/g, '').trim() : 'Reference image';
       const box = h('div.ref-slot', { dataset: { node: slot.node }, onpointerdown: () => { this.active = slot.node; } },
-        h('div.ref-head', {}, h('span', {}, label), set ? h('button.link', { onclick: () => { delete this.values[slot.node]; this.render(this.slots); this.onChange?.(); } }, 'clear') : null),
+        h('div.ref-head', {}, h('span.ref-title', {}, h('span', {}, label), infoButton(label, slot.info)), set ? h('button.link', { onclick: () => { delete this.values[slot.node]; this.render(this.slots); this.onChange?.(); } }, 'clear') : null),
         h('div.ref-body', {}, preview, empty),
         h('div.ref-buttons', {},
           h('button.btn', { onclick: () => fileIn.click() }, 'Pick'),

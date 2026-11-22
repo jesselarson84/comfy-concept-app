@@ -11,6 +11,8 @@
 //   - Re-fits on rotation / resize; side toolbar on tablets in landscape.
 //   - Undo, Clear, Invert. The mask is exported at the picture's own size.
 import { h, toast } from './dom.js';
+import { infoButton } from './info-tip.js';
+import { infoFor } from '../lib/setting-info.js';
 import { Overlay, overlayTop } from './overlay.js';
 import { inputViewUrl } from '../comfy-client.js';
 import { isEraserPointer, isPalm, brushWidth, smoothPoint, pinchView, fitView, toImage, maskPixels } from '../lib/mask-paint.js';
@@ -272,7 +274,7 @@ export class MaskSlot {
     if (src) pv.src = src;
     const empty = h('i.i.i-image.ref-empty', { 'aria-hidden': 'true', hidden: !!src });
     this.container.append(h('div.ref-slot.mask-slot', { dataset: { mask: spec.node } },
-      h('div.ref-head', {}, h('span', {}, 'Mask'), this.value ? h('button.link', { type: 'button', onclick: () => { this.value = null; this.preview = null; this.render(this.spec, this.source); } }, 'clear') : null),
+      h('div.ref-head', {}, h('span.ref-title', {}, h('span', {}, 'Mask'), infoButton('Mask', spec.info || infoFor('mask'))), this.value ? h('button.link', { type: 'button', onclick: () => { this.value = null; this.preview = null; this.render(this.spec, this.source); } }, 'clear') : null),
       h('div.ref-body', {}, pv, empty),
       h('div.ref-buttons.one', {}, h('button.btn', { type: 'button', dataset: { act: 'paint' }, disabled: !this.source, onclick: () => this.paint() }, 'Paint'))));
   }

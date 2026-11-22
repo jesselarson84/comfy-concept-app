@@ -31,7 +31,8 @@
      "false": "Off",
      "true": "On"
     },
-    "span2": true
+    "span2": true,
+    "info": "Lightning is a speed-up add-on (a LoRA). On (the default): about 4 steps at guidance 1, a few seconds per image. Off: the full model, 20-50 steps; Guidance and the negative prompt only take effect when it is off."
    },
    "steps": {
     "node": "9",
@@ -56,7 +57,8 @@
        "default": 40
       }
      }
-    }
+    },
+    "info": "How many refinement passes. With Lightning on the range is 2-8 (4 is what it is made for); with Lightning off it is 20-50 (40 by default). More takes longer and rarely helps past that."
    },
    "cfg": {
     "node": "9",
@@ -72,7 +74,8 @@
      "param": "lightning",
      "is": false
     },
-    "offValue": 1
+    "offValue": 1,
+    "info": "How strictly the model follows the prompt and avoids the negative prompt. Only used with Lightning off; with Lightning on it runs at 1 and this is greyed out."
    },
    "shift": {
     "node": "3",
@@ -83,7 +86,8 @@
     "step": 0.1,
     "default": 3.1,
     "label": "Shift",
-    "control": "slider"
+    "control": "slider",
+    "info": "How the model splits its effort between the overall layout and the fine detail; higher spends more of the steps on layout. 3.1 is this preset's default. Leave it unless you are experimenting."
    },
    "sampler": {
     "node": "9",
@@ -121,6 +125,10 @@
    "unet_name": "qwen-image-2512-Q5_K_M.gguf",
    "estMB": 16000,
    "basis": "14.3 GB Q5_K_M GGUF UNet (UnetLoaderGGUF) instead of the 20.4 GB fp8 + LoRA + activations; used on the small-GPU profile"
+  },
+  "info": {
+   "prompt": "Describe the picture you want. Qwen-Image is strong at text and layouts: put any words that should appear in the picture in quotes.",
+   "negative": "Things you do NOT want in the picture. Only takes effect with Lightning off (with Lightning on the model runs at guidance 1, which ignores it)."
   }
  },
  "workflow": {

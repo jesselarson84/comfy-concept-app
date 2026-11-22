@@ -17,7 +17,8 @@
     "label": "Scale",
     "control": "slider",
     "step": 0.5,
-    "format": "x"
+    "format": "x",
+    "info": "How much bigger the result is (2× = twice the width and height). SeedVR2 adds real detail, so higher scales take much longer and need more memory."
    },
    "colorFix": {
     "node": "66:59",
@@ -31,7 +32,8 @@
     ],
     "default": "none",
     "label": "Color fix",
-    "control": "select"
+    "control": "select",
+    "info": "Corrects colour shifts the upscaler can introduce by matching the colours of the original. lab, wavelet and adain are different ways of doing that; none keeps the colours as the model made them."
    },
    "tile": {
     "node": "66:48",
@@ -53,13 +55,17 @@
       "input": "tile_size"
      }
     ],
-    "group": "Memory"
+    "group": "Memory",
+    "info": "The picture is encoded and decoded in tiles of this size to save graphics memory. Smaller uses less memory but is slower. Lower it if you run out of memory."
    }
   },
   "maxBatch": 2,
   "vram": {
    "estMB": 10500,
    "basis": "weights: 8.2 GB int8 7B DiT + 0.5 GB VAE; tiled VAE keeps activations small; grows with output size"
+  },
+  "info": {
+   "image": "The picture to upscale. SeedVR2 restores detail while it enlarges."
   }
  },
  "workflow": {

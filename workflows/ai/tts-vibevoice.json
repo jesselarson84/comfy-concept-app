@@ -30,7 +30,8 @@
     "installed": {
      "fsFolder": "tts",
      "dir": "VibeVoice/{v}"
-    }
+    },
+    "info": "Which VibeVoice model to use. 1.5B is faster; 7B can sound better but needs much more memory (use 4-bit with it)."
    },
    "quant4": {
     "node": "1",
@@ -51,7 +52,8 @@
      "param": "model",
      "is": "VibeVoice-7B"
     },
-    "offValue": false
+    "offValue": false,
+    "info": "Loads the 7B model's language part in 4-bit so it fits in less graphics memory, at a small cost in quality. Only used with the 7B model."
    },
    "steps": {
     "node": "1",
@@ -61,7 +63,8 @@
     "max": 30,
     "default": 10,
     "label": "Steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "How many refinement passes for the sound. 10 is the default; more is slower and rarely needed."
    },
    "cfg": {
     "node": "1",
@@ -72,7 +75,8 @@
     "default": 1.3,
     "label": "Voice adherence (cfg)",
     "control": "slider",
-    "step": 0.05
+    "step": 0.05,
+    "info": "How closely the speech sticks to the voice sample. 1.3 is the default; higher can sound strained."
    },
    "temperature": {
     "node": "1",
@@ -83,7 +87,8 @@
     "step": 0.05,
     "default": 0.95,
     "label": "Temperature",
-    "control": "slider"
+    "control": "slider",
+    "info": "How much variation goes into the speech. Lower is steadier; higher is livelier but less predictable."
    }
   },
   "maxBatch": 2,
@@ -113,7 +118,11 @@
     "label": "Voice sample (a few seconds of speech to clone)",
     "default": "verify-voice.flac"
    }
-  ]
+  ],
+  "info": {
+   "prompt": "The text to speak. Mark speakers with [1], [2] at the start of their lines for a conversation; plain text is read by speaker 1.",
+   "audio": "A few seconds of clean speech whose voice is copied. Leave empty to use verify-voice.flac from ComfyUI's input folder."
+  }
  },
  "workflow": {
   "1": {

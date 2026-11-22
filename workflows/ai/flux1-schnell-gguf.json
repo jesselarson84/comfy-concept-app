@@ -24,7 +24,8 @@
     "max": 8,
     "default": 4,
     "label": "Steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "How many refinement passes. FLUX.1 Schnell is distilled for about 4 steps (the default); 1-8 are allowed. More rarely helps."
    },
    "sampler": {
     "node": "7",

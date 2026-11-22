@@ -24,7 +24,8 @@
     "max": 12,
     "default": 8,
     "label": "Steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "How many refinement passes. Z-Image Turbo is a distilled (\"turbo\") model tuned for about 8 steps, the default. Fewer can look unfinished; more rarely helps and takes longer."
    },
    "shift": {
     "node": "57:11",
@@ -35,7 +36,8 @@
     "step": 0.1,
     "default": 3.0,
     "label": "Shift",
-    "control": "slider"
+    "control": "slider",
+    "info": "How the model splits its effort between the overall layout and the fine detail; higher spends more of the steps on layout. 3 is this preset's default. Leave it unless you are experimenting."
    },
    "sampler": {
     "node": "57:3",
@@ -50,7 +52,8 @@
     ],
     "default": "res_multistep",
     "label": "Sampler",
-    "control": "select"
+    "control": "select",
+    "info": "The method used to take each step; it changes the look subtly. res_multistep is the default this preset was set up with."
    },
    "scheduler": {
     "node": "57:3",

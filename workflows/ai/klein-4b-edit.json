@@ -15,7 +15,8 @@
     "max": 8,
     "default": 4,
     "label": "Steps",
-    "control": "stepper"
+    "control": "stepper",
+    "info": "How many refinement passes. This is the distilled Klein 4B, made for 4 steps (the default); 2-8 are allowed. More rarely helps."
    },
    "megapixels": {
     "node": "75:80",
@@ -35,13 +36,18 @@
      "1": "1 MP",
      "1.5": "1.5 MP",
      "2": "2 MP"
-    }
+    },
+    "info": "Size of the result. The picture is scaled to this many megapixels (1 MP is about 1024 × 1024) and keeps its own shape. Bigger is sharper but slower."
    }
   },
   "maxBatch": 8,
   "vram": {
    "estMB": 9000,
    "basis": "same weights as Fast concept / From reference image (7.8 GB UNet); measured ~9 GB peak in batch0"
+  },
+  "info": {
+   "prompt": "The edit instruction: say what to change, in plain words (\"make the jacket red\", \"remove the people in the background\"). Things you do not mention should stay as they are.",
+   "image": "The picture to edit. The result keeps its shape (scaled to the Size setting)."
   }
  },
  "workflow": {
