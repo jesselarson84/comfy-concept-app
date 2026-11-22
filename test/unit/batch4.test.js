@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { startStack } from './helpers.js';
 import http from 'node:http';
-import { deleteAppFile, unlinkWithRetry, IN_USE } from '../../server/outputs.js';
+import { deleteAppFile, unlinkWithRetry, IN_USE, outputDirFromArgv, comfyOutputDir, createOutputDirCache } from '../../server/outputs.js';
 import { createComfyProxy } from '../../server/proxy.js';
 
 function tempOutput() {
@@ -128,4 +128,67 @@ test('proxy: an idle upstream is dropped after idleMs with a 502; a normal respo
     comfy.closeAllConnections(); app.closeAllConnections();
     await new Promise((r) => comfy.close(r)); await new Promise((r) => app.close(r));
   }
+});
+
+// ---- 3. output folder lookup ------------------------------------------------------
+test('output folder from ComfyUI argv: spaced and = forms, quotes, --base-directory fallback', () => {
+  assert.equal(outputDirFromArgv(['main.py', '--output-directory', '/x/out']), path.resolve('/x/out'));
+  assert.equal(outputDirFromArgv(['main.py', '--output-directory=/x/out2', '--port', '8000']), path.resolve('/x/out2'));
+  assert.equal(outputDirFromArgv(['main.py', '--output-directory="/x/q"']), path.resolve('/x/q'));
+  assert.equal(outputDirFromArgv(['main.py', '--base-directory', '/x/shared', '--port', '8000']), path.resolve('/x/shared', 'output'));
+  assert.equal(outputDirFromArgv(['main.py', '--base-directory=/x/shared']), path.resolve('/x/shared', 'output'));
+  assert.equal(outputDirFromArgv(['main.py', '--base-directory', '/b', '--output-directory', '/o']), path.resolve('/o'), 'an explicit output folder wins');
+  assert.equal(outputDirFromArgv(['main.py', '--output-directory', '--port']), null, 'a flag is not a folder');
+  assert.equal(outputDirFromArgv(['main.py']), null);
+  assert.equal(outputDirFromArgv(undefined), null);
+});
+
+const stats = (argv) => async () => ({ ok: true, json: async () => ({ system: { argv } }) });
+const local = { comfyUrl: 'http://127.0.0.1:8188', comfyOutputDir: '' };
+
+test('output folder: config wins; remote ComfyUI gives null; a slow /system_stats waits up to 8 s, not 2 s', async () => {
+  assert.equal(await comfyOutputDir({ ...local, comfyOutputDir: '/cfg/out' }, { fetchImpl: async () => { throw new Error('not called'); } }), path.resolve('/cfg/out'));
+  assert.equal(await comfyOutputDir({ comfyUrl: 'http://192.168.1.5:8188', comfyOutputDir: '' }, { fetchImpl: stats(['--output-directory', '/o']) }), null);
+  let seen;
+  const slow = async (url, { signal }) => { seen = signal; await new Promise((r) => setTimeout(r, 2300)); if (signal.aborted) throw signal.reason; return stats(['--output-directory', '/slow'])(); };
+  assert.equal(await comfyOutputDir(local, { fetchImpl: slow }), path.resolve('/slow'), 'an answer after 2.3 s is still used');
+  assert.ok(seen instanceof AbortSignal);
+  // the timeout itself (shortened for the test) falls back to "unknown"
+  const logs = [];
+  const hang = (url, { signal }) => new Promise((_, rej) => signal.addEventListener('abort', () => rej(signal.reason)));
+  assert.equal(await comfyOutputDir(local, { fetchImpl: hang, timeoutMs: 50, log: (m) => logs.push(m) }), null);
+  assert.match(logs[0], /took longer than/);
+});
+
+test('output folder: the last good value is cached in memory and in data/, and used when ComfyUI does not answer', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-odc-'));
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-odo-'));
+  const cache = createOutputDirCache(dataDir);
+  assert.equal(await comfyOutputDir(local, { fetchImpl: stats(['--base-directory', path.dirname(outDir)]), cache }), path.join(path.dirname(outDir), 'output'));
+  assert.equal(await comfyOutputDir(local, { fetchImpl: stats(['--output-directory', outDir]), cache }), outDir);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, 'comfy-output-dir.json'), 'utf8')).dir, outDir);
+  const down = async () => { throw new Error('ECONNREFUSED'); };
+  assert.equal(await comfyOutputDir(local, { fetchImpl: down, cache }), outDir, 'memory');
+  const again = createOutputDirCache(dataDir); // server restart
+  assert.equal(await comfyOutputDir(local, { fetchImpl: down, cache: again }), outDir, 'data/comfy-output-dir.json');
+  assert.equal(await comfyOutputDir(local, { fetchImpl: stats(['main.py']), cache: again }), outDir, 'argv without the flags');
+  fs.rmSync(outDir, { recursive: true });
+  assert.equal(await comfyOutputDir(local, { fetchImpl: down, cache: again }), null, 'a cached folder that no longer exists is not used');
+});
+
+test('API delete: output folder found through --base-directory (Comfy Desktop) and kept after ComfyUI goes quiet', async () => {
+  const t = tempOutput();
+  t.write('concept-app/one.png'); t.write('concept-app/two.png');
+  let up = true;
+  const fetchImpl = async (url, o) => (String(url).endsWith('/system_stats') ? (up ? stats(['main.py', `--base-directory=${t.root}`])() : Promise.reject(new Error('down'))) : fetch(url, o));
+  const st = await startStack({ outputDir: null, appOptions: { fetchImpl } });
+  try {
+    const post = (p, b) => fetch(st.base + p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(async (r) => ({ status: r.status, body: await r.json() }));
+    const one = (await post('/api/history', { workflow: 'z', images: [{ filename: 'one.png', subfolder: 'concept-app', type: 'output' }] })).body;
+    const two = (await post('/api/history', { workflow: 'z', images: [{ filename: 'two.png', subfolder: 'concept-app', type: 'output' }] })).body;
+    assert.deepEqual((await post('/api/history/delete', { ids: [one.id] })).body.deleted, [one.id]);
+    up = false;
+    assert.deepEqual((await post('/api/history/delete', { ids: [two.id] })).body.deleted, [two.id], 'cached folder used while /system_stats fails');
+    assert.equal(fs.existsSync(path.join(t.out, 'concept-app', 'two.png')), false);
+  } finally { await st.close(); }
 });

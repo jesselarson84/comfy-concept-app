@@ -24,6 +24,17 @@ Settings live in `config.json`. Put your own overrides in `config.local.json`, w
 | workflowsDir / dataDir | `workflows` / `data` | `WORKFLOWS_DIR` / `DATA_DIR` |
 | sessionGapMinutes | 90 | |
 | outputSubfolder | `concept-app` (images go to `ComfyUI/output/concept-app/`; set `""` to leave prefixes alone) | |
+| comfyOutputDir | `""` = ask ComfyUI (see below) | `COMFY_OUTPUT_DIR` |
+
+**ComfyUI's output folder** (needed to delete results from History and for the "From Comfy UI" grid). ComfyUI has no API for deleting output files, so the app deletes them from disk and has to know where that folder is. It looks in this order:
+
+1. `comfyOutputDir` in `config.local.json` (or `COMFY_OUTPUT_DIR`). Setting it is the most reliable. On the owner's PC (Comfy Desktop) it is `C:\Users\<you>\AppData\Local\Comfy-Desktop\ComfyUI-Shared\output`, so `config.local.json` would contain `{ "comfyOutputDir": "C:\\Users\\<you>\\AppData\\Local\\Comfy-Desktop\\ComfyUI-Shared\\output" }` (backslashes doubled in JSON). The path is not in the code.
+2. ComfyUI's own command line, from `GET /system_stats` (8 s timeout): `--output-directory X`, `--output-directory=X`, or `--base-directory X` plus `\output` (what Comfy Desktop passes).
+3. The last folder found by step 2, kept in `data/comfy-output-dir.json`, used while that folder still exists.
+
+If none of these works, a delete answers *"ComfyUI output folder is unknown, nothing was deleted"*, and the reason is written to `data\server.log`.
+
+**Deleting a file that is open** (a .glb still loading in the 3D viewer, a file open in another program) fails on Windows with `EBUSY`. The app retries for about a second, then reports *"File is in use (open in a viewer or another app), try again"* for that file and carries on with the rest of the selection. History keeps only the files that are still on disk.
 
 ### Bundled Node runtime (not in git)
 

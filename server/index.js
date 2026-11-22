@@ -55,7 +55,7 @@ import { isHeavy } from '../app/js/lib/memory-options.js';
 import { splitOutputs } from '../app/js/lib/outputs.js';
 import { isLegacyPreset, migrateHistoryEntry } from '../app/js/lib/legacy-presets.js';
 import { defaultPreset } from '../app/js/lib/preset-choice.js';
-import { historyOutputs, comfyOutputDir, scanAppFolder, mergeOutputs, deleteAppFile } from './outputs.js';
+import { historyOutputs, comfyOutputDir, createOutputDirCache, scanAppFolder, mergeOutputs, deleteAppFile } from './outputs.js';
 import { FolderStore } from './folders.js';
 import { saveToDrive } from './drive.js';
 
@@ -64,7 +64,10 @@ const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
 // Written to stdout/stderr, which start-background.vbs sends to data\server.log.
 const log = (...a) => console.error(new Date().toISOString(), ...a);
 
-const json = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
+const json = (res, status, body) => {
+  if (status === 409 || status >= 500) log(`answered ${status}:`, body?.error || '', body?.detail || '');
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body));
+};
 
 export function createApp(cfg, opts = {}) {
   const { runSmi, os, env } = opts;
@@ -87,6 +90,9 @@ export function createApp(cfg, opts = {}) {
   const userPresets = new UserPresetStore(cfg.dataDir);
   const builder = createBuilder({ cfg, comfyInfo, presets, memory, hardware });
   const sseClients = new Set();
+  // ComfyUI's output folder (delete, "From Comfy UI"): last good value cached in data/.
+  const outDirCache = createOutputDirCache(cfg.dataDir);
+  const outputDirOf = () => comfyOutputDir(cfg, { cache: outDirCache, log, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
 
   // Everything the preset picker shows: AI Workflow presets (live
   // availability), saved builder setups (re-validated live) and workflows
@@ -203,8 +209,8 @@ export function createApp(cfg, opts = {}) {
       try { body = JSON.parse((await readBody(req, 256 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
       const ids = Array.isArray(body?.ids) ? body.ids.filter((x) => typeof x === 'string').slice(0, 2000) : [];
       if (!ids.length) return json(res, 400, { error: 'Nothing to delete' });
-      const outputDir = await comfyOutputDir(cfg);
-      if (!outputDir) return json(res, 409, { error: 'ComfyUI output folder is unknown, nothing was deleted' });
+      const outputDir = await outputDirOf();
+      if (!outputDir) return json(res, 409, { error: 'ComfyUI output folder is unknown, nothing was deleted. Set "comfyOutputDir" in config.local.json (see README).' });
       const deleted = [], refused = [], trimmed = new Map();
       // One locked or refused file never stops the rest of the selection, and
       // History always ends up matching the disk: an entry whose files are all
@@ -307,7 +313,7 @@ export function createApp(cfg, opts = {}) {
       const kind = url.searchParams.get('kind') || undefined;
       const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
       const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 120));
-      const dir = await comfyOutputDir(cfg);
+      const dir = await outputDirOf();
       return json(res, 200, { ...mergeOutputs([historyOutputs(history), scanAppFolder(dir, cfg.outputSubfolder)], { kind, offset, limit }), scanned: !!dir });
     }
     if (p === '/api/drive/save' && req.method === 'POST') {
