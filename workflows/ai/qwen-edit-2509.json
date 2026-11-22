@@ -5,32 +5,142 @@
   "menuPath": "Image/Qwen Image Edit 2509",
   "source": "ComfyUI-AIWorkflowMenu image/qwen_image_edit_2509.json (converted to API format with the ComfyUI 1.59.10 frontend)",
   "output": "image",
-  "description": "Edit a picture with an instruction (Qwen-Image-Edit 2509 fp8, 4-step Lightning LoRA).",
-  "size": {
-   "base": [
-    1664,
-    928
-   ],
-   "min": 512,
-   "max": 1664,
-   "multiple": 16
-  },
+  "description": "Edit a picture with an instruction, with up to two more reference pictures (Qwen-Image-Edit 2509, 4-step Lightning LoRA). The picture is VAE-encoded and edited in place.",
   "params": {
+   "lightning": {
+    "node": "20",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Lightning",
+    "control": "seg",
+    "labels": {
+     "false": "Off",
+     "true": "On"
+    },
+    "span2": true
+   },
    "steps": {
     "node": "10",
     "input": "steps",
     "type": "int",
     "min": 2,
-    "max": 8,
+    "max": 50,
     "default": 4,
-    "label": "Steps"
+    "label": "Steps",
+    "control": "stepper",
+    "modes": {
+     "param": "lightning",
+     "values": {
+      "true": {
+       "min": 2,
+       "max": 8,
+       "default": 4
+      },
+      "false": {
+       "min": 20,
+       "max": 50,
+       "default": 40
+      }
+     }
+    }
+   },
+   "cfg": {
+    "node": "10",
+    "input": "cfg",
+    "type": "number",
+    "min": 1.0,
+    "max": 6.0,
+    "step": 0.5,
+    "default": 4.0,
+    "label": "Guidance",
+    "control": "slider",
+    "when": {
+     "param": "lightning",
+     "is": false
+    },
+    "offValue": 1
+   },
+   "shift": {
+    "node": "3",
+    "input": "shift",
+    "type": "number",
+    "min": 1.0,
+    "max": 6.0,
+    "step": 0.1,
+    "default": 3.1,
+    "label": "Shift",
+    "control": "slider"
+   },
+   "sampler": {
+    "node": "10",
+    "input": "sampler_name",
+    "type": "enum",
+    "options": [
+     "euler",
+     "res_multistep",
+     "dpmpp_2m"
+    ],
+    "default": "euler",
+    "label": "Sampler",
+    "control": "select"
+   },
+   "scheduler": {
+    "node": "10",
+    "input": "scheduler",
+    "type": "enum",
+    "options": [
+     "simple",
+     "beta"
+    ],
+    "default": "simple",
+    "label": "Scheduler",
+    "control": "select"
    }
   },
   "maxBatch": 4,
   "vram": {
    "estMB": 21500,
    "basis": "same weights as Qwen 2512 (20.4 GB fp8 UNet) + vision encoding of the input"
-  }
+  },
+  "gguf": {
+   "node": "1",
+   "unet_name": "Qwen-Image-Edit-2509-Q5_K_M.gguf",
+   "estMB": 15500,
+   "basis": "13.9 GB Q5_K_M GGUF UNet (UnetLoaderGGUF) instead of the 20.4 GB fp8 + LoRA + activations; used on the small-GPU profile"
+  },
+  "optional": [
+   {
+    "node": "21",
+    "drop": [
+     {
+      "node": "7",
+      "input": "image2"
+     },
+     {
+      "node": "8",
+      "input": "image2"
+     }
+    ]
+   },
+   {
+    "node": "22",
+    "drop": [
+     {
+      "node": "7",
+      "input": "image3"
+     },
+     {
+      "node": "8",
+      "input": "image3"
+     }
+    ]
+   }
+  ]
  },
  "workflow": {
   "1": {
@@ -62,7 +172,7 @@
     "shift": 3.1,
     "sampling": "flow",
     "model": [
-     "2",
+     "20",
      0
     ]
    },
@@ -100,6 +210,34 @@
     "title": "Image to edit #image"
    }
   },
+  "14": {
+   "inputs": {
+    "image": [
+     "6",
+     0
+    ]
+   },
+   "class_type": "FluxKontextImageScale",
+   "_meta": {
+    "title": "FluxKontextImageScale"
+   }
+  },
+  "9": {
+   "inputs": {
+    "pixels": [
+     "14",
+     0
+    ],
+    "vae": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "VAEEncode",
+   "_meta": {
+    "title": "VAE Encode (input image)"
+   }
+  },
   "7": {
    "inputs": {
     "prompt": "Describe the edit here.",
@@ -107,8 +245,20 @@
      "4",
      0
     ],
+    "vae": [
+     "5",
+     0
+    ],
     "image1": [
-     "6",
+     "14",
+     0
+    ],
+    "image2": [
+     "21",
+     0
+    ],
+    "image3": [
+     "22",
      0
     ]
    },
@@ -124,25 +274,26 @@
      "4",
      0
     ],
+    "vae": [
+     "5",
+     0
+    ],
     "image1": [
-     "6",
+     "14",
+     0
+    ],
+    "image2": [
+     "21",
+     0
+    ],
+    "image3": [
+     "22",
      0
     ]
    },
    "class_type": "TextEncodeQwenImageEditPlus",
    "_meta": {
     "title": "Negative #negative"
-   }
-  },
-  "9": {
-   "inputs": {
-    "width": 1664,
-    "height": 928,
-    "batch_size": 1
-   },
-   "class_type": "EmptySD3LatentImage",
-   "_meta": {
-    "title": "EmptySD3LatentImage"
    }
   },
   "10": {
@@ -202,6 +353,41 @@
    "class_type": "SaveImage",
    "_meta": {
     "title": "Save Image"
+   }
+  },
+  "20": {
+   "inputs": {
+    "switch": true,
+    "on_false": [
+     "1",
+     0
+    ],
+    "on_true": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "Lightning on/off"
+   }
+  },
+  "21": {
+   "inputs": {
+    "image": "reference_2.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Reference 2 #image"
+   }
+  },
+  "22": {
+   "inputs": {
+    "image": "reference_3.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Reference 3 #image"
    }
   }
  }

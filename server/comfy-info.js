@@ -55,6 +55,15 @@ export function isLocal(url) {
  * Unknown (remote ComfyUI) -> key missing, which the availability check treats
  * as "cannot verify" (unavailable - never risk an auto-download).
  */
+/** Does <fsFolder>/<dir> (any of ComfyUI's roots for that folder) hold a .safetensors file?
+ *  undefined when it cannot be checked (remote ComfyUI). Only looks one level deep. */
+export function fsDirHasModel(info, fsFolder, dir) {
+  if (!info?.folderPaths) return undefined;
+  const roots = (info.folderPaths[fsFolder] || []).map((r) => (Array.isArray(r) ? r[0] : r)).filter((r) => typeof r === 'string');
+  const rel = String(dir).split(/[\\/]/).filter((s) => s && s !== '..' && s !== '.');
+  return roots.some((r) => { try { return fs.readdirSync(path.join(r, ...rel)).some((f) => /\.safetensors$/i.test(f)); } catch { return false; } });
+}
+
 export function checkFsFiles(info, files) {
   const out = {};
   if (!info?.folderPaths) return out;

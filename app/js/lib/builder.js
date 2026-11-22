@@ -307,7 +307,14 @@ export function assemble(blocks, { prefix = 'concept-app/builder', objectInfo } 
         est(EST.image_to_3d);
         const ck = add('ImageOnlyCheckpointLoader', { ckpt_name: 'hunyuan_3d_v2.1.safetensors' }, 'Load Hunyuan3D 2.1');
         const ms = add('ModelSamplingAuraFlow', { model: [ck, 0], shift: 1, sampling: 'flow' });
-        const enc = add('CLIPVisionEncode', { clip_vision: [ck, 1], image, crop: 'center' });
+        // Hunyuan3D needs the object cut out: on an opaque backdrop it models the
+        // whole frame and returns a box. Mask with BiRefNet, composite on white.
+        const bgm = add('LoadBackgroundRemovalModel', { bg_removal_name: 'birefnet.safetensors' }, 'Load background removal');
+        const fg = add('RemoveBackground', { bg_removal_model: [bgm, 0], image });
+        const bgMask = add('InvertMask', { mask: [fg, 0] });
+        const white = add('EmptyImage', { width: 64, height: 64, batch_size: 1, color: 0xffffff });
+        const cut = add('ImageCompositeMasked', { destination: image, source: [white, 0], x: 0, y: 0, resize_source: true, mask: [bgMask, 0] }, 'Object on white');
+        const enc = add('CLIPVisionEncode', { clip_vision: [ck, 1], image: [cut, 0], crop: 'center' });
         const cond = add('Hunyuan3Dv2Conditioning', { clip_vision_output: [enc, 0] });
         const lat = add('EmptyLatentHunyuan3Dv2', { resolution: 4096, batch_size: 1 });
         const ks = add('KSampler', { seed: 0, steps: p.steps, cfg: 5, sampler_name: 'euler', scheduler: 'normal', denoise: 1, model: [ms, 0], positive: [cond, 0], negative: [cond, 1], latent_image: [lat, 0] });

@@ -1,0 +1,473 @@
+{
+ "preset": {
+  "group": "Image",
+  "label": "FLUX.2 Klein 4B Inpaint",
+  "menuPath": "Image/FLUX.2 Klein 4B Inpaint",
+  "source": "Batch 3: Klein 4B distilled edit graph inside Inpaint Crop & Stitch (ComfyUI-Inpaint-CropAndStitch) with Acly's Color Match (comfyui-inpaint-nodes)",
+  "output": "image",
+  "description": "Repaint only the area you paint. The masked area is cropped (1024 px, context x1.35), edited with Klein 4B (4 steps, cfg 1), colour-matched and stitched back, so everything outside the mask stays as it was.",
+  "mask": {
+   "node": "2",
+   "input": "image",
+   "image": "1"
+  },
+  "params": {
+   "steps": {
+    "node": "22",
+    "input": "steps",
+    "type": "int",
+    "min": 2,
+    "max": 8,
+    "default": 4,
+    "label": "Steps",
+    "control": "stepper"
+   },
+   "expand": {
+    "node": "4",
+    "input": "mask_expand_pixels",
+    "type": "int",
+    "min": 0,
+    "max": 64,
+    "step": 4,
+    "default": 12,
+    "label": "Expand",
+    "control": "stepper",
+    "format": "px",
+    "group": "Mask"
+   },
+   "blend": {
+    "node": "4",
+    "input": "mask_blend_pixels",
+    "type": "int",
+    "min": 0,
+    "max": 64,
+    "default": 32,
+    "label": "Blend",
+    "control": "slider",
+    "step": 1,
+    "format": "px"
+   },
+   "context": {
+    "node": "4",
+    "input": "context_from_mask_extend_factor",
+    "type": "number",
+    "min": 1.0,
+    "max": 2.0,
+    "step": 0.05,
+    "default": 1.35,
+    "label": "Context",
+    "control": "slider"
+   },
+   "crop": {
+    "node": "4",
+    "input": "output_target_width",
+    "also": [
+     {
+      "node": "4",
+      "input": "output_target_height"
+     }
+    ],
+    "type": "enum",
+    "options": [
+     768,
+     1024,
+     1280
+    ],
+    "default": 1024,
+    "label": "Crop size",
+    "control": "select",
+    "labels": {
+     "768": "768 px",
+     "1024": "1024 px",
+     "1280": "1280 px"
+    }
+   },
+   "fillHoles": {
+    "node": "4",
+    "input": "mask_fill_holes",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Fill holes",
+    "control": "seg",
+    "labels": {
+     "false": "Off",
+     "true": "On"
+    }
+   },
+   "colorMatch": {
+    "node": "26",
+    "input": "strength",
+    "type": "number",
+    "min": 0,
+    "max": 1,
+    "step": 0.05,
+    "default": 0.6,
+    "label": "Color match",
+    "control": "slider"
+   }
+  },
+  "maxBatch": 4,
+  "vram": {
+   "estMB": 9000,
+   "basis": "same weights as Klein 4B Image Edit (7.8 GB UNet); the crop is 1024 px so the peak matches the 1 MP edit"
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "image": "example.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Image to edit #image"
+   }
+  },
+  "2": {
+   "inputs": {
+    "image": "mask.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Painted mask"
+   }
+  },
+  "3": {
+   "inputs": {
+    "image": [
+     "2",
+     0
+    ],
+    "channel": "red"
+   },
+   "class_type": "ImageToMask",
+   "_meta": {
+    "title": "Mask (white = repaint)"
+   }
+  },
+  "4": {
+   "inputs": {
+    "image": [
+     "1",
+     0
+    ],
+    "mask": [
+     "3",
+     0
+    ],
+    "downscale_algorithm": "bilinear",
+    "upscale_algorithm": "bicubic",
+    "preresize": false,
+    "preresize_mode": "ensure minimum resolution",
+    "preresize_min_width": 1024,
+    "preresize_min_height": 1024,
+    "preresize_max_width": 16384,
+    "preresize_max_height": 16384,
+    "mask_fill_holes": true,
+    "mask_expand_pixels": 12,
+    "mask_invert": false,
+    "mask_blend_pixels": 32,
+    "mask_hipass_filter": 0.1,
+    "extend_for_outpainting": false,
+    "extend_up_factor": 1.0,
+    "extend_down_factor": 1.0,
+    "extend_left_factor": 1.0,
+    "extend_right_factor": 1.0,
+    "context_from_mask_extend_factor": 1.35,
+    "output_resize_to_target_size": true,
+    "output_target_width": 1024,
+    "output_target_height": 1024,
+    "output_padding": "16",
+    "device_mode": "gpu (much faster)"
+   },
+   "class_type": "InpaintCropImproved",
+   "_meta": {
+    "title": "Inpaint Crop"
+   }
+  },
+  "10": {
+   "inputs": {
+    "unet_name": "flux-2-klein-4b.safetensors",
+    "weight_dtype": "default"
+   },
+   "class_type": "UNETLoader",
+   "_meta": {
+    "title": "Load Diffusion Model"
+   }
+  },
+  "11": {
+   "inputs": {
+    "clip_name": "qwen_3_4b.safetensors",
+    "type": "flux2",
+    "device": "default"
+   },
+   "class_type": "CLIPLoader",
+   "_meta": {
+    "title": "Load CLIP"
+   }
+  },
+  "12": {
+   "inputs": {
+    "vae_name": "flux2-vae.safetensors"
+   },
+   "class_type": "VAELoader",
+   "_meta": {
+    "title": "Load VAE"
+   }
+  },
+  "13": {
+   "inputs": {
+    "pixels": [
+     "4",
+     1
+    ],
+    "vae": [
+     "12",
+     0
+    ]
+   },
+   "class_type": "VAEEncode",
+   "_meta": {
+    "title": "VAE Encode (crop)"
+   }
+  },
+  "14": {
+   "inputs": {
+    "samples": [
+     "13",
+     0
+    ],
+    "mask": [
+     "4",
+     2
+    ]
+   },
+   "class_type": "SetLatentNoiseMask",
+   "_meta": {
+    "title": "Set Latent Noise Mask"
+   }
+  },
+  "15": {
+   "inputs": {
+    "text": "Describe what goes in the painted area.",
+    "clip": [
+     "11",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Prompt #prompt"
+   }
+  },
+  "16": {
+   "inputs": {
+    "conditioning": [
+     "15",
+     0
+    ]
+   },
+   "class_type": "ConditioningZeroOut",
+   "_meta": {
+    "title": "Conditioning Zero Out"
+   }
+  },
+  "17": {
+   "inputs": {
+    "conditioning": [
+     "15",
+     0
+    ],
+    "latent": [
+     "13",
+     0
+    ]
+   },
+   "class_type": "ReferenceLatent",
+   "_meta": {
+    "title": "Reference Latent"
+   }
+  },
+  "18": {
+   "inputs": {
+    "conditioning": [
+     "16",
+     0
+    ],
+    "latent": [
+     "13",
+     0
+    ]
+   },
+   "class_type": "ReferenceLatent",
+   "_meta": {
+    "title": "Reference Latent (neg)"
+   }
+  },
+  "19": {
+   "inputs": {
+    "cfg": 1,
+    "model": [
+     "10",
+     0
+    ],
+    "positive": [
+     "17",
+     0
+    ],
+    "negative": [
+     "18",
+     0
+    ]
+   },
+   "class_type": "CFGGuider",
+   "_meta": {
+    "title": "CFG Guider"
+   }
+  },
+  "20": {
+   "inputs": {
+    "sampler_name": "euler"
+   },
+   "class_type": "KSamplerSelect",
+   "_meta": {
+    "title": "KSamplerSelect"
+   }
+  },
+  "21": {
+   "inputs": {
+    "image": [
+     "4",
+     1
+    ]
+   },
+   "class_type": "GetImageSize",
+   "_meta": {
+    "title": "Get Image Size"
+   }
+  },
+  "22": {
+   "inputs": {
+    "steps": 4,
+    "width": [
+     "21",
+     0
+    ],
+    "height": [
+     "21",
+     1
+    ]
+   },
+   "class_type": "Flux2Scheduler",
+   "_meta": {
+    "title": "Flux2Scheduler"
+   }
+  },
+  "23": {
+   "inputs": {
+    "noise_seed": 0
+   },
+   "class_type": "RandomNoise",
+   "_meta": {
+    "title": "RandomNoise"
+   }
+  },
+  "24": {
+   "inputs": {
+    "noise": [
+     "23",
+     0
+    ],
+    "guider": [
+     "19",
+     0
+    ],
+    "sampler": [
+     "20",
+     0
+    ],
+    "sigmas": [
+     "22",
+     0
+    ],
+    "latent_image": [
+     "14",
+     0
+    ]
+   },
+   "class_type": "SamplerCustomAdvanced",
+   "_meta": {
+    "title": "SamplerCustomAdvanced"
+   }
+  },
+  "25": {
+   "inputs": {
+    "samples": [
+     "24",
+     0
+    ],
+    "vae": [
+     "12",
+     0
+    ]
+   },
+   "class_type": "VAEDecode",
+   "_meta": {
+    "title": "VAE Decode"
+   }
+  },
+  "26": {
+   "inputs": {
+    "target": [
+     "25",
+     0
+    ],
+    "reference": [
+     "4",
+     1
+    ],
+    "strength": 0.6,
+    "exclude_mask": [
+     "4",
+     2
+    ]
+   },
+   "class_type": "INPAINT_ColorMatch",
+   "_meta": {
+    "title": "Color Match (Masked)"
+   }
+  },
+  "27": {
+   "inputs": {
+    "stitcher": [
+     "4",
+     0
+    ],
+    "inpainted_image": [
+     "26",
+     0
+    ]
+   },
+   "class_type": "InpaintStitchImproved",
+   "_meta": {
+    "title": "Inpaint Stitch"
+   }
+  },
+  "28": {
+   "inputs": {
+    "filename_prefix": "concept-app/klein_inpaint",
+    "images": [
+     "27",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save Image"
+   }
+  }
+ }
+}

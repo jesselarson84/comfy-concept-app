@@ -1,4 +1,4 @@
-// model-viewer.js - in-app 3D viewer for GLB results (Hunyuan3D, MoGe, Pixal3D,
+// model-viewer.js - in-app 3D viewer for GLB results (Hunyuan3D, Pixal3D,
 // the Chat's 3D action).
 // -----------------------------------------------------------------------------
 //   one finger drag  -> orbit          pinch -> zoom          two fingers -> pan

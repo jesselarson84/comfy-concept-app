@@ -59,7 +59,7 @@ export function createBuilder({ cfg, comfyInfo, presets, memory, hardware, fetch
     if (!info.objectInfo) return { ok: false, stage: 'comfy', errors: ['ComfyUI is not reachable, so I cannot check what is installed.'], reply: '' };
     if (memory) { const bc = await memory.beforeChat(useModel).catch(() => null); if (bc && bc.ok === false) return { ok: false, stage: 'model', errors: [`Builder model ${useModel}: ${bc.reason || bc.note || 'does not fit in memory right now'}`], reply: '' }; }
     const familyStatus = {};
-    for (const [id, f] of Object.entries(FAMILIES)) { const v = vramFit({ estMB: f.estMB, gpuTotalMB: hw.gpu?.totalMB, ramFreeMB: hw.ram?.freeMB, profileId }); if (v.label) familyStatus[id] = v.label; }
+    for (const [id, f] of Object.entries(FAMILIES)) { const v = vramFit({ estMB: f.estMB, gpuTotalMB: hw.gpu?.totalMB, ramFreeMB: hw.ram?.freeMB, profileId }); if (v.status === 'unavailable') familyStatus[id] = v.label; }
     const messages = [
       { role: 'system', content: builderSystemPrompt({ objectInfo: info.objectInfo, familyStatus }) },
       ...history.slice(-6).filter((x) => x && ['user', 'assistant'].includes(x.role) && typeof x.content === 'string').map((x) => ({ role: x.role, content: x.content.slice(0, 2000) })),
@@ -69,7 +69,7 @@ export function createBuilder({ cfg, comfyInfo, presets, memory, hardware, fetch
     try {
       const r = await fetchImpl(cfg.ollamaUrl + '/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: useModel, stream: false, format: builderSchema(), messages, options: { temperature: 0.2 } }),
+        body: JSON.stringify({ model: useModel, stream: false, format: builderSchema(), messages, options: { temperature: 0.2, ...(memory?.chatOptions?.() || {}) } }),
         signal: AbortSignal.timeout(180000),
       });
       if (!r.ok) throw new Error(`Ollama HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);

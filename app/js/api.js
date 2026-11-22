@@ -24,9 +24,20 @@ export function importWorkflow(file) {
   fd.append('file', file, file.name);
   return req('POST', '/api/workflows', fd);
 }
-export const getHistory = (favoritesOnly) => req('GET', '/api/history' + (favoritesOnly ? '?favorites=1' : '')).then((d) => d.sessions);
+export const getHistory = (favoritesOnly, folder) => req('GET', '/api/history' + (folder ? `?folder=${encodeURIComponent(folder)}` : favoritesOnly ? '?favorites=1' : '')).then((d) => d.sessions);
+// History multi-select (batch 3): delete from the PC, folders (labels only).
+export const deleteHistory = (ids) => req('POST', '/api/history/delete', { ids });
+export const getFolders = () => req('GET', '/api/folders');
+export const createFolder = (name) => req('POST', '/api/folders', { name });
+export const addToFolder = (id, ids) => req('POST', `/api/folders/${encodeURIComponent(id)}/items`, { add: ids });
+export const removeFromFolder = (id, ids) => req('POST', `/api/folders/${encodeURIComponent(id)}/items`, { remove: ids });
+export const renameFolder = (id, name) => req('PATCH', `/api/folders/${encodeURIComponent(id)}`, { name });
+export const deleteFolder = (id) => req('DELETE', `/api/folders/${encodeURIComponent(id)}`);
 export const addHistory = (entry) => req('POST', '/api/history', entry);
 export const patchHistory = (id, patch) => req('PATCH', `/api/history/${encodeURIComponent(id)}`, patch);
 // The app's results on the PC ("From Comfy UI") and Save to Drive.
 export const getOutputs = ({ kind, offset = 0, limit = 60 } = {}) => req('GET', `/api/outputs?${new URLSearchParams({ ...(kind ? { kind } : {}), offset, limit })}`);
+// Memory switches (batch 3): CPU text encoder, Ollama CPU mode.
+export const getMemorySettings = () => req('GET', '/api/memory/settings');
+export const setMemorySettings = (patch) => req('POST', '/api/memory/settings', patch);
 export const saveToDrive = (f, kind) => req('POST', '/api/drive/save', { filename: f.filename, subfolder: f.subfolder || '', type: f.type || 'output', ...(kind ? { kind } : {}) });

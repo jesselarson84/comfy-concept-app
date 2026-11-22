@@ -14,7 +14,46 @@
     "min": 1,
     "max": 4,
     "default": 2,
-    "label": "Scale"
+    "label": "Scale",
+    "control": "slider",
+    "step": 0.5,
+    "format": "x"
+   },
+   "colorFix": {
+    "node": "66:59",
+    "input": "color_correction_method",
+    "type": "enum",
+    "options": [
+     "none",
+     "lab",
+     "wavelet",
+     "adain"
+    ],
+    "default": "none",
+    "label": "Color fix",
+    "control": "select"
+   },
+   "tile": {
+    "node": "66:48",
+    "input": "tile_size",
+    "type": "enum",
+    "options": [
+     256,
+     384,
+     512,
+     768,
+     1024
+    ],
+    "default": 512,
+    "label": "VAE tile",
+    "control": "select",
+    "also": [
+     {
+      "node": "66:55",
+      "input": "tile_size"
+     }
+    ],
+    "group": "Memory"
    }
   },
   "maxBatch": 2,

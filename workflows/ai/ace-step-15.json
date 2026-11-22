@@ -12,7 +12,9 @@
     "input": "lyrics",
     "type": "text",
     "default": "[instrumental]",
-    "label": "Lyrics"
+    "label": "Lyrics",
+    "open": true,
+    "control": "text"
    },
    "seconds": {
     "node": "98",
@@ -27,7 +29,10 @@
     "min": 10,
     "max": 240,
     "default": 60,
-    "label": "Length (s)"
+    "label": "Length",
+    "control": "slider",
+    "step": 5,
+    "format": "s"
    },
    "bpm": {
     "node": "94",
@@ -36,7 +41,112 @@
     "min": 60,
     "max": 200,
     "default": 120,
-    "label": "BPM"
+    "label": "BPM",
+    "control": "stepper"
+   },
+   "key": {
+    "node": "94",
+    "input": "keyscale",
+    "type": "enum",
+    "options": [
+     "auto",
+     "C major",
+     "C minor",
+     "C# major",
+     "C# minor",
+     "D major",
+     "D minor",
+     "Eb major",
+     "Eb minor",
+     "E major",
+     "E minor",
+     "F major",
+     "F minor",
+     "F# major",
+     "F# minor",
+     "G major",
+     "G minor",
+     "Ab major",
+     "Ab minor",
+     "A major",
+     "A minor",
+     "Bb major",
+     "Bb minor",
+     "B major",
+     "B minor"
+    ],
+    "default": "auto",
+    "label": "Key",
+    "control": "select",
+    "auto": "key",
+    "labels": {
+     "auto": "Auto"
+    }
+   },
+   "time": {
+    "node": "94",
+    "input": "timesignature",
+    "type": "enum",
+    "options": [
+     "2",
+     "3",
+     "4",
+     "6"
+    ],
+    "default": "4",
+    "label": "Time",
+    "control": "seg"
+   },
+   "language": {
+    "node": "94",
+    "input": "language",
+    "type": "enum",
+    "options": [
+     "en",
+     "es",
+     "fr",
+     "de",
+     "it",
+     "pt",
+     "ja",
+     "ko",
+     "zh"
+    ],
+    "default": "en",
+    "label": "Language",
+    "control": "select"
+   },
+   "tagCfg": {
+    "node": "94",
+    "input": "cfg_scale",
+    "type": "number",
+    "min": 1.0,
+    "max": 4.0,
+    "step": 0.1,
+    "default": 2.0,
+    "label": "Tag adherence",
+    "control": "slider"
+   },
+   "temperature": {
+    "node": "94",
+    "input": "temperature",
+    "type": "number",
+    "min": 0.5,
+    "max": 1.2,
+    "step": 0.05,
+    "default": 0.85,
+    "label": "Temperature",
+    "control": "slider"
+   },
+   "steps": {
+    "node": "3",
+    "input": "steps",
+    "type": "int",
+    "min": 4,
+    "max": 16,
+    "default": 8,
+    "label": "Steps",
+    "control": "stepper"
    }
   },
   "maxBatch": 2,

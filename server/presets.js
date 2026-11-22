@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { validatePreset, presetAvailability, comboOptions } from '../app/js/lib/presets.js';
 import { detectControls } from '../app/js/lib/workflow-detect.js';
-import { checkFsFiles } from './comfy-info.js';
+import { checkFsFiles, fsDirHasModel } from './comfy-info.js';
+import { ggufPath, isHeavy } from '../app/js/lib/memory-options.js';
 
 export class PresetStore {
   constructor(dir) { this.dir = dir; this.cache = null; }
@@ -27,6 +28,15 @@ export class PresetStore {
 
   get(id) { return this.load().find((p) => p.ok && p.id === String(id).replace(/^ai:/, '')); }
 
+  /** VRAM estimate + heavy flag for the loader path this profile uses. */
+  memoryFor(id, { objectInfo, profileId } = {}) {
+    const p = this.get(id);
+    if (!p) return {};
+    const v = ggufPath(p.workflow, p.manifest, { objectInfo, profileId });
+    const estMB = v.manifest.vram.measuredMB || v.manifest.vram.estMB;
+    return { estMB, heavy: isHeavy(v.manifest, estMB), loader: v.loader };
+  }
+
   /** Live info + file checks for all presets (fs checks only for files /models cannot list). */
   withFs(info) {
     const fsFiles = checkFsFiles(info, this.load().filter((p) => p.ok).flatMap((p) => p.manifest.files));
@@ -43,12 +53,16 @@ export class PresetStore {
     return this.load().map((p) => {
       const id = `ai:${p.id}`;
       if (!p.ok) return { id, file: `ai/${p.id}.json`, label: p.id, ok: false, error: p.error };
-      const manifest = withInputDefaults(p, withInstalledOptions(p, live.objectInfo), live.objectInfo);
-      const controls = presetControls(p.workflow, manifest);
+      // GGUF loader path (Qwen presets): Q5_K_M through UnetLoaderGGUF on the small GPU.
+      const v = ggufPath(p.workflow, p.manifest, { objectInfo: live.objectInfo, profileId: opts?.profileId });
+      const pv = { ...p, workflow: v.workflow, manifest: v.manifest };
+      const manifest = withInputDefaults(pv, withInstalledOptions(pv, live.objectInfo, live), live.objectInfo);
+      manifest.heavy = isHeavy(manifest);
+      const controls = presetControls(v.workflow, manifest);
       return {
         id, file: `ai/${p.id}.json`, label: manifest.label, description: manifest.description, group: manifest.group,
-        ok: true, controls, workflow: p.workflow, ai: manifest,
-        availability: presetAvailability({ ...p, manifest }, live, hw, opts),
+        ok: true, controls, workflow: v.workflow, ai: manifest, loader: v.loader,
+        availability: presetAvailability({ ...pv, manifest }, live, hw, opts),
       };
     });
   }
@@ -65,18 +79,25 @@ export function presetControls(workflow, manifest) {
   return c;
 }
 
-/** Enum params that pick a model: keep only the options ComfyUI has installed. */
-export function withInstalledOptions(p, objectInfo) {
+/** Enum params that pick a model: keep only the options ComfyUI has installed.
+ *  Packs a node lists before they are downloaded (Chatterbox, VibeVoice) are
+ *  checked against the model folders ("installed" hint). */
+export function withInstalledOptions(p, objectInfo, info = {}) {
   if (!objectInfo) return p.manifest;
   const params = {};
   for (const [k, d] of Object.entries(p.manifest.params)) {
     if (d.type !== 'enum') { params[k] = d; continue; }
+    if (d.installed) {
+      const keep = installedPacks(d, info);
+      params[k] = keep ? { ...d, options: keep, default: keep.includes(d.default) ? d.default : keep[0] } : d;
+      continue;
+    }
     const n = p.workflow[d.node];
     const spec = objectInfo[n?.class_type]?.input;
     const opts = comboOptions(spec?.required?.[d.input] || spec?.optional?.[d.input]);
     if (!opts) { params[k] = d; continue; }
     const norm = (s) => String(s).replace(/\\/g, '/');
-    const keep = d.options.filter((o) => opts.map(norm).includes(norm(o)));
+    const keep = d.options.filter((o) => (d.auto && o === 'auto') || opts.map(norm).includes(norm(o)));
     params[k] = keep.length ? { ...d, options: keep, default: keep.includes(d.default) ? d.default : keep[0] } : d;
   }
   return { ...p.manifest, params };
@@ -92,4 +113,21 @@ export function withInputDefaults(p, manifest, objectInfo) {
     return { ...s, defaultAvailable: !!opts?.includes(s.default) };
   });
   return { ...manifest, inputs };
+}
+
+/** Options of an "installed" enum found on the PC; null = cannot tell (keep the list). */
+export function installedPacks(d, info = {}) {
+  const ins = d.installed, norm = (x) => String(x).replace(/\\/g, '/');
+  let keep;
+  if (ins.folder) {
+    const files = info.models?.[ins.folder];
+    if (!Array.isArray(files)) return null;
+    const list = files.map(norm);
+    keep = d.options.filter((o) => { const pre = ins.prefix.replace('{v}', o); return list.some((f) => f.startsWith(pre) && /\.safetensors$/i.test(f)); });
+  } else {
+    const hits = d.options.map((o) => fsDirHasModel(info, ins.fsFolder, ins.dir.replace('{v}', o)));
+    if (hits.some((h) => h === undefined)) return null;
+    keep = d.options.filter((o, i) => hits[i]);
+  }
+  return keep.length ? keep : null;
 }

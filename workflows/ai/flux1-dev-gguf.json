@@ -23,7 +23,8 @@
     "min": 8,
     "max": 30,
     "default": 20,
-    "label": "Steps"
+    "label": "Steps",
+    "control": "stepper"
    },
    "guidance": {
     "node": "5",
@@ -32,7 +33,52 @@
     "min": 1.5,
     "max": 5,
     "default": 3.5,
-    "label": "Guidance"
+    "label": "Guidance",
+    "control": "slider",
+    "step": 0.1
+   },
+   "sampler": {
+    "node": "8",
+    "input": "sampler_name",
+    "type": "enum",
+    "options": [
+     "euler",
+     "dpmpp_2m",
+     "uni_pc"
+    ],
+    "default": "euler",
+    "label": "Sampler",
+    "control": "select"
+   },
+   "scheduler": {
+    "node": "8",
+    "input": "scheduler",
+    "type": "enum",
+    "options": [
+     "simple",
+     "beta",
+     "sgm_uniform"
+    ],
+    "default": "simple",
+    "label": "Scheduler",
+    "control": "select"
+   },
+   "quant": {
+    "node": "1",
+    "input": "unet_name",
+    "type": "enum",
+    "options": [
+     "flux1-dev-Q5_K_S.gguf",
+     "flux1-dev-Q4_K_S.gguf"
+    ],
+    "default": "flux1-dev-Q5_K_S.gguf",
+    "label": "Model",
+    "control": "seg",
+    "labels": {
+     "flux1-dev-Q5_K_S.gguf": "Q5_K_S",
+     "flux1-dev-Q4_K_S.gguf": "Q4_K_S"
+    },
+    "span2": true
    }
   },
   "maxBatch": 8,

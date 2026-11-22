@@ -67,12 +67,31 @@ export function createMemory({ cfg, hardware, ollama, getComfyUrl }) {
   }
 
   let lastWorkflow = null;
-  async function beforeQueue(workflowId = 'default', { estMB } = {}) {
+  // ---- batch 3 memory settings (data/memory-settings.json): two switches in the menu ----
+  const settingsFile = path.join(cfg.dataDir, 'memory-settings.json');
+  const SETTINGS_DEFAULT = { textEncoderCpu: false, ollamaCpu: false };
+  function getSettings() {
+    try { const s = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); return { textEncoderCpu: s.textEncoderCpu === true, ollamaCpu: s.ollamaCpu === true }; } catch { return { ...SETTINGS_DEFAULT }; }
+  }
+  function setSettings(patch = {}) {
+    const next = getSettings();
+    for (const k of Object.keys(SETTINGS_DEFAULT)) if (typeof patch[k] === 'boolean') next[k] = patch[k];
+    fs.mkdirSync(cfg.dataDir, { recursive: true });
+    fs.writeFileSync(settingsFile + '.tmp', JSON.stringify(next, null, 1));
+    fs.renameSync(settingsFile + '.tmp', settingsFile);
+    return next;
+  }
+  /** Ollama options for a chat request: CPU mode = no layers on the GPU (num_gpu 0). */
+  const chatOptions = () => (getSettings().ollamaCpu ? { num_gpu: 0 } : {});
+
+  async function profileId() { try { return (await active()).sel.profile.id; } catch { return undefined; } }
+
+  async function beforeQueue(workflowId = 'default', { estMB, heavy = false } = {}) {
     const { c, hw, sel } = await active({ fresh: true });
     const loaded = await ps();
     const needMB = workflowNeedMB(c, workflowId, estMB);
-    const d = decideBeforeQueue({ profile: sel.profile, freeMB: hw.gpu?.freeMB, ollamaModels: loaded || [], needMB, headroomMB: c.headroomMB });
-    const out = { profile: sel.profile.id, workflow: workflowId, freeMB: hw.gpu?.freeMB ?? null, needMB, loaded: (loaded || []).map((m) => m.name), ...d };
+    const d = decideBeforeQueue({ profile: sel.profile, freeMB: hw.gpu?.freeMB, ollamaModels: loaded || [], needMB, headroomMB: c.headroomMB, heavy });
+    const out = { profile: sel.profile.id, workflow: workflowId, freeMB: hw.gpu?.freeMB ?? null, needMB, heavy, loaded: (loaded || []).map((m) => m.name), ...d };
     if (d.unload) out.result = await ollama.unloadAll();
     const freedMB = d.unload ? Math.round((loaded || []).reduce((a, m) => a + (m.size_vram || 0), 0) / 1048576) : 0;
     const f = decideFreeBeforeQueue({ profile: sel.profile, freeMB: hw.gpu?.freeMB, ollamaFreedMB: freedMB, needMB, headroomMB: c.headroomMB, lastWorkflow, workflow: workflowId });
@@ -89,7 +108,10 @@ export function createMemory({ cfg, hardware, ollama, getComfyUrl }) {
     let size = 0;
     try { size = ((await getJson('/api/tags')).models || []).find((t) => t.name === model)?.size || 0; } catch {}
     const fit = modelFit({ sizeBytes: size, loadedVramBytes: l?.size_vram || 0, freeVramMB: hw.gpu?.freeMB, totalVramMB: hw.gpu?.totalMB, freeRamMB: hw.ram.freeMB, profile: sel.profile, config: c });
-    const out = { profile: sel.profile.id, model, keepAlive: sel.profile.ollamaKeepAlive, freeMB: hw.gpu?.freeMB ?? null, ...fit, ok: !l ? !['no-fit', 'too-big'].includes(fit.fit) : true };
+    const cpu = getSettings().ollamaCpu;
+    // CPU mode: the model lives in RAM only, so VRAM fit does not matter.
+    const out = { profile: sel.profile.id, model, keepAlive: sel.profile.ollamaKeepAlive, freeMB: hw.gpu?.freeMB ?? null, ...fit, ok: cpu || (!l ? !['no-fit', 'too-big'].includes(fit.fit) : true), chatOptions: chatOptions() };
+    if (cpu) return { ...out, reason: 'Ollama CPU mode: chat runs in RAM' };
     if (!out.ok) return out;
     const d = decideBeforeChat({ profile: sel.profile, freeMB: hw.gpu?.freeMB, estMB: fit.estMB, modelLoaded: !!l, headroomMB: c.headroomMB });
     out.reason = d.reason;
@@ -107,5 +129,5 @@ export function createMemory({ cfg, hardware, ollama, getComfyUrl }) {
     const { sel } = await active();
     return comfyFree(sel.profile.comfyFree);
   }
-  return { status, beforeQueue, beforeChat, freeForChat, config };
+  return { status, beforeQueue, beforeChat, freeForChat, config, getSettings, setSettings, chatOptions, profileId };
 }

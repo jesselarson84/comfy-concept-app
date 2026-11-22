@@ -34,7 +34,7 @@ export class ReferenceSlots {
       if (set) { preview.src = inputViewUrl(set); empty.hidden = true; } else preview.hidden = true;
       const fileIn = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: (e) => e.target.files[0] && this.upload(slot.node, e.target.files[0]) });
       const camIn = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: (e) => e.target.files[0] && this.upload(slot.node, e.target.files[0]) });
-      const label = slots.length > 1 ? (slot.title || `Image ${slot.node}`).replace(/#\w+/g, '').trim() : 'Reference image';
+      const label = slots.length > 1 || slot.optional ? (slot.title || `Image ${slot.node}`).replace(/#\w+/g, '').trim() : 'Reference image';
       const box = h('div.ref-slot', { dataset: { node: slot.node }, onpointerdown: () => { this.active = slot.node; } },
         h('div.ref-head', {}, h('span', {}, label), set ? h('button.link', { onclick: () => { delete this.values[slot.node]; this.render(this.slots); this.onChange?.(); } }, 'clear') : null),
         h('div.ref-body', {}, preview, empty),
@@ -93,5 +93,5 @@ export class ReferenceSlots {
     if (this.active && this.slots.some((s) => s.node === this.active)) return this.active;
     return (this.slots.find((s) => !this.values[s.node]) || this.slots[0])?.node;
   }
-  missing() { return this.slots.filter((s) => !this.values[s.node]); }
+  missing() { return this.slots.filter((s) => !this.values[s.node] && !s.optional); }
 }

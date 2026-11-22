@@ -90,8 +90,9 @@ test('AI preset: params shown with ranges; out-of-range values are clamped befor
   await pick('ai:klein-4b-t2i');
   assert.match(await page.textContent('#preset-name'), /FLUX\.2 Klein 4B Text to Image/);
   assert.match(await page.textContent('#preset-crumb'), /Image/);
-  // Steps sits next to Batch and Seed (no More settings collapsible).
+  // Steps is under the Settings twirl-down (batch 3).
   assert.equal(await page.locator('#more').count(), 0);
+  if (!(await page.$eval('#settings', (d) => d.open))) await page.click('#settings > summary');
   const steps = page.locator('#steps[data-param="steps"]');
   assert.equal(await steps.isVisible(), true);
   await steps.fill('99');

@@ -24,7 +24,28 @@
      "4x-UltraSharp.safetensors"
     ],
     "default": "RealESRGAN_x4plus.safetensors",
-    "label": "Model"
+    "label": "Model",
+    "control": "select",
+    "labels": {
+     "4x-UltraSharp.safetensors": "UltraSharp",
+     "RealESRGAN_x4plus.safetensors": "RealESRGAN x4plus"
+    }
+   },
+   "scale": {
+    "node": "13",
+    "input": "scale_by",
+    "type": "enum",
+    "options": [
+     0.5,
+     1.0
+    ],
+    "default": 0.5,
+    "label": "Scale",
+    "control": "seg",
+    "labels": {
+     "0.5": "2×",
+     "1": "4×"
+    }
    }
   },
   "maxBatch": 1,
@@ -99,7 +120,7 @@
     "chroma_subsampling": "auto",
     "codec": "none",
     "images": [
-     "2",
+     "13",
      0
     ],
     "audio": [
@@ -130,6 +151,20 @@
     "title": "Save Video",
     "cnr_id": "comfy-core",
     "ver": "0.10.0"
+   }
+  },
+  "13": {
+   "inputs": {
+    "upscale_method": "lanczos",
+    "scale_by": 0.5,
+    "image": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "ImageScaleBy",
+   "_meta": {
+    "title": "2x / 4x"
    }
   }
  }

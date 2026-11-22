@@ -54,9 +54,21 @@ export class ComfyClient extends EventTarget {
     this.ws = null;
     this.retry = 0;
     this.connected = false;
+    this.timer = 0;
+  }
+
+  /** Back from the background (or the network came back): reconnect now
+   *  instead of waiting out the back-off. A socket that is still open stays. */
+  reconnectNow() {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return false;
+    clearTimeout(this.timer);
+    this.retry = Math.max(1, this.retry); // counts as a reconnect: the queue resyncs from /history
+    this.connect();
+    return true;
   }
 
   connect() {
+    clearTimeout(this.timer);
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}${BASE}/ws?clientId=${encodeURIComponent(this.clientId)}`);
     this.ws = ws;
@@ -74,11 +86,12 @@ export class ComfyClient extends EventTarget {
       this.dispatchEvent(new CustomEvent('message', { detail: msg }));
     });
     ws.addEventListener('close', () => {
+      if (this.ws !== ws) return; // replaced by reconnectNow()
       this.connected = false;
       this.dispatchEvent(new CustomEvent('connection', { detail: { connected: false } }));
       // Reconnect with back-off (1s, 2s, 4s ... max 15s).
       const delay = Math.min(15000, 1000 * 2 ** this.retry++);
-      setTimeout(() => this.connect(), delay);
+      this.timer = setTimeout(() => this.connect(), delay);
     });
   }
 
@@ -96,6 +109,14 @@ export class ComfyClient extends EventTarget {
     const r = await fetch(`${BASE}/history/${encodeURIComponent(promptId)}`);
     if (!r.ok) return null;
     return (await r.json())[promptId] || null;
+  }
+
+  /** prompt_ids still pending or running in ComfyUI's queue (a Set), or null. */
+  async queueState() {
+    const r = await fetch(`${BASE}/queue`);
+    if (!r.ok) return null;
+    const q = await r.json();
+    return new Set([...(q.queue_running || []), ...(q.queue_pending || [])].map((e) => e?.[1]).filter(Boolean));
   }
 
   async deleteQueued(promptIds) {

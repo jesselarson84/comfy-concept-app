@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startStack, GPU_5080, ROOT } from './helpers.js';
-import { validatePreset, clampPresetValues, applyPresetParams, formatPrompt, checkInstalled, vramFit } from '../../app/js/lib/presets.js';
+import { validatePreset, clampPresetValues, applyPresetParams, formatPrompt, checkInstalled, vramFit, dropEmptyOptional } from '../../app/js/lib/presets.js';
 import { decideFreeBeforeQueue, workflowNeedMB, DEFAULT_MEMORY_CONFIG } from '../../app/js/lib/memory-profiles.js';
 import { splitOutputs, fileKind } from '../../app/js/lib/outputs.js';
 import { validateGraph } from '../../app/js/lib/builder.js';
@@ -18,13 +18,13 @@ const models = JSON.parse(fs.readFileSync(path.join(ROOT, 'test/fixtures/models.
 const j = (r) => r.json();
 const avail = (ws, id) => ws.find((w) => w.id === 'ai:' + id).availability;
 
-// The 16 AI Workflow manifest entries + the two TTS presets.
-const MANIFEST_16 = ['qwen-2512-t2i', 'qwen-edit-2509', 'z-image-turbo', 'klein-4b-t2i', 'klein-4b-edit', 'flux1-dev-gguf', 'flux1-schnell-gguf',
-  'seedvr2-7b-image', 'upscale-4x-model', 'seedvr2-3b-video', 'realesrgan-video', 'wan22-5b-ti2v', 'hunyuan3d-21', 'moge-mesh', 'pixal3d-trellis2', 'ace-step-15'];
+// The AI Workflow manifest entries (MoGe Image to Mesh removed in batch 3) + the two TTS presets.
+const MANIFEST_17 = ['qwen-2512-t2i', 'qwen-edit-2509', 'qwen-edit-2511', 'z-image-turbo', 'klein-4b-t2i', 'klein-4b-edit', 'klein-4b-inpaint', 'flux1-dev-gguf', 'flux1-schnell-gguf',
+  'seedvr2-7b-image', 'upscale-4x-model', 'seedvr2-3b-video', 'realesrgan-video', 'wan22-5b-ti2v', 'hunyuan3d-21', 'pixal3d-trellis2', 'ace-step-15'];
 
-test('every shipped AI preset validates: 16 manifest entries + Chatterbox + VibeVoice, prefixes under concept-app/', () => {
+test('every shipped AI preset validates: 17 manifest entries (MoGe out, Qwen Edit 2511 + Klein Inpaint in) + Chatterbox + VibeVoice, prefixes under concept-app/', () => {
   const ids = fs.readdirSync(AI_DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).sort();
-  assert.deepEqual(ids, [...MANIFEST_16, 'tts-chatterbox', 'tts-vibevoice'].sort());
+  assert.deepEqual(ids, [...MANIFEST_17, 'tts-chatterbox', 'tts-vibevoice'].sort());
   for (const id of ids) {
     const p = load(id);
     assert.ok(p.ok, `${id}: ${p.error}`);
@@ -36,8 +36,10 @@ test('every shipped AI preset validates: 16 manifest entries + Chatterbox + Vibe
 });
 
 test('every installed preset graph passes the builder validator against object_info (Wan/ACE only miss model files)', () => {
-  for (const id of [...MANIFEST_16, 'tts-chatterbox', 'tts-vibevoice']) {
-    const errs = validateGraph(load(id).workflow, objectInfo);
+  for (const id of [...MANIFEST_17, 'tts-chatterbox', 'tts-vibevoice']) {
+    const p = load(id);
+    // optional slots (Wan start frame, Chatterbox voice sample) are dropped when left empty
+    const errs = validateGraph(dropEmptyOptional(p.manifest, structuredClone(p.workflow)), objectInfo);
     if (id === 'wan22-5b-ti2v' || id === 'ace-step-15') assert.match(errs.join(' '), /needs download/, id);
     else assert.deepEqual(errs, [], id);
   }
@@ -75,11 +77,12 @@ test('checkInstalled: missing node class and missing model file give plain reaso
   assert.match(checkInstalled(wan.workflow, { objectInfo, models }, wan.manifest.files).reasons.join(), /needs download: wan2\.2_ti2v_5B_fp16\.safetensors/);
 });
 
-test('vramFit: ok / tight / slow RAM offload / unavailable', () => {
+test('vramFit: ok / tight / RAM offload / unavailable; only unavailable carries a label', () => {
   assert.equal(vramFit({ estMB: 3000, gpuTotalMB: 11264, ramFreeMB: 60000 }).status, 'ok');
   assert.equal(vramFit({ estMB: 9600, gpuTotalMB: 11264, ramFreeMB: 60000 }).status, 'tight');
   const off = vramFit({ estMB: 21500, gpuTotalMB: 11264, ramFreeMB: 60000, profileId: 'small' });
-  assert.equal(off.status, 'offload'); assert.equal(off.label, 'slow · RAM offload');
+  assert.equal(off.status, 'offload'); assert.equal(off.label, ''); assert.equal(off.reason, undefined);
+  assert.equal(vramFit({ estMB: 9600, gpuTotalMB: 11264, ramFreeMB: 60000 }).label, '');
   assert.equal(vramFit({ estMB: 21500, gpuTotalMB: 11264, ramFreeMB: 12000 }).status, 'unavailable');
 });
 
@@ -127,15 +130,16 @@ before(async () => {
 });
 after(() => s.close());
 
-test('/api/workflows: availability is computed live; Wan 2.2 5B and ACE-Step 1.5 need download; heavy = slow RAM offload on 11 GB', async () => {
+test('/api/workflows: availability is computed live; Wan 2.2 5B and ACE-Step 1.5 need download; heavy = RAM offload on 11 GB (no label)', async () => {
   const { workflows, comfy } = await j(await fetch(s.base + '/api/workflows?fresh=1'));
   assert.equal(comfy.reachable, true);
   assert.equal(avail(workflows, 'wan22-5b-ti2v').status, 'unavailable');
   assert.equal(avail(workflows, 'wan22-5b-ti2v').label, 'needs download');
   assert.equal(avail(workflows, 'ace-step-15').label, 'needs download');
   assert.match(avail(workflows, 'ace-step-15').reason, /acestep_v1\.5_turbo/);
-  for (const id of ['qwen-2512-t2i', 'qwen-edit-2509', 'z-image-turbo']) assert.equal(avail(workflows, id).label, 'slow · RAM offload', id);
-  for (const id of ['moge-mesh', 'upscale-4x-model', 'tts-chatterbox', 'tts-vibevoice']) assert.equal(avail(workflows, id).status, 'ok', id);
+  for (const id of ['qwen-2512-t2i', 'qwen-edit-2509', 'z-image-turbo']) { assert.equal(avail(workflows, id).status, 'offload', id); assert.equal(avail(workflows, id).label, '', id); }
+  assert.doesNotMatch(JSON.stringify(workflows.map((w) => w.availability)), /RAM offload|tight on|slow/);
+  for (const id of ['upscale-4x-model', 'tts-chatterbox', 'tts-vibevoice']) assert.equal(avail(workflows, id).status, 'ok', id);
   // the enum of upscale models only offers installed files
   const up = workflows.find((w) => w.id === 'ai:upscale-4x-model');
   for (const o of up.ai.params.model.options) assert.ok(models.upscale_models.includes(o), o);
@@ -178,4 +182,14 @@ test('a TTS preset runs end to end through /comfy/prompt and the audio file come
   const { files } = splitOutputs(h.outputs);
   assert.equal(fileKind(files[0]), 'audio');
   assert.match(files[0].subfolder, /^concept-app/);
+});
+
+test('batch 3: the MoGe Image to Mesh preset is gone, but Pixal3D still uses the MoGe nodes and model', () => {
+  assert.equal(fs.existsSync(path.join(AI_DIR, 'moge-mesh.json')), false);
+  const px = load('pixal3d-trellis2');
+  assert.ok(px.ok, px.error);
+  const classes = Object.values(px.workflow).map((n) => n.class_type);
+  for (const c of ['LoadMoGeModel', 'MoGeInference', 'MoGeGeometryToFOV']) assert.ok(classes.includes(c), c);
+  const loader = Object.values(px.workflow).find((n) => n.class_type === 'LoadMoGeModel');
+  assert.match(loader.inputs.model_name, /moge_2_vitl_normal_fp16/);
 });

@@ -98,14 +98,28 @@ export class HistoryStore {
 
   /** Newest session first, entries newest first. Entries made with a retired
    *  preset id come back mapped (copies; the stored data is never rewritten). */
-  list({ favoritesOnly = false } = {}) {
+  list({ favoritesOnly = false, only = null } = {}) {
     const bySession = new Map(this.data.sessions.map((s) => [s.id, { ...s, entries: [] }]));
     for (const e of this.data.entries) {
       if (favoritesOnly && !e.favorite) continue;
+      if (only && !only.has(e.id)) continue;
       bySession.get(e.sessionId)?.entries.push(migrateHistoryEntry(e));
     }
     return [...bySession.values()].filter((s) => s.entries.length).reverse().map((s) => ({ ...s, entries: s.entries.reverse() }));
   }
+
+  /** Removes entries (metadata only; files are deleted by the caller first). */
+  async remove(ids) {
+    const drop = new Set(ids);
+    const before = this.data.entries.length;
+    this.data.entries = this.data.entries.filter((e) => !drop.has(e.id));
+    const used = new Set(this.data.entries.map((e) => e.sessionId));
+    this.data.sessions = this.data.sessions.filter((s) => used.has(s.id) || s === this.data.sessions.at(-1));
+    if (this.data.entries.length !== before) await this.#save();
+    return before - this.data.entries.length;
+  }
+
+  get(id) { return this.data.entries.find((e) => e.id === id) || null; }
 
   pending() { return this.data.entries.filter((e) => e.promptId && !e.images.length && !e.files?.length && e.status !== 'error' && e.status !== 'cancelled'); }
 }
