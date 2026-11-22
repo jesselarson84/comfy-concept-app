@@ -17,7 +17,7 @@ const listen = (server) => new Promise((r) => server.listen(0, '127.0.0.1', () =
 // ram: { totalMB, freeMB }. env: e.g. { MEMORY_PROFILE: 'large' }. memoryFile: a memory-profiles.json path.
 export const GPU_2080TI = { name: 'NVIDIA GeForce RTX 2080 Ti', totalMB: 11264, freeMB: 4000 };
 export const GPU_5080 = { name: 'NVIDIA GeForce RTX 5080', totalMB: 16303, freeMB: 9000 };
-export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = false, gpu = GPU_2080TI, ram = { totalMB: 98204, freeMB: 60000 }, env = {}, memoryFile, ollamaOptions = {}, comfyOptions = {}, folderWorkflows = true, legacyFiles = false, data = null, drive = true, outputDir = null } = {}) {
+export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = false, gpu = GPU_2080TI, ram = { totalMB: 98204, freeMB: 60000 }, env = {}, memoryFile, ollamaOptions = {}, comfyOptions = {}, folderWorkflows = true, legacyFiles = false, data = null, drive = true, outputDir = null, appOptions = {} } = {}) {
   const mock = createMockComfy({ stepMs, ...comfyOptions });
   const mockPort = await listen(mock.server);
   const ollama = createMockOllama(ollamaOptions);
@@ -49,7 +49,8 @@ export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = 
   const hw = { gpu, ram };
   const runSmi = async () => { if (!hw.gpu) throw Object.assign(new Error('not found'), { code: 'ENOENT' }); return `${hw.gpu.name}, ${hw.gpu.totalMB}, ${hw.gpu.freeMB}\n`; };
   const fakeOs = { totalmem: () => hw.ram.totalMB * 1048576, freemem: () => hw.ram.freeMB * 1048576 };
-  const app = createApp(cfg, { runSmi, os: fakeOs, env });
+  // appOptions: test seams of createApp (e.g. { unlink } to simulate a locked file).
+  const app = createApp(cfg, { runSmi, os: fakeOs, env, ...appOptions });
   const port = await listen(app.server);
   const base = `http://127.0.0.1:${port}`;
   return {

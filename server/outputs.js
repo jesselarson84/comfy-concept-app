@@ -132,9 +132,10 @@ export function mergeOutputs(lists, { kind, offset = 0, limit = 120 } = {}) {
  * is deleted: type "output", plain name, safe relative subfolder at or below the
  * app's folder, no absolute paths or "..", no symlink (the file itself, the app
  * folder or any folder in between) leading out of it. Anything else is refused.
- * Returns { ok: true, deleted | missing } or { ok: false, reason }.
+ * Returns { ok: true, deleted | missing } or { ok: false, reason }. Never throws
+ * for a locked file: see unlinkWithRetry. unlink / wait are test seams.
  */
-export async function deleteAppFile(ref, { outputDir, outputSubfolder = 'concept-app' } = {}) {
+export async function deleteAppFile(ref, { outputDir, outputSubfolder = 'concept-app', unlink, wait } = {}) {
   const no = (reason) => ({ ok: false, reason });
   if (!outputDir) return no('ComfyUI output folder is unknown');
   if (!ref || typeof ref !== 'object') return no('No file given');
@@ -163,6 +164,28 @@ export async function deleteAppFile(ref, { outputDir, outputSubfolder = 'concept
   let real;
   try { real = await fs.promises.realpath(full); } catch (e) { return no(e.message); }
   if (!real.startsWith(appRoot + path.sep)) return no('Resolves outside the app\'s output folder');
-  await fs.promises.unlink(real);
-  return { ok: true, deleted: true };
+  return unlinkWithRetry(real, { unlink, wait });
+}
+
+// Windows keeps a file locked while any program has it open (a 3D viewer, Explorer's
+// preview pane, or ComfyUI itself still streaming it to a phone through /view). Deleting
+// it then fails with EBUSY or EPERM. The lock is usually gone within a second, so try a
+// few times with a growing pause (0.1 + 0.2 + 0.3 + 0.4 s = 1 s of waiting, 5 tries)
+// before giving up with a message that says what to do.
+export const LOCKED_CODES = new Set(['EBUSY', 'EPERM', 'EACCES']);
+export const IN_USE = 'File is in use (open in a viewer or another app), try again';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export async function unlinkWithRetry(file, { unlink = fs.promises.unlink, wait = sleep, tries = 5, stepMs = 100 } = {}) {
+  for (let i = 1; ; i++) {
+    try {
+      await unlink(file);
+      return { ok: true, deleted: true };
+    } catch (e) {
+      if (e?.code === 'ENOENT') return { ok: true, missing: true }; // gone in the meantime
+      if (!LOCKED_CODES.has(e?.code)) return { ok: false, reason: e?.message || String(e) };
+      if (i >= tries) return { ok: false, reason: IN_USE, code: e.code };
+      await wait(stepMs * i);
+    }
+  }
 }

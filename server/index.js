@@ -61,9 +61,13 @@ import { saveToDrive } from './drive.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
 
+// Written to stdout/stderr, which start-background.vbs sends to data\server.log.
+const log = (...a) => console.error(new Date().toISOString(), ...a);
+
 const json = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
 
-export function createApp(cfg, { runSmi, os, env } = {}) {
+export function createApp(cfg, opts = {}) {
+  const { runSmi, os, env } = opts;
   const appDir = path.join(ROOT, 'app');
   const workflows = new WorkflowStore(cfg.workflowsDir);
   const history = new HistoryStore(cfg.dataDir, { sessionGapMinutes: cfg.sessionGapMinutes });
@@ -201,19 +205,34 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
       if (!ids.length) return json(res, 400, { error: 'Nothing to delete' });
       const outputDir = await comfyOutputDir(cfg);
       if (!outputDir) return json(res, 409, { error: 'ComfyUI output folder is unknown, nothing was deleted' });
-      const deleted = [], refused = [];
-      for (const id of ids) {
-        const e = history.get(id);
-        if (!e) { refused.push({ id, reason: 'Not found' }); continue; }
-        let ok = true;
-        for (const f of [...(e.images || []), ...(e.files || [])]) {
-          const r = await deleteAppFile(f, { outputDir, outputSubfolder: cfg.outputSubfolder });
-          if (!r.ok) { ok = false; refused.push({ id, file: `${f.subfolder ? f.subfolder + '/' : ''}${f.filename}`, reason: r.reason }); }
+      const deleted = [], refused = [], trimmed = new Map();
+      // One locked or refused file never stops the rest of the selection, and
+      // History always ends up matching the disk: an entry whose files are all
+      // gone is removed; an entry with some files left keeps only those (finally,
+      // so this also happens if something unexpected throws half way).
+      try {
+        for (const id of ids) {
+          const e = history.get(id);
+          if (!e) { refused.push({ id, reason: 'Not found' }); continue; }
+          const left = { images: [], files: [] };
+          for (const key of ['images', 'files']) {
+            for (const f of e[key] || []) {
+              let r;
+              try { r = await deleteAppFile(f, { outputDir, outputSubfolder: cfg.outputSubfolder, unlink: opts.unlink, wait: opts.wait }); } catch (err) { r = { ok: false, reason: err.message }; }
+              if (r.ok) continue;
+              left[key].push(f);
+              refused.push({ id, file: `${f.subfolder ? f.subfolder + '/' : ''}${f.filename}`, reason: r.reason });
+            }
+          }
+          if (!left.images.length && !left.files.length) deleted.push(id);
+          else if (left.images.length + left.files.length < (e.images?.length || 0) + (e.files?.length || 0)) trimmed.set(id, left);
         }
-        if (ok) deleted.push(id);
+      } finally {
+        await history.remove(deleted);
+        for (const [id, left] of trimmed) await history.update(id, left);
+        await folders.forget(deleted);
       }
-      await history.remove(deleted);
-      await folders.forget(deleted);
+      if (refused.length) log(`delete: ${refused.length} not deleted (${refused.slice(0, 3).map((x) => `${x.file || x.id}: ${x.reason}`).join('; ')})`);
       return json(res, 200, { deleted, refused });
     }
     // ---- History folders (labels only) ----
@@ -331,6 +350,7 @@ export function createApp(cfg, { runSmi, os, env } = {}) {
       if (req.method === 'GET' && !path.extname(url.pathname)) { req.url = '/'; if (serveStatic(appDir, req, res)) return; }
       json(res, 404, { error: 'Not found' });
     } catch (e) {
+      if (!e.status || e.status >= 500) log(`${req.method} ${url.pathname} failed:`, e.stack || e.message);
       if (!res.headersSent) json(res, e.status || 500, { error: e.message });
       else res.end();
     }

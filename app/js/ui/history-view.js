@@ -176,9 +176,14 @@ export class HistoryView {
       if (r.refused.length) toast(`Deleted ${r.deleted.length}; ${r.refused.length} not deleted: ${r.refused[0].reason}`, 8000);
       else toast(`Deleted ${r.deleted.length}`);
       for (const id of r.deleted) for (const f of filesOf.get(id) || []) deleteThumb(thumbKey(f));
-    } catch (e) { toast(e.message, 8000); return; }
-    this.endSelect();
-    await this.load();
+    } catch (e) {
+      toast(e.message, 8000);
+    } finally {
+      // Even after an error the server may have deleted part of the selection:
+      // leave selection mode and show what is really there now.
+      this.endSelect();
+      await this.load();
+    }
   }
 
   /** ⋮ menu on the selection bar. */
