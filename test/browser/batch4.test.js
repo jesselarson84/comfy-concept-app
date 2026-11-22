@@ -53,6 +53,7 @@ test('B: the whole form is locked during a run and comes back exactly as it was'
   await page.fill('#prompt', 'a red mech in the rain');
   await app(() => { const d = document.querySelector('#settings'); d.open = true; });
   await setBatch(3);
+  await shot('default-view');
   const before = await formState();
   assert.equal(before.prompt, true); assert.equal(before.seedVal, false, 'random seed: the value box is off before the run');
   assert.ok(before.params.length >= 4 && before.params.every(Boolean));
