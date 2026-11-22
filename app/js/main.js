@@ -40,6 +40,7 @@ import { PresetChooser } from './ui/preset-chooser.js';
 import { afterBack } from './ui/overlay.js';
 import { RunLock, runProgress } from './lib/run-lock.js';
 import { lockControls } from './ui/form-lock.js';
+import { ConnectionBanner } from './lib/conn-banner.js';
 import { textEncoderOnCpu, tiledVaeDecode, hasVaeDecode, wantTiledDecode, isOom } from './lib/memory-options.js';
 
 const comfy = new ComfyClient();
@@ -413,7 +414,12 @@ $('#import-file').addEventListener('change', async (e) => {
 
 // ---- connection banner -------------------------------------------------------
 function banner(text) { const b = $('#banner'); b.textContent = text || ''; b.hidden = !text; }
-comfy.addEventListener('connection', (e) => banner(e.detail.connected ? '' : 'Not connected to ComfyUI - retrying…'));
+// Shown only when the socket has been down for 4 s (lib/conn-banner.js), so a
+// normal reconnect after switching apps never flashes it.
+const connBanner = new ConnectionBanner({ show: () => banner('Not connected to ComfyUI - retrying…'), hide: () => banner('') });
+comfy.addEventListener('connection', (e) => {
+  if (e.detail.connected) { banner(''); connBanner.connected(); } else connBanner.disconnected();
+});
 
 // ---- arriving from the Android share sheet (/share redirects here) --------
 async function handleLaunchParams() {
@@ -438,8 +444,21 @@ async function handleLaunchParams() {
 }
 
 // ---- back from the background: reconnect at once, then catch up -------------
+// Called on visibilitychange (visible), focus, pageshow, online and by the
+// Android app's onResume. Several of these fire together, so one resume per
+// second. After more than 10 s hidden the socket is replaced even if it still
+// says "open": Android often leaves a dead socket that only notices later.
+let hiddenAt = 0, lastResume = 0, started = false;
+document.addEventListener('visibilitychange', () => { if (document.hidden) hiddenAt = Date.now(); });
 function resume() {
-  comfy.reconnectNow();
+  if (!started || document.hidden) return; // start() opens the first socket itself
+  const now = Date.now();
+  if (now >= lastResume && now - lastResume < 1000) return; // (clock going back: never stuck)
+  lastResume = now;
+  const longAway = hiddenAt && now - hiddenAt > 10000;
+  hiddenAt = 0;
+  connBanner.resume();
+  comfy.reconnectNow({ force: longAway });
   queue.resync().then(() => paintThumbs());
 }
 
@@ -454,12 +473,14 @@ async function start() {
   const back = queue.restore();
   if (back.length) lock.started(back);
   comfy.connect();
+  started = true;
   paintThumbs();
   if (back.length) queue.resync();
   // The server watches workflows/ and pushes an event when it changes.
   try { new EventSource('/api/events').addEventListener('workflows', () => loadWorkflows(current?.id)); } catch {}
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { resume(); loadWorkflows(current?.id); } });
   window.addEventListener('pageshow', (e) => { if (e.persisted) resume(); });
+  window.addEventListener('focus', resume);
   window.addEventListener('online', resume);
   // Restored jobs belong to the old page's websocket client: poll /history for them.
   setInterval(() => { if (!document.hidden && queue.active.some((i) => i.restored)) queue.resync(); }, 4000);
@@ -468,4 +489,4 @@ async function start() {
 start();
 // For tests and poking around from DevTools.
 window.conceptApp = { maskSlot, modelThumbs, historyView, isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, chat, versions, picker, selectPreset, loadWorkflows,
-  lock, resume, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };
+  lock, resume, connBanner, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };

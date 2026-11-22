@@ -156,10 +156,18 @@ public class MainActivity extends Activity {
         handleIntent(intent, false);
     }
 
+    // Back in the foreground: ask the web app to reconnect its websocket at once
+    // (app/js/main.js resume(); does nothing on a page without it).
+    private static final String RESUME_JS =
+            "window.conceptApp&&window.conceptApp.resume&&window.conceptApp.resume();";
+
     @Override
     protected void onResume() {
         super.onResume();
-        if (web != null) web.onResume();
+        if (web != null) {
+            web.onResume();
+            web.evaluateJavascript(RESUME_JS, null);
+        }
     }
 
     @Override

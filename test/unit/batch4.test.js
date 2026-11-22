@@ -10,6 +10,7 @@ import { startStack } from './helpers.js';
 import http from 'node:http';
 import { deleteAppFile, unlinkWithRetry, IN_USE, outputDirFromArgv, comfyOutputDir, createOutputDirCache } from '../../server/outputs.js';
 import { createComfyProxy } from '../../server/proxy.js';
+import { ConnectionBanner, GRACE_MS } from '../../app/js/lib/conn-banner.js';
 
 function tempOutput() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-del4-'));
@@ -199,4 +200,47 @@ test('styles: every :active (press) rule excludes disabled controls', () => {
   const selectors = [...css.matchAll(/([^{}]+)\{/g)].flatMap((m) => m[1].split(',')).map((x) => x.trim()).filter((x) => x.includes(':active'));
   assert.ok(selectors.length >= 1);
   for (const sel of selectors) assert.match(sel, /:not\(:disabled\)/, `"${sel}" would also flash a disabled control`);
+});
+
+// ---- C. reconnect banner grace period -------------------------------------------------
+function fakeTimers() {
+  let now = 0, id = 0; const timers = new Map();
+  return {
+    setTimer: (f, ms) => { timers.set(++id, { f, at: now + ms }); return id; },
+    clearTimer: (t) => timers.delete(t),
+    advance(ms) { now += ms; for (const [k, t] of [...timers]) if (t.at <= now) { timers.delete(k); t.f(); } },
+    get pending() { return timers.size; },
+  };
+}
+test('banner: hidden during the 4 s grace period, shown after, hidden the moment the socket opens', () => {
+  const t = fakeTimers(); const log = [];
+  const b = new ConnectionBanner({ show: () => log.push('show'), hide: () => log.push('hide'), ...t });
+  assert.equal(GRACE_MS, 4000);
+  b.disconnected(); t.advance(3900);
+  assert.deepEqual(log, [], 'a reconnect within 4 s shows nothing');
+  b.connected(); t.advance(5000);
+  assert.deepEqual(log, [], 'reconnected in time: never shown');
+  b.disconnected(); b.disconnected(); // back-off retries keep failing
+  t.advance(1000); b.disconnected(); t.advance(3000);
+  assert.deepEqual(log, ['show'], 'shown once after 4 s down (not reset by each failed retry)');
+  b.disconnected(); t.advance(10000);
+  assert.deepEqual(log, ['show']);
+  b.connected();
+  assert.deepEqual(log, ['show', 'hide']);
+});
+test('banner: resume() hides it and starts a fresh grace period', () => {
+  const t = fakeTimers(); const log = [];
+  const b = new ConnectionBanner({ show: () => log.push('show'), hide: () => log.push('hide'), ...t });
+  b.disconnected(); t.advance(4000);
+  assert.deepEqual(log, ['show']);
+  b.resume(); // back in the foreground, reconnecting
+  assert.deepEqual(log, ['show', 'hide']);
+  t.advance(3000); b.connected();
+  assert.deepEqual(log, ['show', 'hide'], 'reconnect within the fresh grace period: no banner');
+  b.disconnected(); t.advance(3000); b.resume(); t.advance(3000);
+  assert.deepEqual(log, ['show', 'hide'], 'resume during a grace period restarts it');
+  t.advance(1000);
+  assert.deepEqual(log, ['show', 'hide', 'show']);
+  b.connected(); b.resume();
+  assert.equal(t.pending, 0, 'connected + resume arms nothing');
 });

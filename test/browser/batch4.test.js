@@ -109,3 +109,58 @@ test('B: viewer Reuse waits for the run to end', async () => {
   await app(() => window.conceptApp.viewer.close());
   await idle();
 });
+
+// ---- C. no "Not connected" banner after switching apps ---------------------------
+// Simulates Android: the page is hidden, its socket dies, then it is shown again.
+const setHidden = (hidden) => app((h) => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => h }); Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (h ? 'hidden' : 'visible') }); document.dispatchEvent(new Event('visibilitychange')); }, hidden);
+const bannerShown = () => app(() => !document.querySelector('#banner').hidden && /Not connected/.test(document.querySelector('#banner').textContent));
+
+test('C: back from another app: the dead socket is replaced at once and the banner never shows', async () => {
+  await page.waitForFunction(() => window.conceptApp.comfy.connected);
+  await setHidden(true);
+  await app(() => { window.__sockets = 0; const c = window.conceptApp.comfy; const old = c.ws; c.retry = 4; old.close(); }); // killed in the background
+  await page.waitForFunction(() => !window.conceptApp.comfy.connected);
+  await page.waitForTimeout(300);
+  await setHidden(false);
+  await page.waitForFunction(() => window.conceptApp.comfy.connected, null, { timeout: 3000 });
+  for (let i = 0; i < 6; i++) { assert.equal(await bannerShown(), false); await page.waitForTimeout(800); }
+});
+
+test('C: a socket that still says "open" after a long time away is replaced on resume', async () => {
+  await page.waitForTimeout(1100); // resume() runs at most once a second
+  const first = await app(() => { window.__old = window.conceptApp.comfy.ws; return window.__old.readyState; });
+  assert.equal(first, 1);
+  await setHidden(true);
+  // pretend the page was hidden 30 s ago
+  await app(() => { const real = Date.now; window.__realNow = real; Date.now = () => real() + 30000; });
+  await setHidden(false);
+  await page.waitForFunction(() => window.conceptApp.comfy.ws !== window.__old && window.conceptApp.comfy.connected, null, { timeout: 3000 });
+  assert.equal(await bannerShown(), false);
+  await app(() => { Date.now = window.__realNow; });
+});
+
+test('C: when ComfyUI really is gone the banner appears after the grace period, and resume restarts it', async () => {
+  await page.waitForTimeout(1100);
+  await app(() => {
+    const Real = window.WebSocket;
+    window.__RealWS = Real;
+    window.WebSocket = class extends Real { constructor(u, p) { super(window.__wsDown ? 'ws://127.0.0.1:9/' : u, p); } };
+    window.__wsDown = true;
+    window.conceptApp.comfy.ws.close();
+  });
+  await page.waitForFunction(() => !window.conceptApp.comfy.connected);
+  await page.waitForTimeout(2500);
+  assert.equal(await bannerShown(), false, 'not within the first seconds');
+  await page.waitForFunction(() => !document.querySelector('#banner').hidden, null, { timeout: 4000 });
+  assert.equal(await bannerShown(), true);
+  await shot('banner-after-grace');
+  await page.waitForTimeout(1100);
+  await app(() => window.conceptApp.resume());
+  assert.equal(await bannerShown(), false, 'resume hides it (fresh grace period)');
+  await app(() => { window.__wsDown = false; window.conceptApp.resume(); });
+  await page.waitForTimeout(1100);
+  await app(() => window.conceptApp.resume());
+  await page.waitForFunction(() => window.conceptApp.comfy.connected, null, { timeout: 4000 });
+  assert.equal(await bannerShown(), false);
+  await app(() => { window.WebSocket = window.__RealWS; });
+});
