@@ -192,3 +192,11 @@ test('API delete: output folder found through --base-directory (Comfy Desktop) a
     assert.equal(fs.existsSync(path.join(t.out, 'concept-app', 'two.png')), false);
   } finally { await st.close(); }
 });
+
+// ---- A. press effect only on enabled buttons -----------------------------------------
+test('styles: every :active (press) rule excludes disabled controls', () => {
+  const css = fs.readFileSync(new URL('../../app/styles.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const selectors = [...css.matchAll(/([^{}]+)\{/g)].flatMap((m) => m[1].split(',')).map((x) => x.trim()).filter((x) => x.includes(':active'));
+  assert.ok(selectors.length >= 1);
+  for (const sel of selectors) assert.match(sel, /:not\(:disabled\)/, `"${sel}" would also flash a disabled control`);
+});
