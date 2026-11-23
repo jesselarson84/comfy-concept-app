@@ -632,3 +632,7 @@ body.node-view-on #btn-canvas { margin-left: 0; }
 .picker-pop .ent-edit-wrap { display: grid; gap: 2px; }
 .picker-pop .place-row { gap: 8px; }
 .picker-pop .place-row select { flex: 1; min-width: 0; min-height: 34px; background: var(--c-input); color: var(--c-fg); border: 0; border-radius: var(--r-md); padding: 0 8px; }
+
+/* History: back arrow inside a folder / Favorites */
+.history-top .hist-back { margin-left: -4px; }
+.history-top .hist-back[hidden] { display: none; }
