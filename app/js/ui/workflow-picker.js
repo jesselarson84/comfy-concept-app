@@ -123,7 +123,9 @@ export class WorkflowPicker {
       this.editing = null; if (!this.pop.hidden) this.render();
     };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { this.editing = null; this.render(); } });
-    setTimeout(() => input.focus(), 0);
+    // Graph presets: no keyboard on open (found on the phone: it covered the
+    // "Move to" row); just bring both rows into view. Builder setups: rename only.
+    setTimeout(() => { if (w.graph) this.pop.querySelector('.ent-edit-wrap')?.scrollIntoView({ block: 'nearest' }); else input.focus(); }, 0);
     let confirmDel = false;
     const del = h('button.btn.text.danger-text', { type: 'button', onclick: async () => {
       if (!confirmDel) { confirmDel = true; del.textContent = 'Tap again to delete'; return; }
