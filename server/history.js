@@ -103,7 +103,7 @@ export class HistoryStore {
     for (const e of this.data.entries) {
       if (favoritesOnly && !e.favorite) continue;
       if (only && !only.has(e.id)) continue;
-      bySession.get(e.sessionId)?.entries.push(migrateHistoryEntry(e));
+      bySession.get(e.sessionId)?.entries.push(withViewVersion(migrateHistoryEntry(e)));
     }
     return [...bySession.values()].filter((s) => s.entries.length).reverse().map((s) => ({ ...s, entries: s.entries.reverse() }));
   }
@@ -122,6 +122,14 @@ export class HistoryStore {
   get(id) { return this.data.entries.find((e) => e.id === id) || null; }
 
   pending() { return this.data.entries.filter((e) => e.promptId && !e.images.length && !e.files?.length && e.status !== 'error' && e.status !== 'cancelled'); }
+}
+
+/** Copy of an entry whose images/files carry v (prompt id, else entry id) for /view URLs. */
+export function withViewVersion(e) {
+  const v = e.promptId || e.id;
+  if (!v) return e;
+  const s = (list) => (Array.isArray(list) ? list.map((i) => (i && i.v == null ? { ...i, v: String(v) } : i)) : list);
+  return { ...e, images: s(e.images), files: s(e.files) };
 }
 
 function sanitizeImages(list) {

@@ -1,12 +1,13 @@
 // thumb-cache.js - rendered 3D preview stills, kept in this device's IndexedDB
-// ("conceptThumbs" / "glb", key = "subfolder/filename", value = PNG Blob), so a
+// ("conceptThumbs" / "glb", key = "subfolder/filename#v", value = PNG Blob), so a
 // model is rendered once and never again. Nothing is written to the PC or to
 // ComfyUI's output folders. Falls back to memory when IndexedDB is unavailable.
 const DB = 'conceptThumbs', STORE = 'glb', VERSION = 1;
 const mem = new Map();
 let dbp = null;
 
-export const thumbKey = (f) => `${f?.subfolder || ''}/${f?.filename || ''}`;
+// v (prompt id / mtime, see comfy-client.js viewUrl): a reused file name is a new model.
+export const thumbKey = (f) => `${f?.subfolder || ''}/${f?.filename || ''}${f?.v ? '#' + f.v : ''}`;
 
 function open() {
   if (dbp) return dbp;

@@ -155,6 +155,10 @@ export class ComfyClient extends EventTarget {
 
 export function viewUrl(img, { thumb = false } = {}) {
   const q = new URLSearchParams({ filename: img.filename, subfolder: img.subfolder || '', type: img.type || 'output' });
+  // v: what makes this file unique (prompt id, or mtime for files found on disk).
+  // ComfyUI reuses a deleted file's name (its counter restarts after the highest
+  // file left), so filename alone can show a cached copy of an older image.
+  if (img.v != null && img.v !== '') q.set('v', String(img.v));
   if (thumb) q.set('preview', 'webp;70');
   return `${BASE}/view?${q}`;
 }

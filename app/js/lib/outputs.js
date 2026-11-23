@@ -25,6 +25,13 @@ export function splitOutputs(outputs = {}) {
   return { images: saved ? images.filter((i) => i.type !== 'temp') : images, files };
 }
 
+/** Adds v (cache key for /view URLs, see comfy-client.js viewUrl) to every output. */
+export function stampOutputs({ images = [], files = [] } = {}, v) {
+  if (v == null || v === '') return { images, files };
+  const s = (x) => ({ ...x, v: String(v) });
+  return { images: images.map(s), files: files.map(s) };
+}
+
 export function fileKind(f) {
   if (!f) return null;
   if (['3d', 'video', 'audio'].includes(f.kind)) return f.kind;
