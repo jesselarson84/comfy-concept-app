@@ -1,0 +1,126 @@
+{
+ "preset": {
+  "kind": "workflow",
+  "group": "Textures",
+  "label": "Upscale Texture",
+  "menuPath": "Textures/Upscale Texture",
+  "menuOrder": 1,
+  "source": "Comfy UI Ideas doc, Texture Cleanup and Prep: upscale (authored)",
+  "output": "image",
+  "description": "Enlarge a texture, logo or photo with an upscale model, then fit it to 1K / 2K / 4K on the long side. No AI repainting, so logos and text stay exact.",
+  "params": {
+   "model": {
+    "node": "2",
+    "input": "model_name",
+    "type": "enum",
+    "options": [
+     "4x-UltraSharp.safetensors",
+     "4x-ClearRealityV1.safetensors",
+     "4x_NMKD-Siax_200k.pth",
+     "4x_foolhardy_Remacri.pth",
+     "RealESRGAN_x4plus.safetensors"
+    ],
+    "labels": {
+     "4x-UltraSharp.safetensors": "UltraSharp",
+     "4x-ClearRealityV1.safetensors": "ClearReality",
+     "4x_NMKD-Siax_200k.pth": "NMKD-Siax",
+     "4x_foolhardy_Remacri.pth": "Remacri",
+     "RealESRGAN_x4plus.safetensors": "RealESRGAN x4plus"
+    },
+    "default": "4x-UltraSharp.safetensors",
+    "label": "Model",
+    "control": "select",
+    "info": "Which upscale model. UltraSharp and Remacri keep edges crisp (logos, flat graphics); ClearReality and NMKD-Siax suit photos and scans; RealESRGAN is an all-rounder."
+   },
+   "size": {
+    "node": "4",
+    "input": "longer_edge",
+    "type": "enum",
+    "options": [
+     1024,
+     2048,
+     4096
+    ],
+    "default": 2048,
+    "label": "Texture size",
+    "control": "seg",
+    "labels": {
+     "1024": "1K",
+     "2048": "2K",
+     "4096": "4K"
+    },
+    "info": "Size of the long side of the result. The model enlarges 4x, then the picture is fitted to this size (the shape is kept)."
+   }
+  },
+  "maxBatch": 4,
+  "vram": {
+   "estMB": 1800,
+   "basis": "67 MB upscale model; 4x activations on a 1K input"
+  },
+  "info": {
+   "image": "The texture, logo or photo to enlarge. Nothing is repainted, so it stays faithful to the original."
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "image": "example.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Texture #image"
+   }
+  },
+  "2": {
+   "inputs": {
+    "model_name": "4x-UltraSharp.safetensors"
+   },
+   "class_type": "UpscaleModelLoader",
+   "_meta": {
+    "title": "Load Upscale Model"
+   }
+  },
+  "3": {
+   "inputs": {
+    "upscale_model": [
+     "2",
+     0
+    ],
+    "image": [
+     "1",
+     0
+    ]
+   },
+   "class_type": "ImageUpscaleWithModel",
+   "_meta": {
+    "title": "Upscale 4x (model)"
+   }
+  },
+  "4": {
+   "inputs": {
+    "images": [
+     "3",
+     0
+    ],
+    "longer_edge": 2048
+   },
+   "class_type": "ResizeImagesByLongerEdge",
+   "_meta": {
+    "title": "Fit to texture size"
+   }
+  },
+  "5": {
+   "inputs": {
+    "filename_prefix": "concept-app/texture_upscale",
+    "images": [
+     "4",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save Image"
+   }
+  }
+ }
+}

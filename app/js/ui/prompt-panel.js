@@ -157,6 +157,8 @@ export class PromptPanel {
     e.msg.classList.toggle('warn', !!msgs.length);
     this.#staticInfo();
     show(e.prompt.closest('.field'), !!c?.prompt.length || !c);
+    // Workflows with a built-in instruction: shown as the placeholder; an empty prompt uses it.
+    e.prompt.placeholder = wf?.ai?.promptDefault ? `${wf.ai.promptDefault} (or type your own)` : 'Describe the concept…';
     show(e.negRow, !!c?.negative.length);
     e.negative.hidden = !(c?.negative.length && s.negOn);
     show(e.strengthField, !!c?.strength.length);

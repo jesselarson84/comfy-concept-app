@@ -1,4 +1,4 @@
-﻿// Batch 1 follow-up names: "Comfy UI" save folder, "ComfyUI canvas" menu item,
+// Batch 1 follow-up names: "Comfy UI" save folder, "ComfyUI canvas" menu item,
 // no "App presets" section, ratio dropdown in the page.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,7 +28,7 @@ test('ComfyUI canvas is the node view toggle in the top bar (batch 4; was the me
 test('picker has no App presets section; aspect is a dropdown next to the orientation toggle; SW cache bumped', async () => {
   const { SECTIONS, sectionOf } = await import('../../app/js/ui/workflow-picker.js').catch(() => ({}));
   if (SECTIONS) {
-    assert.deepEqual(SECTIONS.map((x) => x.key), ['3D', 'Image', 'Video', 'Audio', 'My presets']);
+    assert.deepEqual(SECTIONS.map((x) => x.key), ['3D', 'Image', 'Video', 'Audio', 'Textures', 'Concept', 'VFX', 'My presets']);
     assert.equal(sectionOf({ id: 'my-import' }), 'My presets');
   } else assert.doesNotMatch(read('app/js/ui/workflow-picker.js'), /App presets/);
   const html = read('app/index.html');
@@ -36,7 +36,7 @@ test('picker has no App presets section; aspect is a dropdown next to the orient
   assert.doesNotMatch(html, /data-ratio=/);
   assert.match(html, /data-orient="portrait"[\s\S]*data-orient="landscape"/);
   assert.match(html, /id="aspect-size"/);
-  assert.match(read('app/sw.js'), /const VERSION = 'shell-v19';/); // node view reload + History back arrow
+  assert.match(read('app/sw.js'), /const VERSION = 'shell-v20';/); // AI Workflows: picker tabs
   assert.match(read('app/sw.js'), /'\/js\/lib\/resolution\.js'/);
   assert.match(read('app/sw.js'), /'\/js\/lib\/preset-choice\.js'/);
   assert.match(read('app/sw.js'), /'\/js\/lib\/legacy-presets\.js'/);

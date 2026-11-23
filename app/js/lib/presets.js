@@ -26,6 +26,13 @@
 import { clampParams } from './actions.js';
 
 export const GROUPS = ['3D', 'Image', 'Video', 'Audio'];
+// Two kinds of preset (picker tabs "Models" / "Workflows", ComfyUI right-click
+// "AI Models" / "AI Workflows"): a model preset runs one model as it comes; a
+// workflow preset is a multi-step pipeline for a task (manifest kind: "workflow"),
+// grouped by task instead of by output.
+export const KINDS = ['model', 'workflow'];
+export const WORKFLOW_GROUPS = ['Textures', 'Concept', 'VFX'];
+export const groupsFor = (kind) => (kind === 'workflow' ? WORKFLOW_GROUPS : GROUPS);
 // Sub sections of a group in the picker (batch 4), in this order. A preset is in
 // one when its menuPath is "<group>/<sub section>/<short name>", e.g.
 // "Image/Text to Image/Z-Image Turbo"; the short name is what the row shows
@@ -50,7 +57,10 @@ export function validatePreset(id, file) {
   if (!m || typeof m !== 'object') return fail('missing "preset" manifest');
   if (!wf || typeof wf !== 'object' || !Object.keys(wf).length) return fail('missing "workflow" graph');
   for (const [k, n] of Object.entries(wf)) if (!k.startsWith('_') && (!n || typeof n.class_type !== 'string' || typeof n.inputs !== 'object')) return fail(`workflow node ${k} is not API format`);
-  if (!GROUPS.includes(m.group)) return fail(`group must be one of ${GROUPS.join(', ')}`);
+  const kind = m.kind ?? 'model';
+  if (!KINDS.includes(kind)) return fail(`kind must be one of ${KINDS.join(', ')}`);
+  if (!groupsFor(kind).includes(m.group)) return fail(`group must be one of ${groupsFor(kind).join(', ')}`);
+  if (m.promptDefault !== undefined && typeof m.promptDefault !== 'string') return fail('promptDefault must be a string');
   if (typeof m.label !== 'string' || !m.label.trim()) return fail('manifest needs a label');
   if (!OUTPUTS.includes(m.output)) return fail(`output must be one of ${OUTPUTS.join(', ')}`);
   const params = {};
@@ -102,6 +112,7 @@ export function validatePreset(id, file) {
   return {
     ok: true, id,
     manifest: {
+      kind, promptDefault: m.promptDefault || '',
       group: m.group, label: m.label.trim(), menuPath: m.menuPath || `${m.group}/${m.label}`, source: String(m.source || ''),
       ...menuParts(m.group, m.menuPath, m.label.trim()), menuOrder: Number.isFinite(m.menuOrder) ? m.menuOrder : 999,
       output: m.output, description: String(m.description || ''), params, size: m.size || null,
@@ -262,6 +273,8 @@ export function applyPresetParams(manifest, workflow, params) {
 
 /** TTS engines want "[1] text": add the speaker tag when the user typed plain text. */
 export function formatPrompt(manifest, text) {
+  // Workflows with a built-in instruction (manifest promptDefault): an empty prompt uses it.
+  if (manifest?.promptDefault && (typeof text !== 'string' || !text.trim())) text = manifest.promptDefault;
   const f = manifest?.promptFormat;
   if (!f || typeof text !== 'string' || !text.trim()) return text;
   if (f.unless && new RegExp(f.unless).test(text)) return text;

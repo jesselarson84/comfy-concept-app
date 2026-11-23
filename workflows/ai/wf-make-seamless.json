@@ -1,0 +1,1014 @@
+{
+ "preset": {
+  "kind": "workflow",
+  "group": "Textures",
+  "label": "Make Seamless",
+  "menuPath": "Textures/Make Seamless",
+  "menuOrder": 3,
+  "source": "Comfy UI Ideas doc, Texture Cleanup and Prep: seamless tiling (half offset + seam inpaint, authored)",
+  "output": "image",
+  "description": "Makes a texture tile: shifts it by half so the edges meet in the middle, repaints that cross with Z-Image Turbo, and shifts it back. The rest of the picture is untouched.",
+  "promptDefault": "seamless continuous texture, same material, same pattern and scale, flat lighting",
+  "params": {
+   "size": {
+    "node": "8",
+    "input": "longer_edge",
+    "type": "enum",
+    "options": [
+     1024,
+     2048
+    ],
+    "default": 1024,
+    "label": "Working size",
+    "control": "seg",
+    "labels": {
+     "1024": "1K",
+     "2048": "2K"
+    },
+    "info": "Size of the long side while the seam is repainted, and of the result. 2K keeps more detail but takes about four times as long."
+   },
+   "blend": {
+    "node": "42",
+    "input": "denoise",
+    "type": "number",
+    "min": 0.5,
+    "max": 1,
+    "step": 0.05,
+    "default": 0.8,
+    "label": "Seam repaint",
+    "control": "slider",
+    "info": "How much the seam cross is repainted. 0.8 blends the join while keeping the texture there. Lower keeps more of the original but can leave a faint line; 1 repaints the cross completely (good for big shapes like bricks, can come out flatter on fine noisy textures)."
+   },
+   "steps": {
+    "node": "42",
+    "input": "steps",
+    "type": "int",
+    "min": 4,
+    "max": 12,
+    "default": 8,
+    "label": "Steps",
+    "control": "stepper",
+    "info": "Refinement passes for the seam. Z-Image Turbo is made for about 8."
+   }
+  },
+  "maxBatch": 4,
+  "vram": {
+   "estMB": 15800,
+   "basis": "Z-Image Turbo bf16 + 2 GB lite ControlNet patch (inpaint) at the working size"
+  },
+  "files": [
+   {
+    "folder": "model_patches",
+    "file": "Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors"
+   }
+  ],
+  "info": {
+   "image": "The texture to make tileable. Square power-of-two textures work best; other shapes are kept.",
+   "prompt": "Optional: what the material is (\"mossy cobblestones\"). Helps the repainted seam match. Leave empty for a neutral instruction."
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "unet_name": "z_image_turbo_bf16.safetensors",
+    "weight_dtype": "default"
+   },
+   "class_type": "UNETLoader",
+   "_meta": {
+    "title": "Load Diffusion Model"
+   }
+  },
+  "2": {
+   "inputs": {
+    "clip_name": "qwen_3_4b.safetensors",
+    "type": "lumina2",
+    "device": "default"
+   },
+   "class_type": "CLIPLoader",
+   "_meta": {
+    "title": "Load CLIP"
+   }
+  },
+  "3": {
+   "inputs": {
+    "vae_name": "ae.safetensors"
+   },
+   "class_type": "VAELoader",
+   "_meta": {
+    "title": "Load VAE"
+   }
+  },
+  "4": {
+   "inputs": {
+    "shift": 3,
+    "sampling": "flow",
+    "model": [
+     "1",
+     0
+    ]
+   },
+   "class_type": "ModelSamplingAuraFlow",
+   "_meta": {
+    "title": "ModelSamplingAuraFlow"
+   }
+  },
+  "5": {
+   "inputs": {
+    "text": "",
+    "clip": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Describe the material #prompt"
+   }
+  },
+  "6": {
+   "inputs": {
+    "conditioning": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "ConditioningZeroOut",
+   "_meta": {
+    "title": "Conditioning Zero Out"
+   }
+  },
+  "7": {
+   "inputs": {
+    "image": "example.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Texture #image"
+   }
+  },
+  "8": {
+   "inputs": {
+    "images": [
+     "7",
+     0
+    ],
+    "longer_edge": 1024
+   },
+   "class_type": "ResizeImagesByLongerEdge",
+   "_meta": {
+    "title": "Working size"
+   }
+  },
+  "9": {
+   "inputs": {
+    "image": [
+     "8",
+     0
+    ]
+   },
+   "class_type": "GetImageSize",
+   "_meta": {
+    "title": "Size"
+   }
+  },
+  "10": {
+   "inputs": {
+    "expression": "a // 16 * 16",
+    "values.a": [
+     "9",
+     0
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Width, multiple of 16"
+   }
+  },
+  "11": {
+   "inputs": {
+    "expression": "a // 16 * 16",
+    "values.a": [
+     "9",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Height, multiple of 16"
+   }
+  },
+  "12": {
+   "inputs": {
+    "image": [
+     "8",
+     0
+    ],
+    "upscale_method": "lanczos",
+    "width": [
+     "10",
+     1
+    ],
+    "height": [
+     "11",
+     1
+    ],
+    "crop": "center"
+   },
+   "class_type": "ImageScale",
+   "_meta": {
+    "title": "Snap to multiple of 16"
+   }
+  },
+  "13": {
+   "inputs": {
+    "image": [
+     "12",
+     0
+    ]
+   },
+   "class_type": "GetImageSize",
+   "_meta": {
+    "title": "Seam: image size"
+   }
+  },
+  "14": {
+   "inputs": {
+    "expression": "a",
+    "values.a": [
+     "13",
+     0
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Seam: width"
+   }
+  },
+  "15": {
+   "inputs": {
+    "expression": "a",
+    "values.a": [
+     "13",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Seam: height"
+   }
+  },
+  "16": {
+   "inputs": {
+    "expression": "a // 2",
+    "values.a": [
+     "14",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Seam: half width"
+   }
+  },
+  "17": {
+   "inputs": {
+    "expression": "a // 2",
+    "values.a": [
+     "15",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Seam: half height"
+   }
+  },
+  "18": {
+   "inputs": {
+    "expression": "a - b",
+    "values.a": [
+     "14",
+     1
+    ],
+    "values.b": [
+     "16",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Seam: shift half: rest of width"
+   }
+  },
+  "19": {
+   "inputs": {
+    "expression": "a - b",
+    "values.a": [
+     "15",
+     1
+    ],
+    "values.b": [
+     "17",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Seam: shift half: rest of height"
+   }
+  },
+  "20": {
+   "inputs": {
+    "image": [
+     "12",
+     0
+    ],
+    "width": [
+     "16",
+     1
+    ],
+    "height": [
+     "17",
+     1
+    ],
+    "x": 0,
+    "y": 0
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Seam: shift half: top left"
+   }
+  },
+  "21": {
+   "inputs": {
+    "image": [
+     "12",
+     0
+    ],
+    "width": [
+     "18",
+     1
+    ],
+    "height": [
+     "17",
+     1
+    ],
+    "x": [
+     "16",
+     1
+    ],
+    "y": 0
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Seam: shift half: top right"
+   }
+  },
+  "22": {
+   "inputs": {
+    "image": [
+     "12",
+     0
+    ],
+    "width": [
+     "16",
+     1
+    ],
+    "height": [
+     "19",
+     1
+    ],
+    "x": 0,
+    "y": [
+     "17",
+     1
+    ]
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Seam: shift half: bottom left"
+   }
+  },
+  "23": {
+   "inputs": {
+    "image": [
+     "12",
+     0
+    ],
+    "width": [
+     "18",
+     1
+    ],
+    "height": [
+     "19",
+     1
+    ],
+    "x": [
+     "16",
+     1
+    ],
+    "y": [
+     "17",
+     1
+    ]
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Seam: shift half: bottom right"
+   }
+  },
+  "24": {
+   "inputs": {
+    "image1": [
+     "23",
+     0
+    ],
+    "direction": "right",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "22",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Seam: shift half: top row"
+   }
+  },
+  "25": {
+   "inputs": {
+    "image1": [
+     "21",
+     0
+    ],
+    "direction": "right",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "20",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Seam: shift half: bottom row"
+   }
+  },
+  "26": {
+   "inputs": {
+    "image1": [
+     "24",
+     0
+    ],
+    "direction": "down",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "25",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Seam: shift half: shifted"
+   }
+  },
+  "27": {
+   "inputs": {
+    "expression": "max(32, min(a, b) // 12 // 16 * 16)",
+    "values.a": [
+     "14",
+     1
+    ],
+    "values.b": [
+     "15",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Seam: band width"
+   }
+  },
+  "28": {
+   "inputs": {
+    "expression": "a - b // 2",
+    "values.a": [
+     "18",
+     1
+    ],
+    "values.b": [
+     "27",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Seam: band x"
+   }
+  },
+  "29": {
+   "inputs": {
+    "expression": "a - b // 2",
+    "values.a": [
+     "19",
+     1
+    ],
+    "values.b": [
+     "27",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Seam: band y"
+   }
+  },
+  "30": {
+   "inputs": {
+    "value": 0,
+    "width": [
+     "14",
+     1
+    ],
+    "height": [
+     "15",
+     1
+    ]
+   },
+   "class_type": "SolidMask",
+   "_meta": {
+    "title": "Seam: empty mask"
+   }
+  },
+  "31": {
+   "inputs": {
+    "value": 1,
+    "width": [
+     "27",
+     1
+    ],
+    "height": [
+     "15",
+     1
+    ]
+   },
+   "class_type": "SolidMask",
+   "_meta": {
+    "title": "Seam: vertical band"
+   }
+  },
+  "32": {
+   "inputs": {
+    "value": 1,
+    "width": [
+     "14",
+     1
+    ],
+    "height": [
+     "27",
+     1
+    ]
+   },
+   "class_type": "SolidMask",
+   "_meta": {
+    "title": "Seam: horizontal band"
+   }
+  },
+  "33": {
+   "inputs": {
+    "destination": [
+     "30",
+     0
+    ],
+    "source": [
+     "31",
+     0
+    ],
+    "x": [
+     "28",
+     1
+    ],
+    "y": 0,
+    "operation": "or"
+   },
+   "class_type": "MaskComposite",
+   "_meta": {
+    "title": "Seam: + vertical"
+   }
+  },
+  "34": {
+   "inputs": {
+    "destination": [
+     "33",
+     0
+    ],
+    "source": [
+     "32",
+     0
+    ],
+    "x": 0,
+    "y": [
+     "29",
+     1
+    ],
+    "operation": "or"
+   },
+   "class_type": "MaskComposite",
+   "_meta": {
+    "title": "Seam: cross mask"
+   }
+  },
+  "35": {
+   "inputs": {
+    "mask": [
+     "34",
+     0
+    ]
+   },
+   "class_type": "MaskToImage",
+   "_meta": {
+    "title": "Seam: mask to image"
+   }
+  },
+  "36": {
+   "inputs": {
+    "image": [
+     "35",
+     0
+    ],
+    "blur_radius": 31,
+    "sigma": 10
+   },
+   "class_type": "ImageBlur",
+   "_meta": {
+    "title": "Seam: soften edge"
+   }
+  },
+  "37": {
+   "inputs": {
+    "image": [
+     "36",
+     0
+    ],
+    "channel": "red"
+   },
+   "class_type": "ImageToMask",
+   "_meta": {
+    "title": "Seam: soft mask"
+   }
+  },
+  "38": {
+   "inputs": {
+    "pixels": [
+     "26",
+     0
+    ],
+    "vae": [
+     "3",
+     0
+    ]
+   },
+   "class_type": "VAEEncode",
+   "_meta": {
+    "title": "Seam: encode"
+   }
+  },
+  "39": {
+   "inputs": {
+    "samples": [
+     "38",
+     0
+    ],
+    "mask": [
+     "34",
+     0
+    ]
+   },
+   "class_type": "SetLatentNoiseMask",
+   "_meta": {
+    "title": "Seam: repaint only the cross"
+   }
+  },
+  "40": {
+   "inputs": {
+    "name": "Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors"
+   },
+   "class_type": "ModelPatchLoader",
+   "_meta": {
+    "title": "Seam: load ControlNet (inpaint)"
+   }
+  },
+  "41": {
+   "inputs": {
+    "model": [
+     "4",
+     0
+    ],
+    "model_patch": [
+     "40",
+     0
+    ],
+    "vae": [
+     "3",
+     0
+    ],
+    "strength": 1,
+    "inpaint_image": [
+     "26",
+     0
+    ],
+    "mask": [
+     "34",
+     0
+    ],
+    "start_percent": 0,
+    "end_percent": 1
+   },
+   "class_type": "ZImageFunControlnet",
+   "_meta": {
+    "title": "Seam: ControlNet inpaint"
+   }
+  },
+  "42": {
+   "inputs": {
+    "seed": 0,
+    "steps": 8,
+    "cfg": 1,
+    "sampler_name": "res_multistep",
+    "scheduler": "simple",
+    "denoise": 0.8,
+    "model": [
+     "41",
+     0
+    ],
+    "positive": [
+     "5",
+     0
+    ],
+    "negative": [
+     "6",
+     0
+    ],
+    "latent_image": [
+     "39",
+     0
+    ]
+   },
+   "class_type": "KSampler",
+   "_meta": {
+    "title": "Seam fix sampler"
+   }
+  },
+  "43": {
+   "inputs": {
+    "samples": [
+     "42",
+     0
+    ],
+    "vae": [
+     "3",
+     0
+    ]
+   },
+   "class_type": "VAEDecode",
+   "_meta": {
+    "title": "Seam: decode"
+   }
+  },
+  "44": {
+   "inputs": {
+    "destination": [
+     "26",
+     0
+    ],
+    "source": [
+     "43",
+     0
+    ],
+    "x": 0,
+    "y": 0,
+    "resize_source": false,
+    "mask": [
+     "37",
+     0
+    ]
+   },
+   "class_type": "ImageCompositeMasked",
+   "_meta": {
+    "title": "Seam: blend repaint in"
+   }
+  },
+  "45": {
+   "inputs": {
+    "expression": "a - b",
+    "values.a": [
+     "14",
+     1
+    ],
+    "values.b": [
+     "18",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Seam: shift back: rest of width"
+   }
+  },
+  "46": {
+   "inputs": {
+    "expression": "a - b",
+    "values.a": [
+     "15",
+     1
+    ],
+    "values.b": [
+     "19",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Seam: shift back: rest of height"
+   }
+  },
+  "47": {
+   "inputs": {
+    "image": [
+     "44",
+     0
+    ],
+    "width": [
+     "18",
+     1
+    ],
+    "height": [
+     "19",
+     1
+    ],
+    "x": 0,
+    "y": 0
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Seam: shift back: top left"
+   }
+  },
+  "48": {
+   "inputs": {
+    "image": [
+     "44",
+     0
+    ],
+    "width": [
+     "45",
+     1
+    ],
+    "height": [
+     "19",
+     1
+    ],
+    "x": [
+     "18",
+     1
+    ],
+    "y": 0
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Seam: shift back: top right"
+   }
+  },
+  "49": {
+   "inputs": {
+    "image": [
+     "44",
+     0
+    ],
+    "width": [
+     "18",
+     1
+    ],
+    "height": [
+     "46",
+     1
+    ],
+    "x": 0,
+    "y": [
+     "19",
+     1
+    ]
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Seam: shift back: bottom left"
+   }
+  },
+  "50": {
+   "inputs": {
+    "image": [
+     "44",
+     0
+    ],
+    "width": [
+     "45",
+     1
+    ],
+    "height": [
+     "46",
+     1
+    ],
+    "x": [
+     "18",
+     1
+    ],
+    "y": [
+     "19",
+     1
+    ]
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Seam: shift back: bottom right"
+   }
+  },
+  "51": {
+   "inputs": {
+    "image1": [
+     "50",
+     0
+    ],
+    "direction": "right",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "49",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Seam: shift back: top row"
+   }
+  },
+  "52": {
+   "inputs": {
+    "image1": [
+     "48",
+     0
+    ],
+    "direction": "right",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "47",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Seam: shift back: bottom row"
+   }
+  },
+  "53": {
+   "inputs": {
+    "image1": [
+     "51",
+     0
+    ],
+    "direction": "down",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "52",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Seam: shift back: shifted"
+   }
+  },
+  "54": {
+   "inputs": {
+    "filename_prefix": "concept-app/texture_seamless",
+    "images": [
+     "53",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save Image"
+   }
+  }
+ }
+}

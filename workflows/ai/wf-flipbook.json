@@ -1,0 +1,397 @@
+{
+ "preset": {
+  "kind": "workflow",
+  "group": "VFX",
+  "label": "Flipbook Sheet",
+  "menuPath": "VFX/Flipbook Sheet",
+  "menuOrder": 1,
+  "source": "Comfy UI Ideas doc, VFX Sprites and Grunge Maps: flipbook sprite sheets, route 1 (Wan video, frames tiled). Graph from the Wan 2.2 5B preset.",
+  "output": "image",
+  "description": "Smoke, fire, dust or sparks as a flipbook texture sheet for Unreal particle materials: a short Wan 2.2 clip on black, evenly spaced frames tiled into a grid. Use it additive, or remove the black.",
+  "promptFormat": {
+   "template": "Close-up VFX element: {text}. Large, filling most of the frame, it grows and changes shape over time, full life cycle from start to end. Isolated on a pure black background, centered, static locked-off camera, no camera movement."
+  },
+  "size": {
+   "base": [
+    704,
+    704
+   ],
+   "min": 480,
+   "max": 1024,
+   "multiple": 32
+  },
+  "params": {
+   "grid": {
+    "node": "70",
+    "input": "num_frames",
+    "also": [
+     {
+      "node": "72",
+      "input": "values.a"
+     }
+    ],
+    "type": "enum",
+    "options": [
+     16,
+     36,
+     64
+    ],
+    "default": 16,
+    "label": "Sheet",
+    "control": "seg",
+    "labels": {
+     "16": "4Ã—4",
+     "36": "6Ã—6",
+     "64": "8Ã—8"
+    },
+    "info": "How many frames go into the sheet (a square grid). More frames play smoother but each one is smaller in the texture."
+   },
+   "cell": {
+    "node": "73",
+    "input": "cell_width",
+    "also": [
+     {
+      "node": "73",
+      "input": "cell_height"
+     }
+    ],
+    "type": "enum",
+    "options": [
+     128,
+     256,
+     512
+    ],
+    "default": 256,
+    "label": "Frame size",
+    "control": "seg",
+    "labels": {
+     "128": "128",
+     "256": "256",
+     "512": "512"
+    },
+    "format": "px",
+    "info": "Size of each frame in the sheet. 4Ã—4 at 256 gives a 1024 sheet; 8Ã—8 at 256 a 2048 sheet."
+   },
+   "frames": {
+    "node": "55",
+    "input": "length",
+    "type": "int",
+    "min": 33,
+    "max": 121,
+    "default": 81,
+    "label": "Length",
+    "control": "slider",
+    "step": 4,
+    "format": "frames",
+    "info": "Length of the clip the frames are picked from. Longer clips show more of the motion (a whole puff of smoke) but take longer to make."
+   },
+   "steps": {
+    "node": "3",
+    "input": "steps",
+    "type": "int",
+    "min": 10,
+    "max": 30,
+    "default": 20,
+    "label": "Steps",
+    "control": "stepper",
+    "info": "How many refinement passes. 20 is the default for Wan 2.2 5B; fewer is faster but rougher."
+   },
+   "cfg": {
+    "node": "3",
+    "input": "cfg",
+    "type": "number",
+    "min": 1,
+    "max": 8,
+    "step": 0.5,
+    "default": 5,
+    "label": "Guidance",
+    "control": "slider",
+    "info": "How strictly the video follows the prompt and avoids the negative prompt. 5 is the default."
+   },
+   "shift": {
+    "node": "48",
+    "input": "shift",
+    "type": "number",
+    "min": 1,
+    "max": 12,
+    "step": 0.5,
+    "default": 8,
+    "label": "Shift",
+    "control": "slider",
+    "info": "How the model splits its effort between the overall layout and motion and the fine detail. 8 is this preset's default; leave it unless you are experimenting."
+   }
+  },
+  "maxBatch": 1,
+  "vram": {
+   "estMB": 14000,
+   "basis": "weights: 10 GB fp16 5B model + 6.7 GB umt5 fp8 (swapped) + video latents (Comfy docs: fits 8 GB with offload)"
+  },
+  "optional": [
+   {
+    "node": "60",
+    "drop": [
+     {
+      "node": "55",
+      "input": "start_image"
+     }
+    ]
+   }
+  ],
+  "info": {
+   "prompt": "The effect: \"thick white smoke puff rising and dissipating\", \"campfire flames\", \"dust burst\". Black background and a still camera are added for you.",
+   "image": "Optional first frame, e.g. a still of the effect to animate."
+  }
+ },
+ "workflow": {
+  "3": {
+   "inputs": {
+    "seed": 898471028164125,
+    "steps": 20,
+    "cfg": 5,
+    "sampler_name": "uni_pc",
+    "scheduler": "simple",
+    "denoise": 1,
+    "model": [
+     "48",
+     0
+    ],
+    "positive": [
+     "6",
+     0
+    ],
+    "negative": [
+     "7",
+     0
+    ],
+    "latent_image": [
+     "55",
+     0
+    ]
+   },
+   "class_type": "KSampler",
+   "_meta": {
+    "title": "KSampler",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.45"
+   }
+  },
+  "6": {
+   "inputs": {
+    "text": "Low contrast. In a retro 1970s-style subway station, a street musician plays in dim colors and rough textures. He wears an old jacket, playing guitar with focus. Commuters hurry by, and a small crowd gathers to listen. The camera slowly moves right, capturing the blend of music and city noise, with old subway signs and mottled walls in the background.",
+    "clip": [
+     "38",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Effect #prompt",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.45"
+   }
+  },
+  "7": {
+   "inputs": {
+    "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+    "clip": [
+     "38",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Negative prompt #negative",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.45"
+   }
+  },
+  "8": {
+   "inputs": {
+    "samples": [
+     "3",
+     0
+    ],
+    "vae": [
+     "39",
+     0
+    ]
+   },
+   "class_type": "VAEDecode",
+   "_meta": {
+    "title": "VAE Decode",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.45"
+   }
+  },
+  "37": {
+   "inputs": {
+    "unet_name": "wan2.2_ti2v_5B_fp16.safetensors",
+    "weight_dtype": "default"
+   },
+   "class_type": "UNETLoader",
+   "_meta": {
+    "title": "Load Diffusion Model",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.45"
+   }
+  },
+  "38": {
+   "inputs": {
+    "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "type": "wan",
+    "device": "default"
+   },
+   "class_type": "CLIPLoader",
+   "_meta": {
+    "title": "Load CLIP",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.45"
+   }
+  },
+  "39": {
+   "inputs": {
+    "vae_name": "wan2.2_vae.safetensors"
+   },
+   "class_type": "VAELoader",
+   "_meta": {
+    "title": "Load VAE",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.45"
+   }
+  },
+  "48": {
+   "inputs": {
+    "shift": 8,
+    "model": [
+     "37",
+     0
+    ]
+   },
+   "class_type": "ModelSamplingSD3",
+   "_meta": {
+    "title": "ModelSamplingSD3",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.45"
+   }
+  },
+  "55": {
+   "inputs": {
+    "width": 704,
+    "height": 704,
+    "length": 81,
+    "batch_size": 1,
+    "vae": [
+     "39",
+     0
+    ],
+    "start_image": [
+     "60",
+     0
+    ]
+   },
+   "class_type": "Wan22ImageToVideoLatent",
+   "_meta": {
+    "title": "Wan22ImageToVideoLatent",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.45"
+   }
+  },
+  "57": {
+   "inputs": {
+    "fps": 24,
+    "bit_depth": "auto",
+    "color_space": "sRGB",
+    "chroma_subsampling": "auto",
+    "codec": "none",
+    "images": [
+     "8",
+     0
+    ]
+   },
+   "class_type": "CreateVideo",
+   "_meta": {
+    "title": "Create Video",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.45"
+   }
+  },
+  "60": {
+   "inputs": {
+    "image": "start_frame.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Start frame #image"
+   }
+  },
+  "70": {
+   "inputs": {
+    "video": [
+     "57",
+     0
+    ],
+    "num_frames": 16,
+    "strategy": "uniform",
+    "seed": 0
+   },
+   "class_type": "VideoFrameSample",
+   "_meta": {
+    "title": "Pick evenly spaced frames"
+   }
+  },
+  "71": {
+   "inputs": {
+    "video": [
+     "70",
+     0
+    ]
+   },
+   "class_type": "GetVideoComponents",
+   "_meta": {
+    "title": "Frames"
+   }
+  },
+  "72": {
+   "inputs": {
+    "expression": "int(round(a ** 0.5))",
+    "values.a": 16
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Columns = square root of frames"
+   }
+  },
+  "73": {
+   "inputs": {
+    "images": [
+     "71",
+     0
+    ],
+    "columns": [
+     "72",
+     1
+    ],
+    "cell_width": 256,
+    "cell_height": 256,
+    "padding": 0
+   },
+   "class_type": "ImageGrid",
+   "_meta": {
+    "title": "Tile into a sheet"
+   }
+  },
+  "74": {
+   "inputs": {
+    "filename_prefix": "concept-app/flipbook",
+    "images": [
+     "73",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save Image"
+   }
+  }
+ }
+}

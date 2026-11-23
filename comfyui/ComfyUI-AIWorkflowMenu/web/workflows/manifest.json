@@ -1,0 +1,214 @@
+{
+  "version": 2,
+  "menus": [
+    {
+      "key": "models",
+      "label": "AI Models",
+      "groups": [
+        "3D",
+        "Image",
+        "Video",
+        "Audio"
+      ]
+    },
+    {
+      "key": "workflows",
+      "label": "AI Workflows",
+      "groups": [
+        "Textures",
+        "Concept",
+        "VFX"
+      ]
+    }
+  ],
+  "entries": [
+    {
+      "menu": "models",
+      "path": "3D/Hunyuan3D 2.1 Image to Model",
+      "file": "3d/hunyuan3d_21_image_to_model.json",
+      "format": "ui",
+      "preset": "ai:hunyuan3d-21"
+    },
+    {
+      "menu": "models",
+      "path": "3D/Pixal3D Image to Model",
+      "file": "3d/pixal3d_trellis2_image_to_model.json",
+      "format": "ui",
+      "preset": "ai:pixal3d-trellis2"
+    },
+    {
+      "menu": "models",
+      "path": "3D/MoGe Image to Mesh",
+      "file": "3d/moge_image_to_mesh.json",
+      "format": "ui"
+    },
+    {
+      "menu": "models",
+      "path": "Image/Image Edit/FLUX.2 Klein 4B",
+      "file": "image/flux2_klein_4b_image_edit.json",
+      "format": "ui",
+      "preset": "ai:klein-4b-edit"
+    },
+    {
+      "menu": "models",
+      "path": "Image/Image Edit/Qwen Image Edit 2509",
+      "file": "image/qwen_image_edit_2509.json",
+      "format": "ui",
+      "preset": "ai:qwen-edit-2509"
+    },
+    {
+      "menu": "models",
+      "path": "Image/Image Edit/Qwen Image Edit 2511",
+      "file": "api/qwen-edit-2511.json",
+      "format": "api",
+      "preset": "ai:qwen-edit-2511"
+    },
+    {
+      "menu": "models",
+      "path": "Image/Inpainting/FLUX.2 Klein 4B",
+      "file": "api/klein-4b-inpaint.json",
+      "format": "api",
+      "preset": "ai:klein-4b-inpaint"
+    },
+    {
+      "menu": "models",
+      "path": "Image/Text to Image/Z-Image Turbo",
+      "file": "image/z_image_turbo.json",
+      "format": "ui",
+      "preset": "ai:z-image-turbo"
+    },
+    {
+      "menu": "models",
+      "path": "Image/Text to Image/FLUX.2 Klein 4B",
+      "file": "image/flux2_klein_4b_text_to_image.json",
+      "format": "ui",
+      "preset": "ai:klein-4b-t2i"
+    },
+    {
+      "menu": "models",
+      "path": "Image/Text to Image/Qwen 2512",
+      "file": "image/qwen_2512_text_to_image.json",
+      "format": "ui",
+      "preset": "ai:qwen-2512-t2i"
+    },
+    {
+      "menu": "models",
+      "path": "Image/Text to Image/FLUX.1 Dev (GGUF)",
+      "file": "image/flux1_dev_gguf.json",
+      "format": "ui",
+      "preset": "ai:flux1-dev-gguf"
+    },
+    {
+      "menu": "models",
+      "path": "Image/Text to Image/FLUX.1 Schnell (GGUF)",
+      "file": "image/flux1_schnell_gguf.json",
+      "format": "ui",
+      "preset": "ai:flux1-schnell-gguf"
+    },
+    {
+      "menu": "models",
+      "path": "Image/Upscale/SeedVR2 7B",
+      "file": "image/seedvr2_7b_image_upscale.json",
+      "format": "ui",
+      "preset": "ai:seedvr2-7b-image"
+    },
+    {
+      "menu": "models",
+      "path": "Image/Upscale/4x Model",
+      "file": "image/upscale_4x_model.json",
+      "format": "ui",
+      "preset": "ai:upscale-4x-model"
+    },
+    {
+      "menu": "models",
+      "path": "Video/Real-ESRGAN Video Upscale",
+      "file": "video/realesrgan_video_upscale.json",
+      "format": "ui",
+      "preset": "ai:realesrgan-video"
+    },
+    {
+      "menu": "models",
+      "path": "Video/SeedVR2 3B Video Upscale",
+      "file": "video/seedvr2_3b_video_upscale.json",
+      "format": "ui",
+      "preset": "ai:seedvr2-3b-video"
+    },
+    {
+      "menu": "models",
+      "path": "Video/Wan 2.2 5B Text⁄Image to Video",
+      "file": "video/wan22_5b_ti2v.json",
+      "format": "ui",
+      "preset": "ai:wan22-5b-ti2v"
+    },
+    {
+      "menu": "models",
+      "path": "Audio/ACE-Step 1.5 Text to Music",
+      "file": "audio/ace_step_15_text_to_music.json",
+      "format": "ui",
+      "preset": "ai:ace-step-15"
+    },
+    {
+      "menu": "models",
+      "path": "Audio/Chatterbox TTS",
+      "file": "api/tts-chatterbox.json",
+      "format": "api",
+      "preset": "ai:tts-chatterbox"
+    },
+    {
+      "menu": "models",
+      "path": "Audio/VibeVoice TTS",
+      "file": "api/tts-vibevoice.json",
+      "format": "api",
+      "preset": "ai:tts-vibevoice"
+    },
+    {
+      "menu": "workflows",
+      "path": "Textures/Upscale Texture",
+      "file": "api/wf-texture-upscale.json",
+      "format": "api",
+      "preset": "ai:wf-texture-upscale"
+    },
+    {
+      "menu": "workflows",
+      "path": "Textures/Remove Lighting",
+      "file": "api/wf-remove-lighting.json",
+      "format": "api",
+      "preset": "ai:wf-remove-lighting"
+    },
+    {
+      "menu": "workflows",
+      "path": "Textures/Make Seamless",
+      "file": "api/wf-make-seamless.json",
+      "format": "api",
+      "preset": "ai:wf-make-seamless"
+    },
+    {
+      "menu": "workflows",
+      "path": "Textures/Grunge Map",
+      "file": "api/wf-grunge-map.json",
+      "format": "api",
+      "preset": "ai:wf-grunge-map"
+    },
+    {
+      "menu": "workflows",
+      "path": "Concept/Concept Looks (Edges)",
+      "file": "api/wf-concept-edges.json",
+      "format": "api",
+      "preset": "ai:wf-concept-edges"
+    },
+    {
+      "menu": "workflows",
+      "path": "Concept/Concept Looks (Depth Pass)",
+      "file": "api/wf-concept-depth.json",
+      "format": "api",
+      "preset": "ai:wf-concept-depth"
+    },
+    {
+      "menu": "workflows",
+      "path": "VFX/Flipbook Sheet",
+      "file": "api/wf-flipbook.json",
+      "format": "api",
+      "preset": "ai:wf-flipbook"
+    }
+  ]
+}

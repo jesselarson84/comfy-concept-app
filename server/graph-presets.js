@@ -1,4 +1,4 @@
-// graph-presets.js - presets saved from the node view ("Save as preset"), in
+﻿// graph-presets.js - presets saved from the node view ("Save as preset"), in
 // data/graph-presets.json (data/ is git-ignored).
 //   { version: 1, presets: [{ id, name, group, subgroup, workflow, from, createdAt, updatedAt }] }
 // workflow is the API-format graph ComfyUI's canvas produced (graphToPrompt).
@@ -13,7 +13,7 @@ import { SUBGROUPS } from '../app/js/lib/presets.js';
 import { cleanName } from './user-presets.js';
 
 const MAX = 200;
-export const GROUPS = ['3D', 'Image', 'Video', 'Audio', 'My presets'];
+export const GROUPS = ['3D', 'Image', 'Video', 'Audio', 'Textures', 'Concept', 'VFX', 'My presets'];
 // Anything that writes a result: SaveImage, SaveVideo, SaveAudio, SaveGLB, VHS_VideoCombine ...
 const OUTPUT_NODES = /Save|PreviewImage|VideoCombine/;
 const bad = (msg) => Object.assign(new Error(msg), { status: 400 });

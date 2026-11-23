@@ -1,0 +1,944 @@
+{
+ "1": {
+  "inputs": {
+   "unet_name": "z_image_turbo_bf16.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "2": {
+  "inputs": {
+   "clip_name": "qwen_3_4b.safetensors",
+   "type": "lumina2",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load CLIP"
+  }
+ },
+ "3": {
+  "inputs": {
+   "vae_name": "ae.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "4": {
+  "inputs": {
+   "shift": 3,
+   "sampling": "flow",
+   "model": [
+    "1",
+    0
+   ]
+  },
+  "class_type": "ModelSamplingAuraFlow",
+  "_meta": {
+   "title": "ModelSamplingAuraFlow"
+  }
+ },
+ "5": {
+  "inputs": {
+   "text": "",
+   "clip": [
+    "2",
+    0
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "Grunge prompt #prompt"
+  }
+ },
+ "6": {
+  "inputs": {
+   "conditioning": [
+    "5",
+    0
+   ]
+  },
+  "class_type": "ConditioningZeroOut",
+  "_meta": {
+   "title": "Conditioning Zero Out"
+  }
+ },
+ "7": {
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "batch_size": 1
+  },
+  "class_type": "EmptySD3LatentImage",
+  "_meta": {
+   "title": "EmptySD3LatentImage"
+  }
+ },
+ "8": {
+  "inputs": {
+   "seed": 0,
+   "steps": 8,
+   "cfg": 1,
+   "sampler_name": "res_multistep",
+   "scheduler": "simple",
+   "denoise": 1,
+   "model": [
+    "4",
+    0
+   ],
+   "positive": [
+    "5",
+    0
+   ],
+   "negative": [
+    "6",
+    0
+   ],
+   "latent_image": [
+    "7",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "9": {
+  "inputs": {
+   "samples": [
+    "8",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  }
+ },
+ "10": {
+  "inputs": {
+   "image": [
+    "9",
+    0
+   ]
+  },
+  "class_type": "GetImageSize",
+  "_meta": {
+   "title": "Seam: image size"
+  }
+ },
+ "11": {
+  "inputs": {
+   "expression": "a",
+   "values.a": [
+    "10",
+    0
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: width"
+  }
+ },
+ "12": {
+  "inputs": {
+   "expression": "a",
+   "values.a": [
+    "10",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: height"
+  }
+ },
+ "13": {
+  "inputs": {
+   "expression": "a // 2",
+   "values.a": [
+    "11",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: half width"
+  }
+ },
+ "14": {
+  "inputs": {
+   "expression": "a // 2",
+   "values.a": [
+    "12",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: half height"
+  }
+ },
+ "15": {
+  "inputs": {
+   "expression": "a - b",
+   "values.a": [
+    "11",
+    1
+   ],
+   "values.b": [
+    "13",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: shift half: rest of width"
+  }
+ },
+ "16": {
+  "inputs": {
+   "expression": "a - b",
+   "values.a": [
+    "12",
+    1
+   ],
+   "values.b": [
+    "14",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: shift half: rest of height"
+  }
+ },
+ "17": {
+  "inputs": {
+   "image": [
+    "9",
+    0
+   ],
+   "width": [
+    "13",
+    1
+   ],
+   "height": [
+    "14",
+    1
+   ],
+   "x": 0,
+   "y": 0
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift half: top left"
+  }
+ },
+ "18": {
+  "inputs": {
+   "image": [
+    "9",
+    0
+   ],
+   "width": [
+    "15",
+    1
+   ],
+   "height": [
+    "14",
+    1
+   ],
+   "x": [
+    "13",
+    1
+   ],
+   "y": 0
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift half: top right"
+  }
+ },
+ "19": {
+  "inputs": {
+   "image": [
+    "9",
+    0
+   ],
+   "width": [
+    "13",
+    1
+   ],
+   "height": [
+    "16",
+    1
+   ],
+   "x": 0,
+   "y": [
+    "14",
+    1
+   ]
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift half: bottom left"
+  }
+ },
+ "20": {
+  "inputs": {
+   "image": [
+    "9",
+    0
+   ],
+   "width": [
+    "15",
+    1
+   ],
+   "height": [
+    "16",
+    1
+   ],
+   "x": [
+    "13",
+    1
+   ],
+   "y": [
+    "14",
+    1
+   ]
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift half: bottom right"
+  }
+ },
+ "21": {
+  "inputs": {
+   "image1": [
+    "20",
+    0
+   ],
+   "direction": "right",
+   "match_image_size": false,
+   "spacing_width": 0,
+   "spacing_color": "black",
+   "image2": [
+    "19",
+    0
+   ]
+  },
+  "class_type": "ImageStitch",
+  "_meta": {
+   "title": "Seam: shift half: top row"
+  }
+ },
+ "22": {
+  "inputs": {
+   "image1": [
+    "18",
+    0
+   ],
+   "direction": "right",
+   "match_image_size": false,
+   "spacing_width": 0,
+   "spacing_color": "black",
+   "image2": [
+    "17",
+    0
+   ]
+  },
+  "class_type": "ImageStitch",
+  "_meta": {
+   "title": "Seam: shift half: bottom row"
+  }
+ },
+ "23": {
+  "inputs": {
+   "image1": [
+    "21",
+    0
+   ],
+   "direction": "down",
+   "match_image_size": false,
+   "spacing_width": 0,
+   "spacing_color": "black",
+   "image2": [
+    "22",
+    0
+   ]
+  },
+  "class_type": "ImageStitch",
+  "_meta": {
+   "title": "Seam: shift half: shifted"
+  }
+ },
+ "24": {
+  "inputs": {
+   "expression": "max(32, min(a, b) // 12 // 16 * 16)",
+   "values.a": [
+    "11",
+    1
+   ],
+   "values.b": [
+    "12",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: band width"
+  }
+ },
+ "25": {
+  "inputs": {
+   "expression": "a - b // 2",
+   "values.a": [
+    "15",
+    1
+   ],
+   "values.b": [
+    "24",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: band x"
+  }
+ },
+ "26": {
+  "inputs": {
+   "expression": "a - b // 2",
+   "values.a": [
+    "16",
+    1
+   ],
+   "values.b": [
+    "24",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: band y"
+  }
+ },
+ "27": {
+  "inputs": {
+   "value": 0,
+   "width": [
+    "11",
+    1
+   ],
+   "height": [
+    "12",
+    1
+   ]
+  },
+  "class_type": "SolidMask",
+  "_meta": {
+   "title": "Seam: empty mask"
+  }
+ },
+ "28": {
+  "inputs": {
+   "value": 1,
+   "width": [
+    "24",
+    1
+   ],
+   "height": [
+    "12",
+    1
+   ]
+  },
+  "class_type": "SolidMask",
+  "_meta": {
+   "title": "Seam: vertical band"
+  }
+ },
+ "29": {
+  "inputs": {
+   "value": 1,
+   "width": [
+    "11",
+    1
+   ],
+   "height": [
+    "24",
+    1
+   ]
+  },
+  "class_type": "SolidMask",
+  "_meta": {
+   "title": "Seam: horizontal band"
+  }
+ },
+ "30": {
+  "inputs": {
+   "destination": [
+    "27",
+    0
+   ],
+   "source": [
+    "28",
+    0
+   ],
+   "x": [
+    "25",
+    1
+   ],
+   "y": 0,
+   "operation": "or"
+  },
+  "class_type": "MaskComposite",
+  "_meta": {
+   "title": "Seam: + vertical"
+  }
+ },
+ "31": {
+  "inputs": {
+   "destination": [
+    "30",
+    0
+   ],
+   "source": [
+    "29",
+    0
+   ],
+   "x": 0,
+   "y": [
+    "26",
+    1
+   ],
+   "operation": "or"
+  },
+  "class_type": "MaskComposite",
+  "_meta": {
+   "title": "Seam: cross mask"
+  }
+ },
+ "32": {
+  "inputs": {
+   "mask": [
+    "31",
+    0
+   ]
+  },
+  "class_type": "MaskToImage",
+  "_meta": {
+   "title": "Seam: mask to image"
+  }
+ },
+ "33": {
+  "inputs": {
+   "image": [
+    "32",
+    0
+   ],
+   "blur_radius": 31,
+   "sigma": 10
+  },
+  "class_type": "ImageBlur",
+  "_meta": {
+   "title": "Seam: soften edge"
+  }
+ },
+ "34": {
+  "inputs": {
+   "image": [
+    "33",
+    0
+   ],
+   "channel": "red"
+  },
+  "class_type": "ImageToMask",
+  "_meta": {
+   "title": "Seam: soft mask"
+  }
+ },
+ "35": {
+  "inputs": {
+   "pixels": [
+    "23",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ]
+  },
+  "class_type": "VAEEncode",
+  "_meta": {
+   "title": "Seam: encode"
+  }
+ },
+ "36": {
+  "inputs": {
+   "samples": [
+    "35",
+    0
+   ],
+   "mask": [
+    "31",
+    0
+   ]
+  },
+  "class_type": "SetLatentNoiseMask",
+  "_meta": {
+   "title": "Seam: repaint only the cross"
+  }
+ },
+ "37": {
+  "inputs": {
+   "name": "Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors"
+  },
+  "class_type": "ModelPatchLoader",
+  "_meta": {
+   "title": "Seam: load ControlNet (inpaint)"
+  }
+ },
+ "38": {
+  "inputs": {
+   "model": [
+    "4",
+    0
+   ],
+   "model_patch": [
+    "37",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "strength": 1,
+   "inpaint_image": [
+    "23",
+    0
+   ],
+   "mask": [
+    "31",
+    0
+   ],
+   "start_percent": 0,
+   "end_percent": 1
+  },
+  "class_type": "ZImageFunControlnet",
+  "_meta": {
+   "title": "Seam: ControlNet inpaint"
+  }
+ },
+ "39": {
+  "inputs": {
+   "seed": 0,
+   "steps": 8,
+   "cfg": 1,
+   "sampler_name": "res_multistep",
+   "scheduler": "simple",
+   "denoise": 0.8,
+   "model": [
+    "38",
+    0
+   ],
+   "positive": [
+    "5",
+    0
+   ],
+   "negative": [
+    "6",
+    0
+   ],
+   "latent_image": [
+    "36",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "Seam fix sampler"
+  }
+ },
+ "40": {
+  "inputs": {
+   "samples": [
+    "39",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "Seam: decode"
+  }
+ },
+ "41": {
+  "inputs": {
+   "destination": [
+    "23",
+    0
+   ],
+   "source": [
+    "40",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "resize_source": false,
+   "mask": [
+    "34",
+    0
+   ]
+  },
+  "class_type": "ImageCompositeMasked",
+  "_meta": {
+   "title": "Seam: blend repaint in"
+  }
+ },
+ "42": {
+  "inputs": {
+   "expression": "a - b",
+   "values.a": [
+    "11",
+    1
+   ],
+   "values.b": [
+    "15",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: shift back: rest of width"
+  }
+ },
+ "43": {
+  "inputs": {
+   "expression": "a - b",
+   "values.a": [
+    "12",
+    1
+   ],
+   "values.b": [
+    "16",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: shift back: rest of height"
+  }
+ },
+ "44": {
+  "inputs": {
+   "image": [
+    "41",
+    0
+   ],
+   "width": [
+    "15",
+    1
+   ],
+   "height": [
+    "16",
+    1
+   ],
+   "x": 0,
+   "y": 0
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift back: top left"
+  }
+ },
+ "45": {
+  "inputs": {
+   "image": [
+    "41",
+    0
+   ],
+   "width": [
+    "42",
+    1
+   ],
+   "height": [
+    "16",
+    1
+   ],
+   "x": [
+    "15",
+    1
+   ],
+   "y": 0
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift back: top right"
+  }
+ },
+ "46": {
+  "inputs": {
+   "image": [
+    "41",
+    0
+   ],
+   "width": [
+    "15",
+    1
+   ],
+   "height": [
+    "43",
+    1
+   ],
+   "x": 0,
+   "y": [
+    "16",
+    1
+   ]
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift back: bottom left"
+  }
+ },
+ "47": {
+  "inputs": {
+   "image": [
+    "41",
+    0
+   ],
+   "width": [
+    "42",
+    1
+   ],
+   "height": [
+    "43",
+    1
+   ],
+   "x": [
+    "15",
+    1
+   ],
+   "y": [
+    "16",
+    1
+   ]
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift back: bottom right"
+  }
+ },
+ "48": {
+  "inputs": {
+   "image1": [
+    "47",
+    0
+   ],
+   "direction": "right",
+   "match_image_size": false,
+   "spacing_width": 0,
+   "spacing_color": "black",
+   "image2": [
+    "46",
+    0
+   ]
+  },
+  "class_type": "ImageStitch",
+  "_meta": {
+   "title": "Seam: shift back: top row"
+  }
+ },
+ "49": {
+  "inputs": {
+   "image1": [
+    "45",
+    0
+   ],
+   "direction": "right",
+   "match_image_size": false,
+   "spacing_width": 0,
+   "spacing_color": "black",
+   "image2": [
+    "44",
+    0
+   ]
+  },
+  "class_type": "ImageStitch",
+  "_meta": {
+   "title": "Seam: shift back: bottom row"
+  }
+ },
+ "50": {
+  "inputs": {
+   "image1": [
+    "48",
+    0
+   ],
+   "direction": "down",
+   "match_image_size": false,
+   "spacing_width": 0,
+   "spacing_color": "black",
+   "image2": [
+    "49",
+    0
+   ]
+  },
+  "class_type": "ImageStitch",
+  "_meta": {
+   "title": "Seam: shift back: shifted"
+  }
+ },
+ "51": {
+  "inputs": {
+   "image": [
+    "50",
+    0
+   ]
+  },
+  "class_type": "ImageRGBToYUV",
+  "_meta": {
+   "title": "Grayscale (luma)"
+  }
+ },
+ "52": {
+  "inputs": {
+   "images": [
+    "51",
+    0
+   ],
+   "factor": 1.4
+  },
+  "class_type": "AdjustContrast",
+  "_meta": {
+   "title": "Push contrast"
+  }
+ },
+ "53": {
+  "inputs": {
+   "filename_prefix": "concept-app/grunge_map",
+   "images": [
+    "52",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "Save Image"
+  }
+ }
+}
