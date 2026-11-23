@@ -6,6 +6,7 @@ import path from 'node:path';
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.apk': 'application/vnd.android.package-archive',
 };
 
 export function serveStatic(root, req, res) {
@@ -21,6 +22,8 @@ export function serveStatic(root, req, res) {
     'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
     'Content-Length': stat.size,
     'Cache-Control': rel === '/sw.js' ? 'no-cache' : 'no-cache', // SW handles offline shell caching
+    // The Android app (app/download/*.apk, git-ignored): a named file download.
+    ...(path.extname(file) === '.apk' ? { 'Content-Disposition': `attachment; filename="${path.basename(file)}"` } : {}),
   });
   if (req.method === 'HEAD') { res.end(); return true; }
   fs.createReadStream(file).pipe(res);
