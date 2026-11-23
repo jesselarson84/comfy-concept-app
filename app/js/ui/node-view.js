@@ -105,6 +105,12 @@ export class NodeView {
       // `instanceof Array`, which is false for arrays made in this page (found on
       // the phone: every link became a NaN value and nothing was connected).
       const fw = this.frame.contentWindow;
+      // One tab per preset: close earlier copies ("<label>.json", "<label> (2).json" ...)
+      // instead of stacking a new numbered tab every time the app starts.
+      const store = app.extensionManager?.workflow;
+      const esc = g.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const same = new RegExp(`(^|/)${esc}( \\(\\d+\\))?\\.json$`);
+      for (const w of [...(store?.openWorkflows || [])]) if (same.test(w.path || '')) { try { await store.closeWorkflow(w); } catch {} }
       const load = async () => { await app.loadApiJson(fw.JSON.parse(JSON.stringify(wf)), name); try { app.graph.arrange?.(); app.graph.setDirtyCanvas?.(true, true); } catch {} };
       await load();
       // Tested on the phone (batch 5): on the very first open ComfyUI can still
