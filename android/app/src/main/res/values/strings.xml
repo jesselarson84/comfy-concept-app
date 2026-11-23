@@ -42,9 +42,4 @@
     <string name="no_app">No app can open this.</string>
     <string name="file_chooser_title">Choose an image</string>
     <string name="file_chooser_failed">Could not open the file picker.</string>
-
-    <!-- Background runs (RunService) -->
-    <string name="run_channel">Runs</string>
-    <string name="run_running">Running %1$d of %2$d</string>
-    <string name="run_finished">Finished %1$d of %2$d</string>
 </resources>

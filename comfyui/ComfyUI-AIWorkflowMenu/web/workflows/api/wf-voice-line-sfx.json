@@ -1,0 +1,232 @@
+{
+ "1": {
+  "inputs": {
+   "duration": 0.5,
+   "sample_rate": 24000,
+   "channels": 1
+  },
+  "class_type": "EmptyAudio",
+  "_meta": {
+   "title": "Lead-in silence"
+  }
+ },
+ "2": {
+  "inputs": {
+   "audio1": [
+    "1",
+    0
+   ],
+   "audio2": [
+    "t1",
+    0
+   ],
+   "direction": "after"
+  },
+  "class_type": "AudioConcat",
+  "_meta": {
+   "title": "Line after the lead-in"
+  }
+ },
+ "3": {
+  "inputs": {
+   "audio": [
+    "s7",
+    0
+   ],
+   "volume": -12
+  },
+  "class_type": "AudioAdjustVolume",
+  "_meta": {
+   "title": "Sound level"
+  }
+ },
+ "4": {
+  "inputs": {
+   "audio": [
+    "2",
+    0
+   ],
+   "volume": -3
+  },
+  "class_type": "AudioAdjustVolume",
+  "_meta": {
+   "title": "Voice headroom"
+  }
+ },
+ "5": {
+  "inputs": {
+   "audio1": [
+    "3",
+    0
+   ],
+   "audio2": [
+    "4",
+    0
+   ],
+   "merge_method": "add"
+  },
+  "class_type": "AudioMerge",
+  "_meta": {
+   "title": "Mix"
+  }
+ },
+ "6": {
+  "inputs": {
+   "filename_prefix": "concept-app/voice_line_sfx",
+   "audio": [
+    "5",
+    0
+   ]
+  },
+  "class_type": "SaveAudio",
+  "_meta": {
+   "title": "Save Audio"
+  }
+ },
+ "t1": {
+  "class_type": "ChatterboxTTS",
+  "inputs": {
+   "model_pack_name": "chatterbox",
+   "text": "Hello. This is a short test.",
+   "max_new_tokens": 400,
+   "flow_cfg_scale": 0.7,
+   "exaggeration": 0.5,
+   "temperature": 0.8,
+   "cfg_weight": 0.5,
+   "repetition_penalty": 1.2,
+   "min_p": 0.05,
+   "top_p": 1,
+   "seed": 1,
+   "use_watermark": false,
+   "device": "default",
+   "dtype": "auto",
+   "attention_mode": "sdpa",
+   "top_k": 1000,
+   "normalize_loudness": true,
+   "num_steps": 10,
+   "cfg_scale": 1,
+   "enable_chunking": true,
+   "max_chars_per_chunk": 400,
+   "chunk_combination_method": "auto",
+   "silence_between_chunks_ms": 100,
+   "audio_prompt": [
+    "t3",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Line to speak #prompt"
+  }
+ },
+ "t3": {
+  "inputs": {
+   "audio": "voice_sample.wav"
+  },
+  "class_type": "LoadAudio",
+  "_meta": {
+   "title": "Voice sample"
+  }
+ },
+ "s1": {
+  "inputs": {
+   "ckpt_name": "stable_audio_3_small_sfx.safetensors"
+  },
+  "class_type": "CheckpointLoaderSimple",
+  "_meta": {
+   "title": "Load Checkpoint"
+  }
+ },
+ "s2": {
+  "inputs": {
+   "clip_name": "t5gemma_b_b_ul2.safetensors",
+   "type": "stable_audio",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load text encoder (T5Gemma)"
+  }
+ },
+ "s3": {
+  "inputs": {
+   "text": "quiet room tone",
+   "clip": [
+    "s2",
+    0
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "Sound under the line"
+  }
+ },
+ "s4": {
+  "inputs": {
+   "text": "",
+   "clip": [
+    "s2",
+    0
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "Negative"
+  }
+ },
+ "s5": {
+  "inputs": {
+   "seconds": 6,
+   "batch_size": 1
+  },
+  "class_type": "EmptyLatentAudio",
+  "_meta": {
+   "title": "Length"
+  }
+ },
+ "s6": {
+  "inputs": {
+   "seed": 0,
+   "steps": 8,
+   "cfg": 1,
+   "sampler_name": "lcm",
+   "scheduler": "simple",
+   "denoise": 1,
+   "model": [
+    "s1",
+    0
+   ],
+   "positive": [
+    "s3",
+    0
+   ],
+   "negative": [
+    "s4",
+    0
+   ],
+   "latent_image": [
+    "s5",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "s7": {
+  "inputs": {
+   "samples": [
+    "s6",
+    0
+   ],
+   "vae": [
+    "s1",
+    2
+   ]
+  },
+  "class_type": "VAEDecodeAudio",
+  "_meta": {
+   "title": "VAE Decode Audio"
+  }
+ }
+}

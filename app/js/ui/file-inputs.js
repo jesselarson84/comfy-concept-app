@@ -20,13 +20,16 @@ export class FileInputs {
     for (const s of slots) {
       const k = this.key(s), set = this.values[k];
       const fileIn = h('input', { type: 'file', accept: ACCEPT[s.kind] || '*/*', hidden: true, onchange: (e) => e.target.files[0] && this.upload(s, e.target.files[0]) });
+      // Batch 8: video slots can record straight from the camera too (the system camera app).
+      const camIn = s.kind === 'video' ? h('input', { type: 'file', accept: 'video/*', capture: 'environment', hidden: true, onchange: (e) => e.target.files[0] && this.upload(s, e.target.files[0]) }) : null;
       this.container.append(h('div.ref-slot', { dataset: { input: k } },
         h('div.ref-head', {}, h('span.ref-title', {}, h('span', {}, s.label || s.kind), infoButton(s.label || s.kind, s.info)), set ? h('button.link', { onclick: () => { delete this.values[k]; this.render(this.slots); } }, 'clear') : null),
         h('div.ref-body', {}, h('span.ref-empty', {}, set ? set : s.defaultAvailable ? `Using ${s.default}` : '')),
         // audio slots (batch 7, voice swap): record straight from the microphone too
-        h(`div.ref-buttons${s.kind === 'audio' ? '' : '.one'}`, {}, h('button.btn', { onclick: () => fileIn.click() }, `Pick ${s.kind}`),
-          s.kind === 'audio' ? h('button.btn.rec-btn', { type: 'button', dataset: { act: 'record' }, onclick: (e) => this.toggleRecord(s, e.currentTarget) }, this.recording?.slot === k ? 'Stop ●' : 'Record') : null),
-        fileIn));
+        h(`div.ref-buttons${s.kind === 'audio' || camIn ? '' : '.one'}`, {}, h('button.btn', { onclick: () => fileIn.click() }, `Pick ${s.kind}`),
+          s.kind === 'audio' ? h('button.btn.rec-btn', { type: 'button', dataset: { act: 'record' }, onclick: (e) => this.toggleRecord(s, e.currentTarget) }, this.recording?.slot === k ? 'Stop ●' : 'Record') : null,
+          camIn ? h('button.btn', { type: 'button', dataset: { act: 'record-video' }, onclick: () => camIn.click() }, 'Record video') : null),
+        fileIn, camIn));
     }
   }
 

@@ -170,8 +170,10 @@ test('Save to Drive from the image viewer: copied into Comfy UI/Images, second s
   await page.waitForSelector('.viewer:not([hidden])');
   const shown = await app(() => window.conceptApp.viewer.current().image.filename);
   await page.click('.viewer button[title="Save to Drive"]');
+  await page.click('.drive-sheet [data-act="save-here"]'); // batch 8: asks where (starts in Comfy UI/<kind>)
   await waitToast(`Saved to Drive: Comfy UI/Images/${shown}`);
   await page.click('.viewer button[title="Save to Drive"]');
+  await page.click('.drive-sheet [data-act="save-here"]'); // batch 8: asks where (starts in Comfy UI/<kind>)
   const second = shown.replace(/(\.[^.]+)$/, ' (2)$1');
   await waitToast(`Saved to Drive: Comfy UI/Images/${second}`);
   assert.deepEqual(fs.readdirSync(path.join(s.driveDir, 'Images')).sort(), [shown, second].sort());
@@ -232,6 +234,7 @@ test('3D viewer: Hunyuan run -> tap the 3D tile -> clay model, counts, Shaded / 
   assert.deepEqual(await cam(), home);
   assert.equal(await page.isVisible('.model-viewer [data-act="download"]'), true);
   await page.click('.model-viewer [data-act="drive"]');
+  await page.click('.drive-sheet [data-act="save-here"]'); // batch 8: asks where (starts in Comfy UI/<kind>)
   await waitToast(/Saved to Drive: Comfy UI\/3D\/.+\.glb/);
   assert.equal(fs.readdirSync(path.join(s.driveDir, '3D')).length, 1);
   await page.goBack();
@@ -259,6 +262,7 @@ test('audio player: duration, waveform, play/pause, scrub; Save to Drive -> Comf
   assert.match(await page.textContent('.audio-player .ap-time'), /^0:01 \/ 0:02$/);
   await shot('audio');
   await page.click('.audio-player [data-act="drive"]');
+  await page.click('.drive-sheet [data-act="save-here"]'); // batch 8: asks where (starts in Comfy UI/<kind>)
   await waitToast('Saved to Drive: Comfy UI/Audio/tone_00001.flac');
   assert.equal(await page.isVisible('.audio-player [data-act="download"]'), true);
   await closeOverlay('.audio-player');
@@ -292,6 +296,7 @@ test('video player: plays in-app with play/pause, scrub, duration, loop toggle; 
   await shot('video');
   assert.equal(await page.isVisible('.video-player [data-act="download"]'), true);
   await page.click('.video-player [data-act="drive"]');
+  await page.click('.drive-sheet [data-act="save-here"]'); // batch 8: asks where (starts in Comfy UI/<kind>)
   await waitToast('Saved to Drive: Comfy UI/Video/clip_00001_.webm');
   assert.deepEqual(fs.readFileSync(path.join(s.driveDir, 'Video', 'clip_00001_.webm')), makeVideo());
   await page.goBack();

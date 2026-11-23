@@ -16,8 +16,8 @@ const WF = ids.filter((id) => id.startsWith('wf-'));
 
 test('kinds: every preset is a model or a workflow; workflows live in task sections, models in output sections', () => {
   assert.deepEqual(KINDS, ['model', 'workflow']);
-  assert.deepEqual(WORKFLOW_GROUPS, ['Textures', 'Concept', 'VFX']);
-  assert.equal(WF.length, 11);
+  assert.deepEqual(WORKFLOW_GROUPS, ['Textures', 'Concept', 'VFX', '3D Assets', 'Sound']);
+  assert.equal(WF.length, 15);
   for (const id of ids) {
     const p = load(id);
     assert.ok(p.ok, `${id}: ${p.error}`);
@@ -25,7 +25,7 @@ test('kinds: every preset is a model or a workflow; workflows live in task secti
     else { assert.equal(p.manifest.kind, 'model', id); assert.ok(GROUPS.includes(p.manifest.group), id); }
   }
   const bad = (m) => validatePreset('x', { preset: { label: 'x', output: 'image', ...m }, workflow: { 1: { class_type: 'A', inputs: {} } } });
-  assert.match(bad({ kind: 'workflow', group: 'Image' }).error, /Textures, Concept, VFX/);
+  assert.match(bad({ kind: 'workflow', group: 'Image' }).error, /Textures, Concept, VFX, 3D Assets, Sound/);
   assert.match(bad({ group: 'Textures' }).error, /3D, Image, Video, Audio/);
   assert.match(bad({ kind: 'pipeline', group: 'Image' }).error, /kind/);
 });
@@ -36,9 +36,12 @@ test('the seven workflows: sections, outputs, what the user fills in', () => {
     'wf-concept-depth': 'Concept', 'wf-concept-edges': 'Concept', 'wf-flipbook': 'VFX', 'wf-grunge-map': 'Textures',
     'wf-make-seamless': 'Textures', 'wf-remove-lighting': 'Textures', 'wf-texture-upscale': 'Textures',
     'wf-photo-texture': 'Textures', 'wf-pbr-maps': 'Textures', 'wf-pbr-chord': 'Textures', 'wf-depth-normal': 'Textures',
+    // batch 8
+    'wf-photo-to-3d': '3D Assets', 'wf-voice-line-swap': 'Sound', 'wf-voice-line-sfx': 'Sound', 'wf-sfx-set': 'Sound',
   });
+  const OUT = { 'wf-photo-to-3d': '3d', 'wf-voice-line-swap': 'audio', 'wf-voice-line-sfx': 'audio', 'wf-sfx-set': 'audio' };
   for (const id of WF) {
-    assert.equal(by[id].output, 'image', id);
+    assert.equal(by[id].output, OUT[id] || 'image', id);
     assert.equal(menuParts(by[id].group, by[id].menuPath, by[id].label).subgroup, null, `${id}: no sub sections`);
     assert.ok(by[id].description.length > 60, id);
   }
@@ -108,7 +111,7 @@ test('ComfyUI menus: AI Models (sub sections like the app) and AI Workflows; UI 
   assert.ok(apiFiles['api/wf-make-seamless.json']['1'], 'API graph written for the pack');
   assert.ok(e('Video/Wan 2.2 5B Text⁄Image to Video'), 'a "/" inside a name is not a folder');
   assert.ok(e('3D/MoGe Image to Mesh'), 'pack-only entry kept in AI Models');
-  assert.equal(manifest.entries.filter((x) => x.menu === 'workflows').length, 11);
+  assert.equal(manifest.entries.filter((x) => x.menu === 'workflows').length, 15);
   // the committed manifest is what the sync script makes from today's presets
   assert.deepEqual(pack, manifest, 'run: node scripts/sync-comfy-menu.mjs');
   for (const [f, wf] of Object.entries(apiFiles)) assert.deepEqual(JSON.parse(fs.readFileSync(path.join(ROOT, 'comfyui/ComfyUI-AIWorkflowMenu/web/workflows', f), 'utf8')), wf, f);

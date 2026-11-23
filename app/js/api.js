@@ -44,4 +44,7 @@ export const getOutputs = ({ kind, offset = 0, limit = 60 } = {}) => req('GET', 
 // Memory switches (batch 3): CPU text encoder, Ollama CPU mode.
 export const getMemorySettings = () => req('GET', '/api/memory/settings');
 export const setMemorySettings = (patch) => req('POST', '/api/memory/settings', patch);
-export const saveToDrive = (f, kind) => req('POST', '/api/drive/save', { filename: f.filename, subfolder: f.subfolder || '', type: f.type || 'output', ...(kind ? { kind } : {}) });
+export const saveToDrive = (f, kind, folder) => req('POST', '/api/drive/save', { filename: f.filename, subfolder: f.subfolder || '', type: f.type || 'output', ...(kind ? { kind } : {}), ...(typeof folder === 'string' ? { folder } : {}) });
+// Batch 8: Save to… folder chooser (folders of My Drive).
+export const getDriveFolders = (path = '') => req('GET', `/api/drive/folders?${new URLSearchParams({ path })}`);
+export const makeDriveFolder = (path, name) => req('POST', '/api/drive/folders', { path, name });

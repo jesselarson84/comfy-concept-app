@@ -25,10 +25,12 @@ const MANIFEST_17 = ['qwen-2512-t2i', 'qwen-edit-2509', 'qwen-edit-2511', 'z-ima
 const WORKFLOWS_7 = ['wf-texture-upscale', 'wf-remove-lighting', 'wf-make-seamless', 'wf-grunge-map', 'wf-flipbook', 'wf-concept-edges', 'wf-concept-depth'];
 // Batch 7: Photo to Texture, PBR maps (image math + CHORD), Depth + Normal; Stable Audio 3 SFX + voice swap (models).
 const BATCH7 = ['wf-photo-texture', 'wf-pbr-maps', 'wf-pbr-chord', 'wf-depth-normal', 'sa3-small-sfx', 'chatterbox-voice-swap'];
+// Batch 8: Photo to 3D Model (3D Assets) and three Sound workflows.
+const BATCH8 = ['wf-photo-to-3d', 'wf-voice-line-swap', 'wf-voice-line-sfx', 'wf-sfx-set'];
 
 test('every shipped AI preset validates: 17 manifest entries (MoGe out, Qwen Edit 2511 + Klein Inpaint in) + Chatterbox + VibeVoice, prefixes under concept-app/', () => {
   const ids = fs.readdirSync(AI_DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).sort();
-  assert.deepEqual(ids, [...MANIFEST_17, 'tts-chatterbox', 'tts-vibevoice', ...WORKFLOWS_7, ...BATCH7].sort());
+  assert.deepEqual(ids, [...MANIFEST_17, 'tts-chatterbox', 'tts-vibevoice', ...WORKFLOWS_7, ...BATCH7, ...BATCH8].sort());
   for (const id of ids) {
     const p = load(id);
     assert.ok(p.ok, `${id}: ${p.error}`);

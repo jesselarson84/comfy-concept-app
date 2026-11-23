@@ -22,6 +22,9 @@ export const SECTIONS = [
   { key: 'Textures', label: 'Textures', icon: 'i-layers', tab: 'workflow' },
   { key: 'Concept', label: 'Concept', icon: 'i-sparkles', tab: 'workflow' },
   { key: 'VFX', label: 'VFX', icon: 'i-film', tab: 'workflow' },
+  // batch 8: 3D and audio pipelines
+  { key: '3D Assets', label: '3D Assets', icon: 'i-box', tab: 'workflow' },
+  { key: 'Sound', label: 'Sound', icon: 'i-audio-lines', tab: 'workflow' },
   { key: 'My presets', label: 'My presets', icon: 'i-save', tab: 'model' },
 ];
 // Anything without a known group (an imported folder workflow) is the user's own.
@@ -54,6 +57,35 @@ export function pickerLayout(items, tab = null) {
 /** Name shown for a preset: its short name inside a sub section, else its label. */
 export const rowName = (w) => (w.subgroup && w.short ? w.short : w.label);
 
+const plural = (n, one, many) => (n === 1 ? `1 ${one}` : `${n} ${many}`);
+/**
+ * Batch 8: the short hint on the right of a picker row - what the preset needs
+ * from you: "Needs 1 image", "Up to 3 images", "Needs a recording", "Uses your
+ * prompt". Optional inputs only count toward "up to".
+ */
+export function presetHint(w) {
+  if (!w?.ok) return '';
+  const m = w.ai || {}, c = w.controls || {};
+  const optional = new Set((m.optional || []).map((o) => o.node));
+  const imgs = c.images || [];
+  const need = imgs.filter((s) => !optional.has(s.node)).length;
+  if (imgs.length) return need === imgs.length ? `Needs ${plural(imgs.length, 'image', 'images')}` : need ? `${need}-${imgs.length} images` : `Up to ${plural(imgs.length, 'image', 'images')}`;
+  const files = (m.inputs || []).filter((s) => !s.optional && !s.defaultAvailable);
+  const audio = files.filter((s) => s.kind === 'audio').length, video = files.filter((s) => s.kind === 'video').length;
+  if (video) return video === 1 ? 'Needs a video' : `Needs ${video} videos`;
+  if (audio) return audio === 1 ? 'Needs a recording' : `Needs ${audio} recordings`;
+  if (c.prompt?.length || m.promptDefault) return 'Uses your prompt';
+  return '';
+}
+
+/** Search: every word of the query in the preset's name, section or hint. */
+export function matchPreset(w, q) {
+  const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = [w.label, rowName(w), w.group, w.subgroup, presetHint(w)].filter(Boolean).join(' ').toLowerCase();
+  return words.every((x) => hay.includes(x));
+}
+
 export class WorkflowPicker {
   /** @param o.onPick(id)  @param o.onRename(w, name)  @param o.onDelete(w) */
   constructor(o) {
@@ -63,7 +95,11 @@ export class WorkflowPicker {
     this.scrim = document.getElementById('picker-scrim');
     this.crumb = document.getElementById('preset-crumb');
     this.name = document.getElementById('preset-name');
-    this.items = []; this.current = null; this.editing = null; this.tab = 'model';
+    this.items = []; this.current = null; this.editing = null; this.tab = 'model'; this.query = '';
+    // Batch 8: search box at the top (the same element across re-renders, so typing keeps focus).
+    this.search = h('input.picker-search', { type: 'search', placeholder: 'Search models and workflows', 'aria-label': 'Search presets', autocomplete: 'off', enterkeyhint: 'search',
+      oninput: () => { this.query = this.search.value; this.editing = null; this.render(); this.pop.scrollTop = 0; },
+      onkeydown: (e) => { if (e.key === 'Enter') this.pop.querySelector('.ent[data-preset]:not(.dis)')?.click(); } });
     this.btn.addEventListener('click', () => (this.pop.hidden ? this.open() : this.close()));
     this.scrim.addEventListener('click', () => this.close());
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !this.pop.hidden) this.close(); });
@@ -87,16 +123,20 @@ export class WorkflowPicker {
 
   // Opens on the tab of the current preset.
   open() { const cur = this.items.find((w) => w.id === this.current); if (cur) this.tab = tabOf(cur); this.render(); this.pop.hidden = false; this.scrim.hidden = false; this.btn.classList.add('open'); this.btn.setAttribute('aria-expanded', 'true'); this.pop.querySelector('.ent.on')?.scrollIntoView({ block: 'nearest' }); }
-  close() { this.pop.hidden = true; this.scrim.hidden = true; this.btn.classList.remove('open'); this.btn.setAttribute('aria-expanded', 'false'); this.editing = null; }
+  close() { this.query = ''; this.search.value = ''; this.pop.hidden = true; this.scrim.hidden = true; this.btn.classList.remove('open'); this.btn.setAttribute('aria-expanded', 'false'); this.editing = null; }
 
   render() {
     const tabs = h('div.picker-tabs', { role: 'tablist' }, ...TABS.map((t) => h('button.picker-tab', {
       type: 'button', role: 'tab', 'aria-selected': String(this.tab === t.key), dataset: { tab: t.key },
       onclick: () => { this.tab = t.key; this.editing = null; this.render(); this.pop.scrollTop = 0; },
     }, t.label, h('span.cnt', {}, String(this.items.filter((w) => tabOf(w) === t.key).length)))));
-    const els = [h('div.mt', {}, h('i.i.i-workflow'), h('b', {}, 'AI Workflow')), tabs];
-    const layout = pickerLayout(this.items, this.tab);
-    if (!layout.length && this.items.length) els.push(h('div.ent.dis', {}, h('span.nm', {}, this.tab === 'workflow' ? 'No workflows yet' : 'No models found')));
+    const searching = !!this.query.trim();
+    const els = [h('div.mt', {}, h('i.i.i-workflow'), h('b', {}, 'AI Workflow')), h('label.picker-search-row', {}, h('i.i.i-search', { 'aria-hidden': 'true' }), this.search)];
+    // While searching: matches from both tabs, and no tabs.
+    if (!searching) els.push(tabs);
+    const layout = searching ? pickerLayout(this.items.filter((w) => matchPreset(w, this.query))) : pickerLayout(this.items, this.tab);
+    if (searching && !layout.length) els.push(h('div.ent.dis', {}, h('span.nm', {}, 'No matches')));
+    if (!searching && !layout.length && this.items.length) els.push(h('div.ent.dis', {}, h('span.nm', {}, this.tab === 'workflow' ? 'No workflows yet' : 'No models found')));
     for (const { sec, rows, subs, count } of layout) {
       els.push(h('div.grp', { dataset: { section: sec.key } }, h(`i.i.${sec.icon}`), sec.label, h('span.cnt', {}, String(count))));
       for (const sub of subs) {
@@ -107,7 +147,9 @@ export class WorkflowPicker {
       for (const w of rows) els.push(this.#row(w));
     }
     if (!this.items.length) els.push(h('div.ent.dis', {}, h('span.nm', {}, 'No presets found')));
+    const focused = document.activeElement === this.search, caret = this.search.selectionStart;
     this.pop.replaceChildren(...els);
+    if (focused) { this.search.focus(); try { this.search.setSelectionRange(caret, caret); } catch {} }
   }
 
   #row(w) {
@@ -120,7 +162,7 @@ export class WorkflowPicker {
       dataset: { preset: w.id },
       onclick: (e) => { if (e.target.closest('.edit')) return; if (off) { toast(reason || 'Unavailable', 6000); return; } this.close(); this.onPick(w.id); },
       onkeydown: (e) => { if (e.key === 'Enter' && !off) { this.close(); this.onPick(w.id); } },
-    }, h('span.nm', {}, rowName(w)), this.current === w.id ? h('i.i.i-check') : null,
+    }, h('span.nm', {}, rowName(w)), !off && presetHint(w) ? h('span.hint', {}, presetHint(w)) : null, this.current === w.id ? h('i.i.i-check') : null,
     w.user || w.graph ? h('button.edit.btn.text', { type: 'button', 'aria-label': `${w.graph ? 'Rename, move' : 'Rename'} or delete ${w.label}`, onclick: () => { this.editing = w.id; this.render(); } }, h('i.i.i-settings')) : null);
     row.classList.toggle('on', this.current === w.id);
     row.classList.toggle('dis', off);

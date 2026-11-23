@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startStack, ROOT } from '../unit/helpers.js';
-import { launch } from './launch.js';
+import { launch, pickAspect } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -50,45 +50,49 @@ test('top bar: no ⋮ menu, History is a folder toggle; Settings has a gear; see
   assert.equal(await page.$eval('#seed-field .toggle .i', (i) => i.className), 'i i-lock');
 });
 
-test('orientation only swaps the ratio numbers; on 1:1 the buttons are hidden', async () => {
+test('batch 8 ratio grid: both orientations side by side, shown the way they come out, shapes the preset cannot make are greyed', async () => {
   await pick('ai:klein-4b-t2i');
-  await page.selectOption('#aspect-ratio', '1:1');
-  assert.equal(await page.isVisible('#orient-seg'), false, 'nothing to swap on 1:1');
+  await pickAspect(page, '1:1');
   assert.equal(await app(() => window.conceptApp.panel.state.aspect), '1:1');
-  await page.selectOption('#aspect-ratio', '16:9');
-  assert.equal(await page.isVisible('#orient-seg'), true);
-  await page.click('[data-orient="portrait"]');
+  await page.click('#aspect-btn');
+  assert.deepEqual(await page.$$eval('#aspect-pop .ar-opt', (b) => b.map((x) => x.textContent)), ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '9:21', '21:9']);
+  assert.equal(await page.$eval('#aspect-pop .ar-opt[aria-checked="true"]', (b) => b.textContent), '1:1');
+  await page.click('#aspect-pop .ar-opt[data-aspect="16:9-portrait"]');
+  assert.equal(await page.isVisible('#aspect-pop'), false, 'closes on pick');
   assert.equal(await app(() => window.conceptApp.panel.state.aspect), '16:9-portrait');
-  assert.equal(await page.$eval('#aspect-ratio', (s) => s.selectedOptions[0].textContent), '9:16', 'shown the way it comes out');
-  await page.click('[data-orient="landscape"]');
-  assert.equal(await app(() => window.conceptApp.panel.state.aspect), '16:9-landscape');
-  assert.equal(await page.$eval('#aspect-ratio', (s) => s.selectedOptions[0].textContent), '16:9');
-  await page.selectOption('#aspect-ratio', '4:3');
-  await page.click('[data-orient="portrait"]');
-  assert.equal(await app(() => window.conceptApp.panel.state.aspect), '4:3-portrait', 'never jumps to another ratio');
+  assert.equal(await page.textContent('#aspect-label'), '9:16', 'shown the way it comes out');
+  await pickAspect(page, '16:9-landscape');
+  assert.equal(await page.textContent('#aspect-label'), '16:9');
+  await pickAspect(page, '4:3-portrait');
+  assert.equal(await app(() => window.conceptApp.panel.state.aspect), '4:3-portrait');
+  // the preview shape follows the hovered ratio; Escape closes
+  await page.click('#aspect-btn');
+  await page.hover('#aspect-pop .ar-opt[data-aspect="16:9-landscape"]');
+  await page.waitForFunction(() => { const e = document.querySelector('#aspect-pop .ar-preview'); return e.offsetWidth > e.offsetHeight * 1.6; }, null, { timeout: 2000 });
+  await page.keyboard.press('Escape');
+  assert.equal(await page.isVisible('#aspect-pop'), false);
 });
 
 test('resolution 1K / 2K / 4K locks the ratio to the long side; Aspect, orientation and resolution share a row', async () => {
   await pick('ai:klein-4b-t2i');
   assert.equal(await page.isVisible('#res-select'), true);
-  await page.selectOption('#aspect-ratio', '16:9');
-  await page.click('[data-orient="landscape"]');
+  await pickAspect(page, '16:9-landscape');
   await page.selectOption('#aspect-res', '1k');
   assert.equal(await size(), '1024 × 576');
   await page.selectOption('#aspect-res', '2k');
   assert.equal(await size(), '2048 × 1152');
-  await page.click('[data-orient="portrait"]');
+  await pickAspect(page, '16:9-portrait');
   assert.equal(await size(), '1152 × 2048');
   await page.selectOption('#aspect-res', '4k');
   assert.equal(await size(), '2304 × 4096');
-  // row 1: ratio, orientation, resolution side by side; row 2: Batch and Seed side by side
+  // row 1: ratio button and resolution side by side; row 2: Batch and Seed side by side
   const geo = await app(() => {
     const r = (sel) => document.querySelector(sel).getBoundingClientRect();
-    return { ratio: r('.ratio-select:not(.res-select)'), orient: r('#orient-seg'), res: r('#res-select'), batch: r('#batch-field'), seed: r('#seed-field'), vw: innerWidth };
+    return { ratio: r('#aspect-btn'), res: r('#res-select'), batch: r('#batch-field'), seed: r('#seed-field'), vw: innerWidth };
   });
   const mid = (b) => b.top + b.height / 2;
-  assert.ok(Math.abs(mid(geo.ratio) - mid(geo.orient)) < 4 && Math.abs(mid(geo.ratio) - mid(geo.res)) < 4, JSON.stringify(geo));
-  assert.ok(geo.ratio.right <= geo.orient.left && geo.orient.right <= geo.res.left);
+  assert.ok(Math.abs(mid(geo.ratio) - mid(geo.res)) < 4, JSON.stringify(geo));
+  assert.ok(geo.ratio.right <= geo.res.left);
   assert.ok(Math.abs(geo.batch.top - geo.seed.top) < 4 && geo.batch.right <= geo.seed.left, 'Batch and Seed on one row');
   assert.ok(geo.seed.right <= geo.vw, 'no overflow');
   await shot('form-4k');
@@ -103,7 +107,7 @@ test('4K renders at 2K and upscales 2x in the same graph; 2K renders natively', 
   await pick('ai:klein-4b-t2i');
   await page.fill('#prompt', 'a tall white rocket');
   await setBatch(1);
-  await page.selectOption('#aspect-ratio', '1:1');
+  await pickAspect(page, '1:1');
   await page.selectOption('#aspect-res', '4k');
   await run();
   let g = lastGraph();

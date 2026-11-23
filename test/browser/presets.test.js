@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { startStack, ROOT } from '../unit/helpers.js';
-import { launch } from './launch.js';
+import { launch, pickAspect } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -54,16 +54,15 @@ test('header says Comfy UI; Run button is the only blue element; picker has 3D /
   const run = await page.$eval('#btn-generate', (b) => getComputedStyle(b).backgroundColor);
   assert.equal(run, 'rgb(11, 140, 233)');
   assert.ok(await page.locator('#btn-generate .i-play').count());
-  // Ratio is a dropdown now (no chips), in the gray ComfyUI look; the orientation toggle stays.
+  // Batch 8: the ratio is one button that opens a grid, in the gray ComfyUI look.
   assert.equal(await page.locator('#aspect-field .chip').count(), 0);
-  assert.deepEqual(await page.$$eval('#aspect-ratio option', (o) => o.map((x) => x.value)), ['1:1', '4:3', '3:2', '16:9']);
-  const dd = await page.$eval('#aspect-ratio', (b) => { const c = getComputedStyle(b); return [c.backgroundColor, c.color, c.borderTopColor]; });
-  assert.deepEqual(dd, ['rgb(38, 39, 41)', 'rgb(255, 255, 255)', 'rgba(0, 0, 0, 0)'], 'dropdown = ComfyUI card gray, never blue');
-  await page.selectOption('#aspect-ratio', '3:2'); // batch 5: no orientation buttons on 1:1
-  await page.click('#aspect-field .seg [data-orient="landscape"]');
-  const seg = await page.$eval('#aspect-field .seg button.on', (b) => getComputedStyle(b).backgroundColor);
+  const dd = await page.$eval('#aspect-btn', (b) => { const c = getComputedStyle(b); return [c.backgroundColor, c.color, c.borderTopColor]; });
+  assert.deepEqual(dd, ['rgb(38, 39, 41)', 'rgb(255, 255, 255)', 'rgba(0, 0, 0, 0)'], 'ratio button = ComfyUI card gray, never blue');
+  await pickAspect(page, '3:2-landscape');
+  await page.click('#aspect-btn');
+  const seg = await page.$eval('#aspect-pop .ar-opt[aria-checked="true"]', (b) => getComputedStyle(b).backgroundColor);
   assert.equal(seg, 'rgb(60, 61, 66)', 'selected = gray, not blue');
-  await page.selectOption('#aspect-ratio', '1:1');
+  await pickAspect(page, '1:1');
   // Default preset (no saved choice): FLUX.2 Klein 4B Text to Image.
   assert.equal(await page.evaluate(() => window.conceptApp.current.id), 'ai:klein-4b-t2i');
   assert.match(await page.textContent('#preset-crumb'), /Image/);
@@ -72,12 +71,13 @@ test('header says Comfy UI; Run button is the only blue element; picker has 3D /
   assert.deepEqual(sections, ['3D', 'Image', 'Video', 'Audio'], 'no App presets section');
   assert.doesNotMatch(await page.textContent('#picker'), /App presets|Fast concept|From reference image/);
   const wan = page.locator('#picker .ent[data-preset="ai:wan22-5b-ti2v"]');
-  // Rows show only the name: no tags, no header note; unavailable rows are grayed out.
+  // Rows show the name (+ batch 8: a short hint of what it needs, not on unavailable rows); no tags, no header note; unavailable rows are grayed out.
   assert.equal((await wan.textContent()).trim(), 'Wan 2.2 5B Text/Image to Video');
   assert.equal(await wan.getAttribute('aria-disabled'), 'true');
   assert.ok(await wan.evaluate((e) => e.classList.contains('dis') && Number(getComputedStyle(e).opacity) < 1));
   // Batch 4: Image rows sit in sub sections and show their short name there.
-  assert.equal((await page.locator('#picker .ent[data-preset="ai:qwen-2512-t2i"]').textContent()).trim(), 'Qwen 2512');
+  assert.equal((await page.locator('#picker .ent[data-preset="ai:qwen-2512-t2i"] .nm').textContent()).trim(), 'Qwen 2512');
+  assert.equal(await page.locator('#picker .ent[data-preset="ai:qwen-2512-t2i"] .hint').textContent(), 'Uses your prompt');
   assert.equal(await page.locator('#picker .tg').count(), 0);
   assert.equal((await page.textContent('#picker .mt')).trim(), 'AI Workflow');
   assert.doesNotMatch(await page.textContent('#picker'), /tight on|RAM offload|needs download|same list/);
@@ -98,11 +98,10 @@ test('AI preset: params shown with ranges; out-of-range values are clamped befor
   const steps = page.locator('#steps[data-param="steps"]');
   assert.equal(await steps.isVisible(), true);
   await steps.fill('99');
-  await page.selectOption('#aspect-ratio', '16:9');
-  await page.click('#aspect-field .seg [data-orient="portrait"]');
+  await pickAspect(page, '16:9-portrait');
   assert.match(await page.textContent('#aspect-size'), /^\d+ × \d+$/);
   assert.equal(await page.evaluate(() => window.conceptApp.panel.state.aspect), '16:9-portrait');
-  assert.equal(await page.inputValue('#aspect-ratio'), '16:9');
+  assert.equal(await page.getAttribute('#aspect-btn', 'data-aspect'), '16:9-portrait');
   await page.fill('#prompt', 'a lighthouse at dusk');
   await page.fill('#batch', '1'); await page.locator('#batch').dispatchEvent('change');
   await page.screenshot({ path: path.join(SHOTS, 'b1-klein-params.png') });

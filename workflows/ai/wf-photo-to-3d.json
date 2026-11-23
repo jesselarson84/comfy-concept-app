@@ -1,0 +1,689 @@
+{
+ "preset": {
+  "kind": "workflow",
+  "group": "3D Assets",
+  "label": "Photo to 3D Model",
+  "menuPath": "3D Assets/Photo to 3D Model",
+  "menuOrder": 1,
+  "source": "Batch 8 (1123 Change List): Qwen Image Edit 2511 clean-up (as Remove Lighting) feeding the Hunyuan3D 2.1 preset.",
+  "output": "3d",
+  "description": "A phone photo of an object in, an untextured 3D model (GLB) out. The photo is cleaned up first (Qwen Image Edit 2511: lighting and shadows removed, the object alone on a plain background), then Hunyuan3D 2.1 builds the mesh.",
+  "promptDefault": "keep the object exactly as it is",
+  "promptFormat": {
+   "template": "{text}. Show only this one object, whole and centered, on a plain white background. Remove the background, other objects, shadows, highlights and reflections: even, diffuse lighting from every side. Keep exactly the same shape, proportions, colours and details."
+  },
+  "params": {
+   "cleanup": {
+    "node": "30",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Clean up photo",
+    "control": "seg",
+    "labels": {
+     "false": "Off",
+     "true": "On"
+    },
+    "span2": true,
+    "info": "On: the photo is cleaned up first (lighting removed, the object alone on a plain background) with Qwen Image Edit 2511, which gives Hunyuan3D a clearer shape. Off: the photo goes straight in (faster; fine for renders or studio shots)."
+   },
+   "lightning": {
+    "node": "20",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Lightning",
+    "control": "seg",
+    "labels": {
+     "false": "Off",
+     "true": "On"
+    },
+    "span2": true,
+    "info": "Lightning is a speed-up add-on (a LoRA). On (the default): about 4 steps at guidance 1, a few seconds per image. Off: the full model, 20-50 steps; Guidance and the negative prompt only take effect when it is off.",
+    "when": {
+     "param": "cleanup",
+     "is": true
+    }
+   },
+   "removeBg": {
+    "node": "m25",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Remove background",
+    "control": "seg",
+    "labels": {
+     "false": "Off",
+     "true": "On"
+    },
+    "span2": true,
+    "info": "Cuts the object out of its background first (BiRefNet), so a photo or render on any backdrop works. Turn it off only if the picture already shows the object on a plain background."
+   },
+   "steps": {
+    "node": "m19:7",
+    "input": "steps",
+    "type": "int",
+    "min": 10,
+    "max": 50,
+    "default": 30,
+    "label": "Steps",
+    "control": "stepper",
+    "step": 5,
+    "info": "How many refinement passes when building the shape. 30 is the default; fewer is faster but less accurate."
+   },
+   "cfg": {
+    "node": "m19:7",
+    "input": "cfg",
+    "type": "number",
+    "min": 1,
+    "max": 10,
+    "step": 0.5,
+    "default": 5,
+    "label": "Guidance",
+    "control": "slider",
+    "info": "How closely the shape follows the picture. 5 is the default; very high values can make the shape noisy."
+   },
+   "detail": {
+    "node": "m19:8",
+    "input": "octree_resolution",
+    "type": "enum",
+    "options": [
+     192,
+     256,
+     320,
+     384
+    ],
+    "default": 256,
+    "label": "Detail",
+    "control": "select",
+    "group": "Shape",
+    "info": "Resolution of the 3D grid the surface is taken from. Higher captures finer detail but is slower and needs more memory."
+   },
+   "surface": {
+    "node": "m19:9",
+    "input": "threshold",
+    "type": "number",
+    "min": 0.3,
+    "max": 0.9,
+    "step": 0.05,
+    "default": 0.6,
+    "label": "Surface level",
+    "control": "slider",
+    "info": "Where the surface is placed in the model's 3D density. Lower makes the shape fuller and thicker; higher makes it thinner and can open holes. 0.6 is the default."
+   },
+   "method": {
+    "node": "m19:9",
+    "input": "algorithm",
+    "type": "enum",
+    "options": [
+     "surface net",
+     "basic"
+    ],
+    "default": "surface net",
+    "label": "Surface method",
+    "control": "select",
+    "info": "How the 3D grid is turned into a mesh. \"surface net\" gives smooth surfaces; \"basic\" gives a blocky, voxel look."
+   },
+   "faces": {
+    "node": "m26",
+    "input": "target_face_count",
+    "type": "int",
+    "min": 20000,
+    "max": 520000,
+    "step": 20000,
+    "default": 520000,
+    "label": "Max faces",
+    "control": "slider",
+    "format": "k",
+    "zeroAtMax": true,
+    "info": "Upper limit on the number of triangles; the mesh is simplified down to this. At the top of the slider (Full) nothing is removed."
+   }
+  },
+  "maxBatch": 1,
+  "vram": {
+   "estMB": 16000,
+   "basis": "Qwen Image Edit 2511 (as its preset), offloaded before Hunyuan3D 2.1 (~9 GB)"
+  },
+  "info": {
+   "image": "A photo of one object, as much of it in view as possible (a three-quarter view shows the most shape). Take it with the + button or the Camera button.",
+   "prompt": "Optional notes for the clean-up: what to keep or fix, e.g. \"remove the hand holding it\", \"keep the sticker on the side\". Leave empty to keep the object as it is."
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "unet_name": "qwen-image-edit-2511-Q5_K_M.gguf"
+   },
+   "class_type": "UnetLoaderGGUF",
+   "_meta": {
+    "title": "Unet Loader (GGUF)"
+   }
+  },
+  "2": {
+   "inputs": {
+    "lora_name": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+    "strength_model": 1,
+    "model": [
+     "1",
+     0
+    ]
+   },
+   "class_type": "LoraLoaderModelOnly",
+   "_meta": {
+    "title": "Lightning LoRA (2511)"
+   }
+  },
+  "3": {
+   "inputs": {
+    "shift": 3.1,
+    "sampling": "flow",
+    "model": [
+     "20",
+     0
+    ]
+   },
+   "class_type": "ModelSamplingAuraFlow",
+   "_meta": {
+    "title": "ModelSamplingAuraFlow"
+   }
+  },
+  "4": {
+   "inputs": {
+    "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+    "type": "qwen_image",
+    "device": "default"
+   },
+   "class_type": "CLIPLoader",
+   "_meta": {
+    "title": "Load CLIP"
+   }
+  },
+  "5": {
+   "inputs": {
+    "vae_name": "qwen_image_vae.safetensors"
+   },
+   "class_type": "VAELoader",
+   "_meta": {
+    "title": "Load VAE"
+   }
+  },
+  "6": {
+   "inputs": {
+    "image": "example.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Object photo #image"
+   }
+  },
+  "7": {
+   "inputs": {
+    "prompt": "Describe the edit here.",
+    "clip": [
+     "4",
+     0
+    ],
+    "vae": [
+     "5",
+     0
+    ],
+    "image1": [
+     "14",
+     0
+    ]
+   },
+   "class_type": "TextEncodeQwenImageEditPlus",
+   "_meta": {
+    "title": "Clean-up notes #prompt"
+   }
+  },
+  "8": {
+   "inputs": {
+    "prompt": "",
+    "clip": [
+     "4",
+     0
+    ],
+    "vae": [
+     "5",
+     0
+    ],
+    "image1": [
+     "14",
+     0
+    ]
+   },
+   "class_type": "TextEncodeQwenImageEditPlus",
+   "_meta": {
+    "title": "Negative #negative"
+   }
+  },
+  "9": {
+   "inputs": {
+    "pixels": [
+     "14",
+     0
+    ],
+    "vae": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "VAEEncode",
+   "_meta": {
+    "title": "VAE Encode"
+   }
+  },
+  "10": {
+   "inputs": {
+    "seed": 0,
+    "steps": 4,
+    "cfg": 1,
+    "sampler_name": "euler",
+    "scheduler": "simple",
+    "denoise": 1,
+    "model": [
+     "13",
+     0
+    ],
+    "positive": [
+     "15",
+     0
+    ],
+    "negative": [
+     "16",
+     0
+    ],
+    "latent_image": [
+     "9",
+     0
+    ]
+   },
+   "class_type": "KSampler",
+   "_meta": {
+    "title": "KSampler"
+   }
+  },
+  "11": {
+   "inputs": {
+    "samples": [
+     "10",
+     0
+    ],
+    "vae": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "VAEDecode",
+   "_meta": {
+    "title": "VAE Decode"
+   }
+  },
+  "13": {
+   "inputs": {
+    "strength": 1,
+    "model": [
+     "3",
+     0
+    ]
+   },
+   "class_type": "CFGNorm",
+   "_meta": {
+    "title": "CFGNorm"
+   }
+  },
+  "14": {
+   "inputs": {
+    "image": [
+     "6",
+     0
+    ]
+   },
+   "class_type": "FluxKontextImageScale",
+   "_meta": {
+    "title": "Scale input"
+   }
+  },
+  "15": {
+   "inputs": {
+    "conditioning": [
+     "7",
+     0
+    ],
+    "reference_latents_method": "index_timestep_zero"
+   },
+   "class_type": "FluxKontextMultiReferenceLatentMethod",
+   "_meta": {
+    "title": "Reference method (positive)"
+   }
+  },
+  "16": {
+   "inputs": {
+    "conditioning": [
+     "8",
+     0
+    ],
+    "reference_latents_method": "index_timestep_zero"
+   },
+   "class_type": "FluxKontextMultiReferenceLatentMethod",
+   "_meta": {
+    "title": "Reference method (negative)"
+   }
+  },
+  "20": {
+   "inputs": {
+    "switch": true,
+    "on_false": [
+     "1",
+     0
+    ],
+    "on_true": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "Lightning on/off"
+   }
+  },
+  "30": {
+   "inputs": {
+    "switch": true,
+    "on_false": [
+     "6",
+     0
+    ],
+    "on_true": [
+     "11",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "Clean up the photo (on/off)"
+   }
+  },
+  "m10": {
+   "inputs": {
+    "filename_prefix": "concept-app/photo_to_3d",
+    "mesh": [
+     "m26",
+     0
+    ]
+   },
+   "class_type": "SaveGLB",
+   "_meta": {
+    "title": "Save 3D Model",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m20": {
+   "inputs": {
+    "bg_removal_name": "birefnet.safetensors"
+   },
+   "class_type": "LoadBackgroundRemovalModel",
+   "_meta": {
+    "title": "Load Background Removal Model",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m21": {
+   "inputs": {
+    "bg_removal_model": [
+     "m20",
+     0
+    ],
+    "image": [
+     "30",
+     0
+    ]
+   },
+   "class_type": "RemoveBackground",
+   "_meta": {
+    "title": "Remove Background",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m22": {
+   "inputs": {
+    "mask": [
+     "m21",
+     0
+    ]
+   },
+   "class_type": "InvertMask",
+   "_meta": {
+    "title": "Background mask",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m23": {
+   "inputs": {
+    "width": 64,
+    "height": 64,
+    "batch_size": 1,
+    "color": 16777215
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "White",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m24": {
+   "inputs": {
+    "destination": [
+     "30",
+     0
+    ],
+    "source": [
+     "m23",
+     0
+    ],
+    "x": 0,
+    "y": 0,
+    "resize_source": true,
+    "mask": [
+     "m22",
+     0
+    ]
+   },
+   "class_type": "ImageCompositeMasked",
+   "_meta": {
+    "title": "Object on white",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m25": {
+   "inputs": {
+    "switch": true,
+    "on_false": [
+     "30",
+     0
+    ],
+    "on_true": [
+     "m24",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "Remove background on/off"
+   }
+  },
+  "m26": {
+   "inputs": {
+    "target_face_count": 0,
+    "placement_mode": "midpoint",
+    "mesh": [
+     "m19:9",
+     0
+    ]
+   },
+   "class_type": "DecimateMesh",
+   "_meta": {
+    "title": "Max faces (0 = full)"
+   }
+  },
+  "m19:1": {
+   "inputs": {
+    "ckpt_name": "hunyuan_3d_v2.1.safetensors"
+   },
+   "class_type": "ImageOnlyCheckpointLoader",
+   "_meta": {
+    "title": "Load Checkpoint Image Only (img2vid model)",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m19:3": {
+   "inputs": {
+    "shift": 1,
+    "sampling": "flow",
+    "model": [
+     "m19:1",
+     0
+    ]
+   },
+   "class_type": "ModelSamplingAuraFlow",
+   "_meta": {
+    "title": "ModelSamplingAuraFlow",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m19:13": {
+   "inputs": {
+    "crop": "center",
+    "clip_vision": [
+     "m19:1",
+     1
+    ],
+    "image": [
+     "m25",
+     0
+    ]
+   },
+   "class_type": "CLIPVisionEncode",
+   "_meta": {
+    "title": "CLIP Vision Encode",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m19:6": {
+   "inputs": {
+    "clip_vision_output": [
+     "m19:13",
+     0
+    ]
+   },
+   "class_type": "Hunyuan3Dv2Conditioning",
+   "_meta": {
+    "title": "Hunyuan3Dv2Conditioning",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m19:4": {
+   "inputs": {
+    "resolution": 4096,
+    "batch_size": 1
+   },
+   "class_type": "EmptyLatentHunyuan3Dv2",
+   "_meta": {
+    "title": "Empty Hunyuan 3D v2 Latent",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m19:7": {
+   "inputs": {
+    "seed": 952805179515179,
+    "steps": 30,
+    "cfg": 5,
+    "sampler_name": "euler",
+    "scheduler": "normal",
+    "denoise": 1,
+    "model": [
+     "m19:3",
+     0
+    ],
+    "positive": [
+     "m19:6",
+     0
+    ],
+    "negative": [
+     "m19:6",
+     1
+    ],
+    "latent_image": [
+     "m19:4",
+     0
+    ]
+   },
+   "class_type": "KSampler",
+   "_meta": {
+    "title": "KSampler",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m19:8": {
+   "inputs": {
+    "num_chunks": 8000,
+    "octree_resolution": 256,
+    "samples": [
+     "m19:7",
+     0
+    ],
+    "vae": [
+     "m19:1",
+     2
+    ]
+   },
+   "class_type": "VAEDecodeHunyuan3D",
+   "_meta": {
+    "title": "Hunyuan 3D VAE Decode",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  },
+  "m19:9": {
+   "inputs": {
+    "algorithm": "surface net",
+    "threshold": 0.6,
+    "voxel": [
+     "m19:8",
+     0
+    ]
+   },
+   "class_type": "VoxelToMesh",
+   "_meta": {
+    "title": "Voxel to Mesh",
+    "cnr_id": "comfy-core",
+    "ver": "0.3.59"
+   }
+  }
+ }
+}

@@ -19,6 +19,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.provider.MediaStore;
 import android.text.InputType;
 import android.util.TypedValue;
@@ -68,7 +71,6 @@ public class MainActivity extends Activity {
     private static final String TAILSCALE_PKG = "com.tailscale.ipn";
     private static final int REQ_FILE_CHOOSER = 1;
     private static final int REQ_STORAGE = 2;
-    private static final int REQ_NOTIFICATIONS = 3;
     private static final int REQ_MICROPHONE = 4;
     private static final int BG_COLOR = 0xFF171718; // = @color/app_bg = top bar / action bar colour in app/styles.css
 
@@ -93,7 +95,7 @@ public class MainActivity extends Activity {
     private String lastFailedUrl;
     private boolean clearHistoryOnFinish;
     private int probeGeneration;
-    private boolean runActive;             // a run is going (RunService is in the foreground)
+    private boolean runActive;             // a run is going (the WebView is not paused)
 
     // ---------------------------------------------------------------- lifecycle
 
@@ -174,9 +176,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
-        // While a run is going the WebView keeps working in the background (the
-        // foreground RunService keeps the process alive), so its websocket
-        // still gets the results; otherwise pause it as before.
+        // While a run is going the WebView keeps working in the background as long
+        // as Android keeps the process, so its websocket still gets the results;
+        // otherwise pause it as before. (If Android drops it, the page catches up
+        // from /history when it comes back.)
         if (web != null && !runActive) web.onPause();
         super.onPause();
     }
@@ -194,10 +197,7 @@ public class MainActivity extends Activity {
             fileCallback.onReceiveValue(null);
             fileCallback = null;
         }
-        if (runActive) {
-            runActive = false;
-            stopService(new Intent(this, RunService.class));
-        }
+        runActive = false;
         destroyWebView();
         io.shutdown();
         super.onDestroy();
@@ -630,7 +630,10 @@ public class MainActivity extends Activity {
             startActivityForResult(capture, REQ_FILE_CHOOSER);
             return;
         }
-        Intent pick = new Intent(Intent.ACTION_GET_CONTENT);
+        // Batch 8: OPEN_DOCUMENT, not GET_CONTENT. Newer Android sends an image/video
+        // GET_CONTENT to the Photo Picker, which has no Google Drive; the document
+        // picker lists Drive (and Downloads, Files ...) in its side menu.
+        Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         pick.addCategory(Intent.CATEGORY_OPENABLE);
         // Non-image types (the .json workflow import) use */*: many providers
         // report .json files as octet-stream, which a strict filter would hide.
@@ -926,26 +929,32 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Called from the bridge (UI thread). */
-    /** From the web app (NativeBridge.runStatus): start, update or finish RunService. */
+    /**
+     * From the web app (NativeBridge.runStatus, UI thread). Batch 8: no notification
+     * and no foreground service; while a run is going the WebView is not paused, and
+     * the phone vibrates once when it ends.
+     */
     void setRunStatus(int current, int total, boolean running, int done) {
         if (running) {
-            if (!runActive) askForNotifications();
             runActive = true;
-            RunService.update(this, current, total, true, done);
         } else if (runActive) {
             runActive = false;
-            RunService.update(this, current, total, false, done);
+            if (total > 0) vibrate();
         }
     }
 
-    /** Android 13+: the run notification needs POST_NOTIFICATIONS (asked once, on the first run). */
-    private void askForNotifications() {
-        if (Build.VERSION.SDK_INT < 33) return;
-        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return;
-        if (getPreferences(MODE_PRIVATE).getBoolean("askedNotifications", false)) return;
-        getPreferences(MODE_PRIVATE).edit().putBoolean("askedNotifications", true).apply();
-        requestPermissions(new String[] {Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATIONS);
+    @SuppressWarnings("deprecation")
+    private void vibrate() {
+        Vibrator v;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            VibratorManager vm = getSystemService(VibratorManager.class);
+            v = vm == null ? null : vm.getDefaultVibrator();
+        } else {
+            v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+        }
+        if (v == null || !v.hasVibrator()) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) v.vibrate(VibrationEffect.createWaveform(new long[] {0, 120, 90, 120}, -1));
+        else v.vibrate(new long[] {0, 120, 90, 120}, -1);
     }
 
     void setKeepAwake(boolean on) {
@@ -1004,7 +1013,6 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode == REQ_NOTIFICATIONS) return; // denied = the run goes on without a notification
         if (requestCode == REQ_MICROPHONE) {
             android.webkit.PermissionRequest r = pendingMicRequest;
             pendingMicRequest = null;

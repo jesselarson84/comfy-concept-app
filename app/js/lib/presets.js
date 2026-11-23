@@ -31,7 +31,7 @@ export const GROUPS = ['3D', 'Image', 'Video', 'Audio'];
 // workflow preset is a multi-step pipeline for a task (manifest kind: "workflow"),
 // grouped by task instead of by output.
 export const KINDS = ['model', 'workflow'];
-export const WORKFLOW_GROUPS = ['Textures', 'Concept', 'VFX'];
+export const WORKFLOW_GROUPS = ['Textures', 'Concept', 'VFX', '3D Assets', 'Sound'];
 export const groupsFor = (kind) => (kind === 'workflow' ? WORKFLOW_GROUPS : GROUPS);
 // Sub sections of a group in the picker (batch 4), in this order. A preset is in
 // one when its menuPath is "<group>/<sub section>/<short name>", e.g.
@@ -181,6 +181,7 @@ export function formatParam(p, v, values = {}) {
   if (p.format === 'x') return `${n.toFixed(1)}×`;
   if (p.format === 'k') return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
   if (p.format === 's') return `${n} s`;
+  if (p.format === 'dB') return `${n > 0 ? '+' : ''}${n} dB`;
   if (p.format === 'frames') { const fps = Number(values[p.fpsParam || 'fps']) || 24; return `${n} · ${(n / fps).toFixed(1)} s`; }
   if (p.format === 'px') return `${n} px`;
   if (p.type === 'int' || !Number.isFinite(n)) return String(v);

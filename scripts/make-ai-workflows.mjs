@@ -520,5 +520,146 @@ const save = (n, img, prefix, title) => n('SaveImage', { filename_prefix: `conce
   }, workflow: g };
 }
 
+// ---- batch 8 helpers: graft one preset's graph into another -----------------------
+/** Copies graph `add` into `into` with every id prefixed (links inside it follow);
+ *  `swap` maps an old id of `add` to a link that replaces every use of it. */
+function graft(into, add, prefix, swap = {}) {
+  const id = (x) => `${prefix}${x}`;
+  for (const [k, node] of Object.entries(add)) {
+    if (k in swap) continue;
+    const inputs = Object.fromEntries(Object.entries(node.inputs).map(([n, v]) => [n, Array.isArray(v) && v.length === 2 && typeof v[0] === 'string' && typeof v[1] === 'number' ? (v[0] in swap ? swap[v[0]] : [id(v[0]), v[1]]) : v]));
+    into[id(k)] = { ...structuredClone(node), inputs };
+  }
+  return id;
+}
+/** A preset's params with their node ids moved by graft(). */
+const moveParams = (params, id) => Object.fromEntries(Object.entries(structuredClone(params)).map(([k, p]) => [k, { ...p, node: id(p.node) }]));
+
+// ---- 3D Assets / Photo to 3D Model (batch 8) ----------------------------------------
+// A phone photo of an object -> Qwen Image Edit 2511 cleans it up (lighting off,
+// the object alone on a plain background, nothing else changed) -> Hunyuan3D 2.1
+// (its background removal + mesh). The clean-up is a lazy switch: Off feeds the
+// photo straight into Hunyuan3D.
+{
+  const q = read('qwen-edit-2511.json'), hy = read('hunyuan3d-21.json');
+  const wf = structuredClone(q.workflow);
+  delete wf['12']; // the cleaned picture is not saved: the model is the result
+  wf['6']._meta.title = 'Object photo #image';
+  wf['7']._meta.title = 'Clean-up notes #prompt';
+  wf['30'] = { inputs: { switch: true, on_false: ['6', 0], on_true: ['11', 0] }, class_type: 'ComfySwitchNode', _meta: { title: 'Clean up the photo (on/off)' } };
+  const id = graft(wf, hy.workflow, 'm', { 2: ['30', 0] });
+  wf[id('10')].inputs.filename_prefix = 'concept-app/photo_to_3d';
+  const hp = moveParams(hy.preset.params, id);
+  files['wf-photo-to-3d'] = { preset: {
+    kind: 'workflow', group: '3D Assets', label: 'Photo to 3D Model', menuPath: '3D Assets/Photo to 3D Model', menuOrder: 1,
+    source: 'Batch 8 (1123 Change List): Qwen Image Edit 2511 clean-up (as Remove Lighting) feeding the Hunyuan3D 2.1 preset.', output: '3d',
+    description: 'A phone photo of an object in, an untextured 3D model (GLB) out. The photo is cleaned up first (Qwen Image Edit 2511: lighting and shadows removed, the object alone on a plain background), then Hunyuan3D 2.1 builds the mesh.',
+    promptDefault: 'keep the object exactly as it is',
+    promptFormat: { template: '{text}. Show only this one object, whole and centered, on a plain white background. Remove the background, other objects, shadows, highlights and reflections: even, diffuse lighting from every side. Keep exactly the same shape, proportions, colours and details.' },
+    params: {
+      cleanup: { node: '30', input: 'switch', type: 'enum', options: [false, true], default: true, label: 'Clean up photo', control: 'seg', labels: { false: 'Off', true: 'On' }, span2: true, info: 'On: the photo is cleaned up first (lighting removed, the object alone on a plain background) with Qwen Image Edit 2511, which gives Hunyuan3D a clearer shape. Off: the photo goes straight in (faster; fine for renders or studio shots).' },
+      lightning: q.preset.params.lightning ? { ...q.preset.params.lightning, when: { param: 'cleanup', is: true } } : undefined,
+      ...hp,
+    },
+    maxBatch: 1, vram: { estMB: 16000, basis: 'Qwen Image Edit 2511 (as its preset), offloaded before Hunyuan3D 2.1 (~9 GB)' }, gguf: q.preset.gguf,
+    info: { image: 'A photo of one object, as much of it in view as possible (a three-quarter view shows the most shape). Take it with the + button or the Camera button.', prompt: 'Optional notes for the clean-up: what to keep or fix, e.g. "remove the hand holding it", "keep the sticker on the side". Leave empty to keep the object as it is.' },
+  }, workflow: wf };
+  if (!files['wf-photo-to-3d'].preset.params.lightning) delete files['wf-photo-to-3d'].preset.params.lightning;
+}
+
+// ---- Sound / Voice Line to Voice Swap (batch 8) -------------------------------------
+// Chatterbox TTS speaks the text, then Chatterbox voice conversion turns it into
+// the target voice (closer to the sample than the TTS voice cloning alone).
+{
+  const t = read('tts-chatterbox.json');
+  const { g, n } = graph();
+  const id = graft(g, t.workflow, 't', { 3: null });
+  // No voice sample on the TTS side: the target voice is applied by the swap.
+  delete g[id('2')];
+  delete g[id('1')].inputs.audio_prompt;
+  g[id('1')]._meta.title = 'Line to speak #prompt';
+  const target = n('LoadAudio', { audio: 'voice_sample.wav' }, 'Target voice');
+  const vc = n('ChatterboxVC', { model_pack_name: 'chatterbox', source_audio: [id('1'), 0], target_voice_audio: L(target), n_timesteps: 10, temperature: 1, flow_cfg_scale: 0.7, use_watermark: false, device: 'default', dtype: 'auto', attention_mode: 'sdpa', refinement_passes: 1, max_chunk_duration: 30, chunk_method: 'smart' }, 'Swap to the target voice');
+  n('SaveAudio', { filename_prefix: 'concept-app/voice_line_swap', audio: L(vc) }, 'Save Audio');
+  const tp = moveParams(t.preset.params, id);
+  files['wf-voice-line-swap'] = { preset: {
+    kind: 'workflow', group: 'Sound', label: 'Voice Line in Any Voice', menuPath: 'Sound/Voice Line in Any Voice', menuOrder: 1,
+    source: 'Batch 8 (1123 Change List): Chatterbox TTS then Chatterbox voice conversion (as the Voice Swap preset).', output: 'audio',
+    description: 'Type a line; Chatterbox speaks it, then the voice is swapped to your target voice sample (voice conversion). Only use voices you have permission to use.',
+    inputs: [{ kind: 'audio', node: target, input: 'audio', label: 'Target voice' }],
+    params: {
+      voice: tp.voice, seconds: tp.seconds, exaggeration: tp.exaggeration,
+      likeness: { node: vc, input: 'flow_cfg_scale', type: 'number', min: 0.3, max: 1.5, step: 0.05, default: 0.7, label: 'Voice likeness', control: 'slider', info: 'How closely the swap copies the target voice. Higher sounds more like the target but can lose naturalness; 0.7 is the default.' },
+      passes: { node: vc, input: 'refinement_passes', type: 'int', min: 1, max: 5, default: 1, label: 'Passes', control: 'stepper', info: 'Runs the swap again on its own result to move further toward the target voice. More than 3 or so starts to distort.' },
+    },
+    maxBatch: 4, vram: { estMB: 3500, basis: 'Chatterbox T3 + S3Gen (shared by TTS and the swap)' }, files: t.preset.files,
+    info: { prompt: 'The line to speak. Punctuation shapes the delivery: "Wait... what?" vs "Wait. What?".', audio: 'Target voice: 5-15 s of clean speech in the voice to end up with. Record it with the Record button or pick a file.' },
+  }, workflow: g };
+}
+
+// ---- Sound / Voice Line over a Sound Bed (batch 8) ----------------------------------
+// Chatterbox TTS line + a Stable Audio 3 sound effect / ambience under it, mixed.
+{
+  const t = read('tts-chatterbox.json'), sfx = read('sa3-small-sfx.json');
+  const { g, n } = graph();
+  const tid = graft(g, t.workflow, 't', {});
+  delete g[tid('2')];
+  g[tid('1')]._meta.title = 'Line to speak #prompt';
+  const sid = graft(g, sfx.workflow, 's', {});
+  const save = Object.keys(sfx.workflow).find((k) => sfx.workflow[k].class_type === 'SaveAudioAdvanced');
+  delete g[sid(save)];
+  const sfxPrompt = Object.keys(sfx.workflow).find((k) => /#prompt/.test(sfx.workflow[k]._meta.title));
+  g[sid(sfxPrompt)]._meta.title = 'Sound under the line';
+  g[sid(sfxPrompt)].inputs.text = 'quiet room tone';
+  const dec = Object.keys(sfx.workflow).find((k) => sfx.workflow[k].class_type === 'VAEDecodeAudio');
+  const lead = n('EmptyAudio', { duration: 0.5, sample_rate: 24000, channels: 1 }, 'Lead-in silence');
+  const line = n('AudioConcat', { audio1: L(lead), audio2: [tid('1'), 0], direction: 'after' }, 'Line after the lead-in');
+  const vol = n('AudioAdjustVolume', { audio: [sid(dec), 0], volume: -12 }, 'Sound level');
+  // The TTS line comes out loudness-normalized near full scale: -3 dB leaves room
+  // for the sound under it (tested: the mix hit 1.0 without it).
+  const lineVol = n('AudioAdjustVolume', { audio: L(line), volume: -3 }, 'Voice headroom');
+  const mix = n('AudioMerge', { audio1: L(vol), audio2: L(lineVol), merge_method: 'add' }, 'Mix');
+  n('SaveAudio', { filename_prefix: 'concept-app/voice_line_sfx', audio: L(mix) }, 'Save Audio');
+  const tp = moveParams(t.preset.params, tid), sp = moveParams(sfx.preset.params, sid);
+  files['wf-voice-line-sfx'] = { preset: {
+    kind: 'workflow', group: 'Sound', label: 'Voice Line with Sound', menuPath: 'Sound/Voice Line with Sound', menuOrder: 2,
+    source: 'Batch 8 (1123 Change List): Chatterbox TTS + Stable Audio 3 Small SFX, mixed with ComfyUI\'s audio nodes.', output: 'audio',
+    description: 'A spoken line with a sound effect or ambience under it: Chatterbox speaks the text, Stable Audio 3 makes the sound, and the two are mixed. The result is as long as the sound, so set Length longer than the line.',
+    params: {
+      sound: { node: sid(sfxPrompt), input: 'text', type: 'text', default: 'quiet room tone', label: 'Sound under the line', open: true, info: 'The sound effect or ambience to put under the line: "rain on a tin roof", "busy tavern chatter", "radio static with faint beeps".' },
+      seconds: { ...sp.seconds, label: 'Length', info: 'Length of the result in seconds. The sound fills it; the line is cut off if it runs longer, so leave a second or two spare.' },
+      level: { node: vol, input: 'volume', type: 'int', min: -30, max: 0, step: 1, default: -12, label: 'Sound level', control: 'slider', format: 'dB', info: 'How loud the sound is under the voice, in dB. -12 sits well under speech; closer to 0 is louder.' },
+      delay: { node: lead, input: 'duration', type: 'number', min: 0, max: 10, step: 0.25, default: 0.5, label: 'Line starts at', control: 'slider', format: 's', info: 'When the voice comes in, in seconds from the start of the sound.' },
+      voice: tp.voice, exaggeration: tp.exaggeration,
+    },
+    maxBatch: 4, vram: { estMB: 7500, basis: 'Chatterbox (3.5 GB) + Stable Audio 3 Small SFX with T5Gemma (~4 GB)' }, files: [...(t.preset.files || []), ...(sfx.preset.files || [])],
+    inputs: [{ kind: 'audio', node: tid('3'), input: 'audio', label: 'Voice sample', optional: true }],
+    optional: [{ node: tid('3'), drop: [{ node: tid('1'), input: 'audio_prompt' }] }],
+    info: { prompt: 'The line to speak, as you want it said. Punctuation shapes the delivery.', audio: 'Optional: a few seconds of clean speech to copy the voice from. Leave empty to use the built-in voice.' },
+  }, workflow: g };
+}
+
+// ---- Sound / Sound Effect Set (batch 8) -----------------------------------------------
+// One description, several takes in one run (the latent batch), to pick from.
+{
+  const sfx = read('sa3-small-sfx.json');
+  const wf = structuredClone(sfx.workflow);
+  const lat = Object.keys(wf).find((k) => wf[k].class_type === 'EmptyLatentAudio');
+  const save = Object.keys(wf).find((k) => wf[k].class_type === 'SaveAudioAdvanced');
+  wf[save].inputs.filename_prefix = 'concept-app/sfx_set';
+  const p = sfx.preset.params;
+  files['wf-sfx-set'] = { preset: {
+    kind: 'workflow', group: 'Sound', label: 'Sound Effect Set', menuPath: 'Sound/Sound Effect Set', menuOrder: 3,
+    source: 'Batch 8 (1123 Change List): the Stable Audio 3 Small SFX preset with a latent batch.', output: 'audio',
+    description: 'One description, several different takes of the sound in one run (Stable Audio 3 Small SFX), to pick the best from.',
+    params: {
+      takes: { node: lat, input: 'batch_size', type: 'enum', options: [2, 4, 8], default: 4, label: 'Takes', control: 'seg', info: 'How many different versions of the sound to make in one run.' },
+      seconds: p.seconds, steps: p.steps,
+    },
+    maxBatch: 1, vram: sfx.preset.vram, files: sfx.preset.files,
+    info: { prompt: 'Describe the sound and where it happens: "wooden door creak, slow", "laser zap, short", "footsteps on gravel".' },
+  }, workflow: wf };
+}
+
 for (const [id, f] of Object.entries(files)) fs.writeFileSync(path.join(OUT, `${id}.json`), JSON.stringify(f, null, 1) + '\n');
 console.log(Object.keys(files).join('\n'));

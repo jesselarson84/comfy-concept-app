@@ -25,18 +25,20 @@ test('ComfyUI canvas is the node view toggle in the top bar (batch 4; was the me
   assert.doesNotMatch(html, /Advanced \(ComfyUI\)/);
 });
 
-test('picker has no App presets section; aspect is a dropdown next to the orientation toggle; SW cache bumped', async () => {
+test('picker has no App presets section; aspect is a ratio grid button (batch 8); SW cache bumped', async () => {
   const { SECTIONS, sectionOf } = await import('../../app/js/ui/workflow-picker.js').catch(() => ({}));
   if (SECTIONS) {
-    assert.deepEqual(SECTIONS.map((x) => x.key), ['3D', 'Image', 'Video', 'Audio', 'Textures', 'Concept', 'VFX', 'My presets']);
+    assert.deepEqual(SECTIONS.map((x) => x.key), ['3D', 'Image', 'Video', 'Audio', 'Textures', 'Concept', 'VFX', '3D Assets', 'Sound', 'My presets']);
     assert.equal(sectionOf({ id: 'my-import' }), 'My presets');
   } else assert.doesNotMatch(read('app/js/ui/workflow-picker.js'), /App presets/);
   const html = read('app/index.html');
-  assert.match(html, /<select id="aspect-ratio"[\s\S]*?value="1:1"[\s\S]*?value="4:3"[\s\S]*?value="3:2"[\s\S]*?value="16:9"[\s\S]*?<\/select>/);
+  // batch 8: one button opens the ratio grid (both orientations); no dropdown or orientation toggle
+  assert.match(html, /id="aspect-btn"/);
+  assert.match(html, /id="aspect-pop"/);
+  assert.doesNotMatch(html, /id="aspect-ratio"|data-orient=/);
   assert.doesNotMatch(html, /data-ratio=/);
-  assert.match(html, /data-orient="portrait"[\s\S]*data-orient="landscape"/);
   assert.match(html, /id="aspect-size"/);
-  assert.match(read('app/sw.js'), /const VERSION = 'shell-v22';/); // batch 7: Import sheet + recorder
+  assert.match(read('app/sw.js'), /const VERSION = 'shell-v23';/); // batch 8: Drive folder sheet, + button, ratio grid
   assert.match(read('app/sw.js'), /'\/js\/lib\/resolution\.js'/);
   assert.match(read('app/sw.js'), /'\/js\/lib\/preset-choice\.js'/);
   assert.match(read('app/sw.js'), /'\/js\/lib\/legacy-presets\.js'/);

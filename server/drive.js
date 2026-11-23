@@ -6,6 +6,10 @@
 //   Q:\My Drive\Comfy UI\Images  pictures      ...\Video  videos
 //   Q:\My Drive\Comfy UI\3D      .glb models    ...\Audio  audio
 //
+// Batch 8: the app asks for a folder on every save ("Save to…", any folder in
+// My Drive, starting in the last one used for that kind); `folder` in the
+// request is that choice. /api/drive/folders lists and creates folders.
+//
 // Rules: the source must be one of the app's own outputs (outputs.js
 // checkAppOutput) and is read through ComfyUI's /view; the target name is
 // the plain file name, kept inside the kind folder, and an existing file is
@@ -42,10 +46,80 @@ export function openUnique(dir, name, { max = 999 } = {}) {
   throw err(409, 'Too many files with that name');
 }
 
+// ---- batch 8: "Save to…" picks any folder in My Drive ------------------------
+// Folder paths travel as "Comfy UI/Images" (forward slashes, relative to the
+// Drive root = the parent of driveDir, i.e. Q:\My Drive). Every part must be a
+// plain name (no "..", separators, drive letters, NUL); the resolved folder (and
+// its real path, so a link can't lead out) must stay inside the Drive root.
+const badPart = (s) => !s || s === '.' || s === '..' || /[\\/:*?"<>|\0]/.test(s) || s.length > 200;
+
+/** Drive root (Q:\My Drive) for a driveDir; 503 when Drive is not there. */
+export function driveRoot(driveDir = DEFAULT_DRIVE_DIR) {
+  const parent = path.dirname(path.resolve(driveDir));
+  let ok = false; try { ok = fs.statSync(parent).isDirectory(); } catch {}
+  if (!ok) throw err(503, `Google Drive is not available: ${parent} was not found.`);
+  return parent;
+}
+
+/** "Comfy UI/Images" -> absolute folder inside root (must exist). */
+export function resolveDriveFolder(root, rel) {
+  const parts = String(rel ?? '').split('/').filter((p) => p !== '');
+  if (parts.some(badPart)) throw err(400, 'Bad folder');
+  const dir = path.resolve(root, ...parts);
+  const inside = (p, r) => p === r || p.startsWith(r.endsWith(path.sep) ? r : r + path.sep);
+  if (!inside(dir, root)) throw err(400, 'Bad folder');
+  let real;
+  try { if (!fs.statSync(dir).isDirectory()) throw new Error(); real = fs.realpathSync(dir); } catch { throw err(404, 'Folder not found'); }
+  if (!inside(real, fs.realpathSync(root))) throw err(400, 'Bad folder');
+  return dir;
+}
+
+/** Absolute folder -> "Comfy UI/Images" ('' = the Drive root). */
+export const relDriveFolder = (root, dir) => path.relative(root, dir).split(path.sep).filter(Boolean).join('/');
+
+/** Default folder per kind, relative to the Drive root ("Comfy UI/Images"). */
+export function driveDefaults(driveDir = DEFAULT_DRIVE_DIR) {
+  const base = path.basename(path.resolve(driveDir));
+  return Object.fromEntries(Object.entries(DRIVE_FOLDERS).map(([k, f]) => [k, `${base}/${f}`]));
+}
+
+/** A default kind folder ("Comfy UI/Images") is created when first asked for. */
+function ensureDefaultFolder(driveDir, root, rel) {
+  const r = String(rel ?? "").split("/").filter(Boolean).join("/");
+  if (!Object.values(driveDefaults(driveDir)).includes(r)) return;
+  fs.mkdirSync(path.join(root, ...r.split("/")), { recursive: true });
+}
+
+/** Sub folders of a Drive folder (hidden / system ones left out), sorted by name. */
+export function listDriveFolders(driveDir, rel = '') {
+  const root = driveRoot(driveDir);
+  ensureDefaultFolder(driveDir, root, rel);
+  // A remembered folder that was deleted or renamed: fall back to the Drive root.
+  let dir;
+  try { dir = resolveDriveFolder(root, rel); } catch (e) { if (e.status === 404) dir = root; else throw e; }
+  const folders = fs.readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !d.name.startsWith('.') && !d.name.startsWith('$') && d.name !== 'desktop.ini')
+    .map((d) => d.name).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  return { root: path.basename(root) || root, path: relDriveFolder(root, dir), folders, defaults: driveDefaults(driveDir) };
+}
+
+/** New folder `name` inside `rel`; returns its relative path. An existing one is fine. */
+export function makeDriveFolder(driveDir, rel, name) {
+  const root = driveRoot(driveDir);
+  const parent = resolveDriveFolder(root, rel);
+  const n = String(name ?? '').trim();
+  if (badPart(n) || n.startsWith('.')) throw err(400, 'Folder names cannot contain \\ / : * ? " < > |');
+  const dir = path.join(parent, n);
+  fs.mkdirSync(dir, { recursive: true });
+  return { path: relDriveFolder(root, dir) };
+}
+
 /**
- * @param ref { filename, subfolder, type, kind? }
+ * @param ref { filename, subfolder, type, kind?, folder? }  folder: "Comfy UI/Images"
+ *            relative to the Drive root (batch 8, picked in the app); without it
+ *            the file goes to driveDir\<kind folder> as before.
  * @param o { driveDir, comfyUrl, outputSubfolder, historyFiles, fetchImpl }
- * @returns { name, folder, path }
+ * @returns { name, folder, drivePath, path }  drivePath: "Comfy UI/Images" (relative to the Drive root)
  */
 export async function saveToDrive(ref, { driveDir = DEFAULT_DRIVE_DIR, comfyUrl, outputSubfolder, historyFiles, fetchImpl = fetch } = {}) {
   const why = checkAppOutput(ref, { outputSubfolder, historyFiles });
@@ -54,10 +128,19 @@ export async function saveToDrive(ref, { driveDir = DEFAULT_DRIVE_DIR, comfyUrl,
   const parent = path.dirname(root);
   let ok = false; try { ok = fs.statSync(parent).isDirectory(); } catch {}
   if (!ok) throw err(503, `Google Drive is not available: ${parent} was not found.`);
-  const folder = DRIVE_FOLDERS[driveKind(ref)];
-  const dir = path.resolve(root, folder);
-  if (path.dirname(dir) !== root) throw err(400, 'Bad folder');
-  fs.mkdirSync(dir, { recursive: true });
+  let folder, dir;
+  if (typeof ref.folder === 'string') {
+    // Batch 8: a folder picked in the app (relative to Q:\My Drive); it must exist
+    // (the default kind folders are made on first use).
+    ensureDefaultFolder(driveDir, parent, ref.folder);
+    dir = resolveDriveFolder(parent, ref.folder);
+    folder = relDriveFolder(parent, dir);
+  } else {
+    folder = DRIVE_FOLDERS[driveKind(ref)];
+    dir = path.resolve(root, folder);
+    if (path.dirname(dir) !== root) throw err(400, 'Bad folder');
+    fs.mkdirSync(dir, { recursive: true });
+  }
   const name = path.basename(String(ref.filename));
   if (!safeFileName(name) || name !== ref.filename) throw err(400, 'Bad file name');
   const q = new URLSearchParams({ filename: ref.filename, subfolder: ref.subfolder || '', type: 'output' });
@@ -70,5 +153,5 @@ export async function saveToDrive(ref, { driveDir = DEFAULT_DRIVE_DIR, comfyUrl,
     try { fs.unlinkSync(out.full); } catch {} // only the partial file this call created
     throw err(502, `Copy failed: ${e.message}`);
   }
-  return { name: out.name, folder, path: out.full };
+  return { name: out.name, folder, drivePath: relDriveFolder(parent, dir), path: out.full };
 }

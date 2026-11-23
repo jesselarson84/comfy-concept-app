@@ -1,0 +1,209 @@
+{
+ "preset": {
+  "kind": "workflow",
+  "group": "Sound",
+  "label": "Voice Line in Any Voice",
+  "menuPath": "Sound/Voice Line in Any Voice",
+  "menuOrder": 1,
+  "source": "Batch 8 (1123 Change List): Chatterbox TTS then Chatterbox voice conversion (as the Voice Swap preset).",
+  "output": "audio",
+  "description": "Type a line; Chatterbox speaks it, then the voice is swapped to your target voice sample (voice conversion). Only use voices you have permission to use.",
+  "inputs": [
+   {
+    "kind": "audio",
+    "node": "1",
+    "input": "audio",
+    "label": "Target voice"
+   }
+  ],
+  "params": {
+   "voice": {
+    "node": "t1",
+    "input": "model_pack_name",
+    "type": "enum",
+    "options": [
+     "chatterbox",
+     "chatterbox-turbo",
+     "chatterbox-multilingual-es-mx-latam",
+     "chatterbox-multilingual-es-es",
+     "chatterbox-multilingual-pt-br",
+     "chatterbox-multilingual-pt-pt",
+     "chatterbox-multilingual-hi",
+     "chatterbox-multilingual-zh-cmn"
+    ],
+    "default": "chatterbox",
+    "label": "Voice model",
+    "control": "select",
+    "labels": {
+     "chatterbox": "Chatterbox (English)",
+     "chatterbox-turbo": "Chatterbox Turbo",
+     "chatterbox-multilingual-es-mx-latam": "Multilingual · Spanish (LatAm)",
+     "chatterbox-multilingual-es-es": "Multilingual · Spanish (Spain)",
+     "chatterbox-multilingual-pt-br": "Multilingual · Portuguese (BR)",
+     "chatterbox-multilingual-pt-pt": "Multilingual · Portuguese (PT)",
+     "chatterbox-multilingual-hi": "Multilingual · Hindi",
+     "chatterbox-multilingual-zh-cmn": "Multilingual · Mandarin"
+    },
+    "span2": true,
+    "installed": {
+     "folder": "chatterbox",
+     "prefix": "{v}/"
+    },
+    "info": "Which Chatterbox model to use: English, Turbo, or a multilingual model for another language. Only models installed on the PC are listed."
+   },
+   "seconds": {
+    "node": "t1",
+    "input": "max_new_tokens",
+    "type": "int",
+    "min": 3,
+    "max": 80,
+    "default": 16,
+    "label": "Max length",
+    "control": "slider",
+    "format": "s",
+    "multiplyBy": 25,
+    "info": "Upper limit on how long the speech may be (about 25 tokens per second). Raise it if the end of a long text is cut off."
+   },
+   "exaggeration": {
+    "node": "t1",
+    "input": "exaggeration",
+    "type": "number",
+    "min": 0.25,
+    "max": 2,
+    "default": 0.5,
+    "label": "Expressiveness",
+    "control": "slider",
+    "step": 0.05,
+    "info": "How expressive and emotional the voice is. 0.5 is neutral; higher is more dramatic (and tends to speak faster)."
+   },
+   "likeness": {
+    "node": "2",
+    "input": "flow_cfg_scale",
+    "type": "number",
+    "min": 0.3,
+    "max": 1.5,
+    "step": 0.05,
+    "default": 0.7,
+    "label": "Voice likeness",
+    "control": "slider",
+    "info": "How closely the swap copies the target voice. Higher sounds more like the target but can lose naturalness; 0.7 is the default."
+   },
+   "passes": {
+    "node": "2",
+    "input": "refinement_passes",
+    "type": "int",
+    "min": 1,
+    "max": 5,
+    "default": 1,
+    "label": "Passes",
+    "control": "stepper",
+    "info": "Runs the swap again on its own result to move further toward the target voice. More than 3 or so starts to distort."
+   }
+  },
+  "maxBatch": 4,
+  "vram": {
+   "estMB": 3500,
+   "basis": "Chatterbox T3 + S3Gen (shared by TTS and the swap)"
+  },
+  "files": [
+   {
+    "folder": "chatterbox",
+    "file": "chatterbox/t3_cfg.safetensors"
+   },
+   {
+    "folder": "chatterbox",
+    "file": "chatterbox/s3gen.safetensors"
+   },
+   {
+    "folder": "chatterbox",
+    "file": "chatterbox/ve.safetensors"
+   }
+  ],
+  "info": {
+   "prompt": "The line to speak. Punctuation shapes the delivery: \"Wait... what?\" vs \"Wait. What?\".",
+   "audio": "Target voice: 5-15 s of clean speech in the voice to end up with. Record it with the Record button or pick a file."
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "audio": "voice_sample.wav"
+   },
+   "class_type": "LoadAudio",
+   "_meta": {
+    "title": "Target voice"
+   }
+  },
+  "2": {
+   "inputs": {
+    "model_pack_name": "chatterbox",
+    "source_audio": [
+     "t1",
+     0
+    ],
+    "target_voice_audio": [
+     "1",
+     0
+    ],
+    "n_timesteps": 10,
+    "temperature": 1,
+    "flow_cfg_scale": 0.7,
+    "use_watermark": false,
+    "device": "default",
+    "dtype": "auto",
+    "attention_mode": "sdpa",
+    "refinement_passes": 1,
+    "max_chunk_duration": 30,
+    "chunk_method": "smart"
+   },
+   "class_type": "ChatterboxVC",
+   "_meta": {
+    "title": "Swap to the target voice"
+   }
+  },
+  "3": {
+   "inputs": {
+    "filename_prefix": "concept-app/voice_line_swap",
+    "audio": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "SaveAudio",
+   "_meta": {
+    "title": "Save Audio"
+   }
+  },
+  "t1": {
+   "class_type": "ChatterboxTTS",
+   "inputs": {
+    "model_pack_name": "chatterbox",
+    "text": "Hello. This is a short test.",
+    "max_new_tokens": 400,
+    "flow_cfg_scale": 0.7,
+    "exaggeration": 0.5,
+    "temperature": 0.8,
+    "cfg_weight": 0.5,
+    "repetition_penalty": 1.2,
+    "min_p": 0.05,
+    "top_p": 1,
+    "seed": 1,
+    "use_watermark": false,
+    "device": "default",
+    "dtype": "auto",
+    "attention_mode": "sdpa",
+    "top_k": 1000,
+    "normalize_loudness": true,
+    "num_steps": 10,
+    "cfg_scale": 1,
+    "enable_chunking": true,
+    "max_chars_per_chunk": 400,
+    "chunk_combination_method": "auto",
+    "silence_between_chunks_ms": 100
+   },
+   "_meta": {
+    "title": "Line to speak #prompt"
+   }
+  }
+ }
+}

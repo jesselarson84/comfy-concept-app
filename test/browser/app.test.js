@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { startStack, pngBytes, ROOT } from '../unit/helpers.js';
-import { launch } from './launch.js';
+import { launch, pickAspect } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -54,7 +54,7 @@ test('batch of 3 portrait: images appear one by one, seeds differ, size injected
   const before = (await mockPrompts()).length;
   await page.fill('#prompt', 'a brass airship over a canyon');
   await page.fill('#batch', '3'); await page.locator('#batch').dispatchEvent('change');
-  await page.selectOption('#aspect-ratio', '3:2'); await page.click('#aspect-field .seg [data-orient="portrait"]');
+  await pickAspect(page, '3:2-portrait');
   await page.click('#btn-generate');
   // While the batch runs there must be a moment with >=1 done and >=1 pending.
   await page.waitForFunction(() => {

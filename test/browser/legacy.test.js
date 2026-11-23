@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { startStack, ROOT } from '../unit/helpers.js';
-import { launch } from './launch.js';
+import { launch, pickAspect } from './launch.js';
 import { oldHistory, oldChats, oldLocalStorage } from '../fixtures/legacy-state.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
@@ -45,8 +45,8 @@ test('saved preset "from-reference-image" opens FLUX.2 Klein 4B Image Edit; old 
     assert.equal(await page.inputValue('#prompt'), 'same castle, winter');
     assert.equal(await page.evaluate(() => window.conceptApp.panel.state.aspect), '3:2-portrait');
     await page.evaluate(() => window.conceptApp.selectPreset('ai:klein-4b-t2i'));
-    assert.equal(await page.inputValue('#aspect-ratio'), '3:2');
-    assert.equal(await page.getAttribute('#aspect-field .seg [data-orient="portrait"]', 'aria-checked'), 'true');
+    assert.equal(await page.textContent('#aspect-label'), '2:3', 'batch 8 ratio button: 3:2 portrait shown as it comes out');
+    assert.equal(await page.getAttribute('#aspect-btn', 'data-aspect'), '3:2-portrait');
     assert.match(await page.textContent('#aspect-size'), /^\d+ × \d+$/);
   } finally { await ctx.close(); }
 });

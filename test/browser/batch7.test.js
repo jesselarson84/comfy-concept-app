@@ -40,12 +40,14 @@ const setFile = async (which, name, mimeType, buffer) => {
   await input.asElement().setInputFiles({ name, mimeType, buffer });
 };
 
-test('Import button: in the top bar; the sheet offers photo, video, recording and files', async () => {
+test('+ in the prompt box (batch 8): the sheet offers photo, video, recording, files, paste and From Comfy UI', async () => {
   await app(() => window.conceptApp.selectPreset('ai:z-image-turbo'));
-  assert.equal(await page.isVisible('#btn-import-media'), true);
-  await page.click('#btn-import-media');
+  assert.equal(await page.isVisible('#btn-attach'), true);
+  assert.equal(await page.locator('#btn-import-media').count(), 0, 'the top bar button is gone');
+  assert.equal(await page.locator('.prompt-box #btn-attach').count(), 1);
+  await page.click('#btn-attach');
   await page.waitForSelector('.import-sheet');
-  assert.deepEqual(await page.$$eval('.import-sheet .sheet-row', (r) => r.map((x) => x.dataset.act)), ['photo', 'video', 'record', 'device', 'audio-file']);
+  assert.deepEqual(await page.$$eval('.import-sheet .sheet-row', (r) => r.map((x) => x.dataset.act)), ['photo', 'video', 'record', 'device', 'audio-file', 'paste', 'comfy']);
   // capture inputs: camera for photo / video, gallery for both kinds
   assert.deepEqual(await app(() => { const i = window.conceptApp.importSheet.inputs; return [i.photo.accept, i.photo.getAttribute('capture'), i.video.accept, i.video.getAttribute('capture'), i.device.accept]; }), ['image/*', 'environment', 'video/*', 'environment', 'image/*,video/*']);
   await shot('sheet');
@@ -82,12 +84,31 @@ test('a recording: "What next?" lists the presets with an audio slot; Voice Swap
   // both audio slots have Pick + Record
   assert.equal(await page.locator('#file-inputs .rec-btn').count(), 2);
   await shot('voice-swap');
+  // batch 8: the current preset takes recordings -> the next one goes straight into its empty slot, no chooser
+  await setFile('audioFile', 'voice.wav', 'audio/wav', wav());
+  await page.waitForFunction(() => document.querySelectorAll('#file-inputs .ref-slot .ref-empty').length === 2 && [...document.querySelectorAll('#file-inputs .ref-slot .ref-empty')].every((e) => /.wav/.test(e.textContent)));
+  assert.equal(await page.isVisible('.preset-chooser'), false);
+  assert.equal(await app(() => window.conceptApp.current.id), 'ai:chatterbox-voice-swap', 'never switches by itself');
 });
 
-test('Import hides in the node view; new presets sit in the right sections', async () => {
+test('batch 8: a photo while the preset takes pictures goes straight into its slot; switching presets keeps it', async () => {
+  await app(() => window.conceptApp.selectPreset('ai:hunyuan3d-21'));
+  await setFile('device', 'chair.png', 'image/png', PNG);
+  await page.waitForSelector('#refs .ref-preview:not([hidden])');
+  assert.equal(await page.isVisible('.preset-chooser'), false);
+  const ref = await app(() => Object.values(window.conceptApp.refs.values)[0]);
+  assert.ok(ref);
+  await app(() => window.conceptApp.selectPreset('ai:wf-photo-to-3d'));
+  assert.deepEqual(await app(() => Object.values(window.conceptApp.refs.values)), [ref], 'carried into the new preset');
+  await page.waitForSelector('#refs .ref-preview:not([hidden])');
+  await app(() => window.conceptApp.selectPreset('ai:z-image-turbo'));
+  assert.deepEqual(await app(() => window.conceptApp.refs.values), {}, 'a text-only preset drops it');
+});
+
+test('+ hides in the node view; new presets sit in the right sections', async () => {
   await page.click('#btn-canvas');
   await page.waitForFunction(() => document.body.classList.contains('node-view-on'));
-  assert.equal(await page.isVisible('#btn-import-media'), false);
+  assert.equal(await page.isVisible('#btn-attach'), false);
   await page.click('#btn-canvas');
   await page.waitForFunction(() => !document.body.classList.contains('node-view-on'));
   const where = await app(() => Object.fromEntries(['ai:wf-photo-texture', 'ai:wf-pbr-maps', 'ai:wf-pbr-chord', 'ai:wf-depth-normal', 'ai:sa3-small-sfx', 'ai:chatterbox-voice-swap'].map((id) => { const w = window.conceptApp.workflows.find((x) => x.id === id); return [id, `${w.kind}:${w.group}`]; })));
