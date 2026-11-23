@@ -1,0 +1,52 @@
+{
+ "1": {
+  "class_type": "VibeVoiceTTS",
+  "inputs": {
+   "model_name": "VibeVoice-1.5B",
+   "text": "[1] Hello. This is a short test.",
+   "quantize_llm_4bit": false,
+   "attention_mode": "sdpa",
+   "cfg_scale": 1.3,
+   "inference_steps": 10,
+   "seed": 1,
+   "do_sample": true,
+   "temperature": 0.95,
+   "top_p": 0.95,
+   "top_k": 0,
+   "max_new_tokens": 0,
+   "force_offload": true,
+   "device": "cuda",
+   "dtype": "auto",
+   "voice_preset": "None",
+   "speaker_1_voice": [
+    "3",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "VibeVoice TTS #prompt"
+  }
+ },
+ "2": {
+  "class_type": "SaveAudio",
+  "inputs": {
+   "audio": [
+    "1",
+    0
+   ],
+   "filename_prefix": "concept-app/tts_vibevoice"
+  },
+  "_meta": {
+   "title": "Save Audio"
+  }
+ },
+ "3": {
+  "class_type": "LoadAudio",
+  "inputs": {
+   "audio": "verify-voice.flac"
+  },
+  "_meta": {
+   "title": "Voice sample"
+  }
+ }
+}

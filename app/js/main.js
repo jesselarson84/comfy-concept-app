@@ -257,8 +257,9 @@ async function generate() {
   const missingFile = fileInputs.missing();
   if (missingFile.length) return toast(`Pick a ${missingFile[0].kind} first`);
   if (maskSlot.missing()) return toast('Paint a mask first');
-  if (c.prompt.length && !v.prompt.trim()) return toast('Type a prompt');
   const ai = current.ai;
+  // Workflows with a built-in instruction (e.g. Remove Lighting) run with an empty prompt.
+  if (c.prompt.length && !v.prompt.trim() && !ai?.promptDefault) return toast('Type a prompt');
   // Text-to-image presets: the 1K / 2K / 4K picker sets the size (lib/resolution.js);
   // others keep the preset's pixel count.
   let size = c.width.length && c.height.length ? (v.res ? panel.renderSize() : sizeFor(v.aspect, ...(ai?.size ? ai.size.base : [c.defaults.width || 1024, c.defaults.height || 1024]), ai?.size?.multiple || 16)) : {};

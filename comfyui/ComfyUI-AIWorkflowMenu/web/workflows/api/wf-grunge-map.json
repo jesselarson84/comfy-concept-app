@@ -1,0 +1,864 @@
+{
+ "1": {
+  "inputs": {
+   "unet_name": "z_image_turbo_bf16.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "2": {
+  "inputs": {
+   "clip_name": "qwen_3_4b.safetensors",
+   "type": "lumina2",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load CLIP"
+  }
+ },
+ "3": {
+  "inputs": {
+   "vae_name": "ae.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "4": {
+  "inputs": {
+   "shift": 3,
+   "sampling": "flow",
+   "model": [
+    "1",
+    0
+   ]
+  },
+  "class_type": "ModelSamplingAuraFlow",
+  "_meta": {
+   "title": "ModelSamplingAuraFlow"
+  }
+ },
+ "5": {
+  "inputs": {
+   "text": "",
+   "clip": [
+    "2",
+    0
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "Grunge prompt #prompt"
+  }
+ },
+ "6": {
+  "inputs": {
+   "conditioning": [
+    "5",
+    0
+   ]
+  },
+  "class_type": "ConditioningZeroOut",
+  "_meta": {
+   "title": "Conditioning Zero Out"
+  }
+ },
+ "7": {
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "batch_size": 1
+  },
+  "class_type": "EmptySD3LatentImage",
+  "_meta": {
+   "title": "EmptySD3LatentImage"
+  }
+ },
+ "8": {
+  "inputs": {
+   "seed": 0,
+   "steps": 8,
+   "cfg": 1,
+   "sampler_name": "res_multistep",
+   "scheduler": "simple",
+   "denoise": 1,
+   "model": [
+    "4",
+    0
+   ],
+   "positive": [
+    "5",
+    0
+   ],
+   "negative": [
+    "6",
+    0
+   ],
+   "latent_image": [
+    "7",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "9": {
+  "inputs": {
+   "samples": [
+    "8",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  }
+ },
+ "10": {
+  "inputs": {
+   "image": [
+    "9",
+    0
+   ]
+  },
+  "class_type": "GetImageSize",
+  "_meta": {
+   "title": "Seam: image size"
+  }
+ },
+ "11": {
+  "inputs": {
+   "expression": "a",
+   "values.a": [
+    "10",
+    0
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: width"
+  }
+ },
+ "12": {
+  "inputs": {
+   "expression": "a",
+   "values.a": [
+    "10",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: height"
+  }
+ },
+ "13": {
+  "inputs": {
+   "expression": "a // 2",
+   "values.a": [
+    "11",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: half width"
+  }
+ },
+ "14": {
+  "inputs": {
+   "expression": "a // 2",
+   "values.a": [
+    "12",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: half height"
+  }
+ },
+ "15": {
+  "inputs": {
+   "expression": "a - b",
+   "values.a": [
+    "11",
+    1
+   ],
+   "values.b": [
+    "13",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: shift half: rest of width"
+  }
+ },
+ "16": {
+  "inputs": {
+   "expression": "a - b",
+   "values.a": [
+    "12",
+    1
+   ],
+   "values.b": [
+    "14",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: shift half: rest of height"
+  }
+ },
+ "17": {
+  "inputs": {
+   "image": [
+    "9",
+    0
+   ],
+   "width": [
+    "13",
+    1
+   ],
+   "height": [
+    "14",
+    1
+   ],
+   "x": 0,
+   "y": 0
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift half: top left"
+  }
+ },
+ "18": {
+  "inputs": {
+   "image": [
+    "9",
+    0
+   ],
+   "width": [
+    "15",
+    1
+   ],
+   "height": [
+    "14",
+    1
+   ],
+   "x": [
+    "13",
+    1
+   ],
+   "y": 0
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift half: top right"
+  }
+ },
+ "19": {
+  "inputs": {
+   "image": [
+    "9",
+    0
+   ],
+   "width": [
+    "13",
+    1
+   ],
+   "height": [
+    "16",
+    1
+   ],
+   "x": 0,
+   "y": [
+    "14",
+    1
+   ]
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift half: bottom left"
+  }
+ },
+ "20": {
+  "inputs": {
+   "image": [
+    "9",
+    0
+   ],
+   "width": [
+    "15",
+    1
+   ],
+   "height": [
+    "16",
+    1
+   ],
+   "x": [
+    "13",
+    1
+   ],
+   "y": [
+    "14",
+    1
+   ]
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift half: bottom right"
+  }
+ },
+ "21": {
+  "inputs": {
+   "image1": [
+    "20",
+    0
+   ],
+   "direction": "right",
+   "match_image_size": false,
+   "spacing_width": 0,
+   "spacing_color": "black",
+   "image2": [
+    "19",
+    0
+   ]
+  },
+  "class_type": "ImageStitch",
+  "_meta": {
+   "title": "Seam: shift half: top row"
+  }
+ },
+ "22": {
+  "inputs": {
+   "image1": [
+    "18",
+    0
+   ],
+   "direction": "right",
+   "match_image_size": false,
+   "spacing_width": 0,
+   "spacing_color": "black",
+   "image2": [
+    "17",
+    0
+   ]
+  },
+  "class_type": "ImageStitch",
+  "_meta": {
+   "title": "Seam: shift half: bottom row"
+  }
+ },
+ "23": {
+  "inputs": {
+   "image1": [
+    "21",
+    0
+   ],
+   "direction": "down",
+   "match_image_size": false,
+   "spacing_width": 0,
+   "spacing_color": "black",
+   "image2": [
+    "22",
+    0
+   ]
+  },
+  "class_type": "ImageStitch",
+  "_meta": {
+   "title": "Seam: shift half: shifted"
+  }
+ },
+ "24": {
+  "inputs": {
+   "expression": "max(64, min(a, b) // 3)",
+   "values.a": [
+    "11",
+    1
+   ],
+   "values.b": [
+    "12",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Blend: band width"
+  }
+ },
+ "25": {
+  "inputs": {
+   "expression": "a - b // 2",
+   "values.a": [
+    "15",
+    1
+   ],
+   "values.b": [
+    "24",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Blend: band x"
+  }
+ },
+ "26": {
+  "inputs": {
+   "expression": "a - b // 2",
+   "values.a": [
+    "16",
+    1
+   ],
+   "values.b": [
+    "24",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Blend: band y"
+  }
+ },
+ "27": {
+  "inputs": {
+   "value": 0,
+   "width": [
+    "11",
+    1
+   ],
+   "height": [
+    "12",
+    1
+   ]
+  },
+  "class_type": "SolidMask",
+  "_meta": {
+   "title": "Blend: empty mask"
+  }
+ },
+ "28": {
+  "inputs": {
+   "value": 1,
+   "width": [
+    "24",
+    1
+   ],
+   "height": [
+    "12",
+    1
+   ]
+  },
+  "class_type": "SolidMask",
+  "_meta": {
+   "title": "Blend: vertical band"
+  }
+ },
+ "29": {
+  "inputs": {
+   "value": 1,
+   "width": [
+    "11",
+    1
+   ],
+   "height": [
+    "24",
+    1
+   ]
+  },
+  "class_type": "SolidMask",
+  "_meta": {
+   "title": "Blend: horizontal band"
+  }
+ },
+ "30": {
+  "inputs": {
+   "destination": [
+    "27",
+    0
+   ],
+   "source": [
+    "28",
+    0
+   ],
+   "x": [
+    "25",
+    1
+   ],
+   "y": 0,
+   "operation": "or"
+  },
+  "class_type": "MaskComposite",
+  "_meta": {
+   "title": "Blend: + vertical"
+  }
+ },
+ "31": {
+  "inputs": {
+   "destination": [
+    "30",
+    0
+   ],
+   "source": [
+    "29",
+    0
+   ],
+   "x": 0,
+   "y": [
+    "26",
+    1
+   ],
+   "operation": "or"
+  },
+  "class_type": "MaskComposite",
+  "_meta": {
+   "title": "Blend: cross mask"
+  }
+ },
+ "32": {
+  "inputs": {
+   "mask": [
+    "31",
+    0
+   ]
+  },
+  "class_type": "MaskToImage",
+  "_meta": {
+   "title": "Blend: mask to image"
+  }
+ },
+ "33": {
+  "inputs": {
+   "image": [
+    "32",
+    0
+   ],
+   "upscale_method": "bilinear",
+   "width": 64,
+   "height": 64,
+   "crop": "disabled"
+  },
+  "class_type": "ImageScale",
+  "_meta": {
+   "title": "Blend: shrink mask"
+  }
+ },
+ "34": {
+  "inputs": {
+   "image": [
+    "33",
+    0
+   ],
+   "blur_radius": 8,
+   "sigma": 4
+  },
+  "class_type": "ImageBlur",
+  "_meta": {
+   "title": "Blend: feather"
+  }
+ },
+ "35": {
+  "inputs": {
+   "image": [
+    "34",
+    0
+   ],
+   "upscale_method": "bilinear",
+   "width": [
+    "11",
+    1
+   ],
+   "height": [
+    "12",
+    1
+   ],
+   "crop": "disabled"
+  },
+  "class_type": "ImageScale",
+  "_meta": {
+   "title": "Blend: mask full size"
+  }
+ },
+ "36": {
+  "inputs": {
+   "image": [
+    "35",
+    0
+   ],
+   "channel": "red"
+  },
+  "class_type": "ImageToMask",
+  "_meta": {
+   "title": "Blend: soft cross"
+  }
+ },
+ "37": {
+  "inputs": {
+   "destination": [
+    "23",
+    0
+   ],
+   "source": [
+    "9",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "resize_source": false,
+   "mask": [
+    "36",
+    0
+   ]
+  },
+  "class_type": "ImageCompositeMasked",
+  "_meta": {
+   "title": "Blend: original over the cross"
+  }
+ },
+ "38": {
+  "inputs": {
+   "expression": "a - b",
+   "values.a": [
+    "11",
+    1
+   ],
+   "values.b": [
+    "15",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: shift back: rest of width"
+  }
+ },
+ "39": {
+  "inputs": {
+   "expression": "a - b",
+   "values.a": [
+    "12",
+    1
+   ],
+   "values.b": [
+    "16",
+    1
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Seam: shift back: rest of height"
+  }
+ },
+ "40": {
+  "inputs": {
+   "image": [
+    "37",
+    0
+   ],
+   "width": [
+    "15",
+    1
+   ],
+   "height": [
+    "16",
+    1
+   ],
+   "x": 0,
+   "y": 0
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift back: top left"
+  }
+ },
+ "41": {
+  "inputs": {
+   "image": [
+    "37",
+    0
+   ],
+   "width": [
+    "38",
+    1
+   ],
+   "height": [
+    "16",
+    1
+   ],
+   "x": [
+    "15",
+    1
+   ],
+   "y": 0
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift back: top right"
+  }
+ },
+ "42": {
+  "inputs": {
+   "image": [
+    "37",
+    0
+   ],
+   "width": [
+    "15",
+    1
+   ],
+   "height": [
+    "39",
+    1
+   ],
+   "x": 0,
+   "y": [
+    "16",
+    1
+   ]
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift back: bottom left"
+  }
+ },
+ "43": {
+  "inputs": {
+   "image": [
+    "37",
+    0
+   ],
+   "width": [
+    "38",
+    1
+   ],
+   "height": [
+    "39",
+    1
+   ],
+   "x": [
+    "15",
+    1
+   ],
+   "y": [
+    "16",
+    1
+   ]
+  },
+  "class_type": "ImageCrop",
+  "_meta": {
+   "title": "Seam: shift back: bottom right"
+  }
+ },
+ "44": {
+  "inputs": {
+   "image1": [
+    "43",
+    0
+   ],
+   "direction": "right",
+   "match_image_size": false,
+   "spacing_width": 0,
+   "spacing_color": "black",
+   "image2": [
+    "42",
+    0
+   ]
+  },
+  "class_type": "ImageStitch",
+  "_meta": {
+   "title": "Seam: shift back: top row"
+  }
+ },
+ "45": {
+  "inputs": {
+   "image1": [
+    "41",
+    0
+   ],
+   "direction": "right",
+   "match_image_size": false,
+   "spacing_width": 0,
+   "spacing_color": "black",
+   "image2": [
+    "40",
+    0
+   ]
+  },
+  "class_type": "ImageStitch",
+  "_meta": {
+   "title": "Seam: shift back: bottom row"
+  }
+ },
+ "46": {
+  "inputs": {
+   "image1": [
+    "44",
+    0
+   ],
+   "direction": "down",
+   "match_image_size": false,
+   "spacing_width": 0,
+   "spacing_color": "black",
+   "image2": [
+    "45",
+    0
+   ]
+  },
+  "class_type": "ImageStitch",
+  "_meta": {
+   "title": "Seam: shift back: shifted"
+  }
+ },
+ "47": {
+  "inputs": {
+   "image": [
+    "46",
+    0
+   ]
+  },
+  "class_type": "ImageRGBToYUV",
+  "_meta": {
+   "title": "Grayscale (luma)"
+  }
+ },
+ "48": {
+  "inputs": {
+   "images": [
+    "47",
+    0
+   ],
+   "factor": 1.4
+  },
+  "class_type": "AdjustContrast",
+  "_meta": {
+   "title": "Push contrast"
+  }
+ },
+ "49": {
+  "inputs": {
+   "filename_prefix": "concept-app/grunge_map",
+   "images": [
+    "48",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "Save Image"
+  }
+ }
+}

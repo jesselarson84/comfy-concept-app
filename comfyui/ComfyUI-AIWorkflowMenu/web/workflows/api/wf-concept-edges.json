@@ -1,0 +1,233 @@
+{
+ "1": {
+  "inputs": {
+   "unet_name": "z_image_turbo_bf16.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "2": {
+  "inputs": {
+   "clip_name": "qwen_3_4b.safetensors",
+   "type": "lumina2",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load CLIP"
+  }
+ },
+ "3": {
+  "inputs": {
+   "vae_name": "ae.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "4": {
+  "inputs": {
+   "shift": 3,
+   "sampling": "flow",
+   "model": [
+    "1",
+    0
+   ]
+  },
+  "class_type": "ModelSamplingAuraFlow",
+  "_meta": {
+   "title": "ModelSamplingAuraFlow"
+  }
+ },
+ "5": {
+  "inputs": {
+   "text": "",
+   "clip": [
+    "2",
+    0
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "Look #prompt"
+  }
+ },
+ "6": {
+  "inputs": {
+   "conditioning": [
+    "5",
+    0
+   ]
+  },
+  "class_type": "ConditioningZeroOut",
+  "_meta": {
+   "title": "Conditioning Zero Out"
+  }
+ },
+ "7": {
+  "inputs": {
+   "image": "example.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Greybox render #image"
+  }
+ },
+ "8": {
+  "inputs": {
+   "image": [
+    "7",
+    0
+   ],
+   "upscale_method": "lanczos",
+   "megapixels": 1,
+   "resolution_steps": 16
+  },
+  "class_type": "ImageScaleToTotalPixels",
+  "_meta": {
+   "title": "Fit to 1 MP"
+  }
+ },
+ "9": {
+  "inputs": {
+   "image": [
+    "8",
+    0
+   ],
+   "low_threshold": 0.2,
+   "high_threshold": 0.5
+  },
+  "class_type": "Canny",
+  "_meta": {
+   "title": "Edges (canny)"
+  }
+ },
+ "10": {
+  "inputs": {
+   "image": [
+    "8",
+    0
+   ]
+  },
+  "class_type": "GetImageSize",
+  "_meta": {
+   "title": "Size"
+  }
+ },
+ "11": {
+  "inputs": {
+   "width": [
+    "10",
+    0
+   ],
+   "height": [
+    "10",
+    1
+   ],
+   "batch_size": 1
+  },
+  "class_type": "EmptySD3LatentImage",
+  "_meta": {
+   "title": "Latent (same shape as the render)"
+  }
+ },
+ "12": {
+  "inputs": {
+   "name": "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors"
+  },
+  "class_type": "ModelPatchLoader",
+  "_meta": {
+   "title": "Load ControlNet (model patch)"
+  }
+ },
+ "13": {
+  "inputs": {
+   "model": [
+    "4",
+    0
+   ],
+   "model_patch": [
+    "12",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "strength": 0.75,
+   "image": [
+    "9",
+    0
+   ],
+   "start_percent": 0,
+   "end_percent": 1
+  },
+  "class_type": "ZImageFunControlnet",
+  "_meta": {
+   "title": "Z-Image Fun ControlNet"
+  }
+ },
+ "14": {
+  "inputs": {
+   "seed": 0,
+   "steps": 8,
+   "cfg": 1,
+   "sampler_name": "res_multistep",
+   "scheduler": "simple",
+   "denoise": 1,
+   "model": [
+    "13",
+    0
+   ],
+   "positive": [
+    "5",
+    0
+   ],
+   "negative": [
+    "6",
+    0
+   ],
+   "latent_image": [
+    "11",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "15": {
+  "inputs": {
+   "samples": [
+    "14",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  }
+ },
+ "16": {
+  "inputs": {
+   "filename_prefix": "concept-app/concept_edges",
+   "images": [
+    "15",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "Save Image"
+  }
+ }
+}

@@ -21,10 +21,12 @@ const avail = (ws, id) => ws.find((w) => w.id === 'ai:' + id).availability;
 // The AI Workflow manifest entries (MoGe Image to Mesh removed in batch 3) + the two TTS presets.
 const MANIFEST_17 = ['qwen-2512-t2i', 'qwen-edit-2509', 'qwen-edit-2511', 'z-image-turbo', 'klein-4b-t2i', 'klein-4b-edit', 'klein-4b-inpaint', 'flux1-dev-gguf', 'flux1-schnell-gguf',
   'seedvr2-7b-image', 'upscale-4x-model', 'seedvr2-3b-video', 'realesrgan-video', 'wan22-5b-ti2v', 'hunyuan3d-21', 'pixal3d-trellis2', 'ace-step-15'];
+// AI Workflows (kind: workflow): multi-step pipelines from the Comfy UI Ideas doc.
+const WORKFLOWS_7 = ['wf-texture-upscale', 'wf-remove-lighting', 'wf-make-seamless', 'wf-grunge-map', 'wf-flipbook', 'wf-concept-edges', 'wf-concept-depth'];
 
 test('every shipped AI preset validates: 17 manifest entries (MoGe out, Qwen Edit 2511 + Klein Inpaint in) + Chatterbox + VibeVoice, prefixes under concept-app/', () => {
   const ids = fs.readdirSync(AI_DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).sort();
-  assert.deepEqual(ids, [...MANIFEST_17, 'tts-chatterbox', 'tts-vibevoice'].sort());
+  assert.deepEqual(ids, [...MANIFEST_17, 'tts-chatterbox', 'tts-vibevoice', ...WORKFLOWS_7].sort());
   for (const id of ids) {
     const p = load(id);
     assert.ok(p.ok, `${id}: ${p.error}`);

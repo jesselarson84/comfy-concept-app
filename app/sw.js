@@ -4,7 +4,7 @@
 // three.js (/vendor/, only used by the 3D viewer) is cached the first time it
 // is fetched, so the 3D viewer also opens without a network round trip later.
 // Bump VERSION when you change app files so phones pick up the new shell.
-const VERSION = 'shell-v19';
+const VERSION = 'shell-v21';
 const SHELL = [
   '/', '/index.html', '/styles.css', '/icons.css', '/fonts/inter-latin-normal.woff2', '/manifest.webmanifest',
   '/js/main.js', '/js/api.js', '/js/comfy-client.js', '/js/job-queue.js',
@@ -33,7 +33,9 @@ self.addEventListener('fetch', (e) => {
   // Not ours to cache: other origins, non-GET (incl. the POST /share from the
   // share sheet - the server handles it), API, ComfyUI proxy.
   if (url.origin !== location.origin || e.request.method !== 'GET') return;
-  if (/^\/(api|comfy|share|ollama)(\/|$)/.test(url.pathname)) return;
+  // /download/ (the Android APK): Chrome on Android leaves a download that went
+  // through the service worker hanging at 100%, so the browser fetches it itself.
+  if (/^\/(api|comfy|share|ollama|download)(\/|$)/.test(url.pathname)) return;
   if (e.request.mode === 'navigate') {
     // Network first for the page itself, cached shell when offline.
     e.respondWith(fetch(e.request).catch(() => caches.match('/index.html')));

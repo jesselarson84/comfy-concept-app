@@ -1,6 +1,8 @@
 // workflow-picker.js - the preset picker in the top bar.
-// Sections follow ComfyUI's right-click "AI Workflow" menu (3D / Image / Video /
-// Audio), with "My presets" at the bottom: setups saved from the chat builder
+// Two tabs, like ComfyUI's right-click "AI Models" / "AI Workflows" menus:
+// Models (3D / Image / Video / Audio) and Workflows (Textures / Concept / VFX,
+// multi-step pipelines). It opens on the current preset's tab. "My presets" sits
+// at the bottom of Models: setups saved from the chat builder
 // (rename / delete inline) and workflows imported or dropped into workflows/.
 // (The old "App presets" section is gone; see lib/legacy-presets.js.) Image is
 // split into sub sections (Text to Image, Image Edit, Inpainting, Upscale), see
@@ -9,15 +11,23 @@
 import { h, toast } from './dom.js';
 import { SUBGROUPS } from '../lib/presets.js';
 
+// tab: the picker tab a section is on. Models = one model as it comes;
+// Workflows = multi-step pipelines grouped by task (lib/presets.js KINDS).
+export const TABS = [{ key: 'model', label: 'Models' }, { key: 'workflow', label: 'Workflows' }];
 export const SECTIONS = [
-  { key: '3D', label: '3D', icon: 'i-box' },
-  { key: 'Image', label: 'Image', icon: 'i-image' },
-  { key: 'Video', label: 'Video', icon: 'i-video' },
-  { key: 'Audio', label: 'Audio', icon: 'i-audio-lines' },
-  { key: 'My presets', label: 'My presets', icon: 'i-save' },
+  { key: '3D', label: '3D', icon: 'i-box', tab: 'model' },
+  { key: 'Image', label: 'Image', icon: 'i-image', tab: 'model' },
+  { key: 'Video', label: 'Video', icon: 'i-video', tab: 'model' },
+  { key: 'Audio', label: 'Audio', icon: 'i-audio-lines', tab: 'model' },
+  { key: 'Textures', label: 'Textures', icon: 'i-layers', tab: 'workflow' },
+  { key: 'Concept', label: 'Concept', icon: 'i-sparkles', tab: 'workflow' },
+  { key: 'VFX', label: 'VFX', icon: 'i-film', tab: 'workflow' },
+  { key: 'My presets', label: 'My presets', icon: 'i-save', tab: 'model' },
 ];
 // Anything without a known group (an imported folder workflow) is the user's own.
 export const sectionOf = (w) => (w.group && SECTIONS.some((s) => s.key === w.group) ? w.group : 'My presets');
+/** Picker tab of a preset: its section's tab. */
+export const tabOf = (w) => SECTIONS.find((s) => s.key === sectionOf(w))?.tab || 'model';
 
 /**
  * Picker layout: [{ sec, rows, subs: [{ name, rows }] }] in SECTIONS order. Image
@@ -25,14 +35,18 @@ export const sectionOf = (w) => (w.group && SECTIONS.some((s) => s.key === w.gro
  * SUBGROUPS, from each preset's menuPath); rows inside a sub section are ordered
  * by menuOrder and show the preset's short name. Empty sections are left out.
  */
-export function pickerLayout(items) {
+export function pickerLayout(items, tab = null) {
   const out = [];
   for (const sec of SECTIONS) {
+    if (tab && sec.tab !== tab) continue;
     const all = items.filter((w) => sectionOf(w) === sec.key);
     if (!all.length) continue;
     const names = SUBGROUPS[sec.key] || [];
     const subs = names.map((name) => ({ name, rows: all.filter((w) => w.subgroup === name).sort((a, b) => (a.menuOrder ?? 999) - (b.menuOrder ?? 999)) })).filter((x) => x.rows.length);
-    out.push({ sec, rows: all.filter((w) => !names.includes(w.subgroup)), subs, count: all.length });
+    let rows = all.filter((w) => !names.includes(w.subgroup));
+    // Workflow sections: in the order the workflows are meant to be used (menuOrder).
+    if (sec.tab === 'workflow') rows = rows.sort((a, b) => (a.menuOrder ?? 999) - (b.menuOrder ?? 999));
+    out.push({ sec, rows, subs, count: all.length });
   }
   return out;
 }
@@ -49,7 +63,7 @@ export class WorkflowPicker {
     this.scrim = document.getElementById('picker-scrim');
     this.crumb = document.getElementById('preset-crumb');
     this.name = document.getElementById('preset-name');
-    this.items = []; this.current = null; this.editing = null;
+    this.items = []; this.current = null; this.editing = null; this.tab = 'model';
     this.btn.addEventListener('click', () => (this.pop.hidden ? this.open() : this.close()));
     this.scrim.addEventListener('click', () => this.close());
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !this.pop.hidden) this.close(); });
@@ -71,12 +85,19 @@ export class WorkflowPicker {
     this.btn.setAttribute('aria-label', w ? `Workflow preset: ${[...path, rowName(w)].join(', ')}` : 'Workflow preset');
   }
 
-  open() { this.render(); this.pop.hidden = false; this.scrim.hidden = false; this.btn.classList.add('open'); this.btn.setAttribute('aria-expanded', 'true'); this.pop.querySelector('.ent.on')?.scrollIntoView({ block: 'nearest' }); }
+  // Opens on the tab of the current preset.
+  open() { const cur = this.items.find((w) => w.id === this.current); if (cur) this.tab = tabOf(cur); this.render(); this.pop.hidden = false; this.scrim.hidden = false; this.btn.classList.add('open'); this.btn.setAttribute('aria-expanded', 'true'); this.pop.querySelector('.ent.on')?.scrollIntoView({ block: 'nearest' }); }
   close() { this.pop.hidden = true; this.scrim.hidden = true; this.btn.classList.remove('open'); this.btn.setAttribute('aria-expanded', 'false'); this.editing = null; }
 
   render() {
-    const els = [h('div.mt', {}, h('i.i.i-workflow'), h('b', {}, 'AI Workflow'))];
-    for (const { sec, rows, subs, count } of pickerLayout(this.items)) {
+    const tabs = h('div.picker-tabs', { role: 'tablist' }, ...TABS.map((t) => h('button.picker-tab', {
+      type: 'button', role: 'tab', 'aria-selected': String(this.tab === t.key), dataset: { tab: t.key },
+      onclick: () => { this.tab = t.key; this.editing = null; this.render(); this.pop.scrollTop = 0; },
+    }, t.label, h('span.cnt', {}, String(this.items.filter((w) => tabOf(w) === t.key).length)))));
+    const els = [h('div.mt', {}, h('i.i.i-workflow'), h('b', {}, 'AI Workflow')), tabs];
+    const layout = pickerLayout(this.items, this.tab);
+    if (!layout.length && this.items.length) els.push(h('div.ent.dis', {}, h('span.nm', {}, this.tab === 'workflow' ? 'No workflows yet' : 'No models found')));
+    for (const { sec, rows, subs, count } of layout) {
       els.push(h('div.grp', { dataset: { section: sec.key } }, h(`i.i.${sec.icon}`), sec.label, h('span.cnt', {}, String(count))));
       for (const sub of subs) {
         els.push(h('div.sub', { dataset: { sub: sub.name }, role: 'presentation' }, sub.name));

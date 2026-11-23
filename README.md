@@ -70,7 +70,7 @@ Chrome only offers the share target for an installed PWA served over HTTPS, whic
 
 ## Using it
 
-- **Preset picker** (top): the same sections as ComfyUI's right-click *AI Workflow* menu (3D / Image / Video / Audio), with Image split into **Text to Image, Image Edit, Inpainting, Upscale** (from each preset's `menuPath`, e.g. `Image/Text to Image/Z-Image Turbo`; the last part is the short name the row shows, `menuOrder` sorts the rows; the button reads *Image › Text to Image › Z-Image Turbo* and drops *Image ›* on a narrow phone), and **My presets** at the bottom: setups saved from the chat builder, plus any workflow you import or drop into `workflows/`. The default preset is **FLUX.2 Klein 4B Text to Image**. A fresh client opens on it whenever it is available; if it is not, on the first available AI Workflow entry, never on My presets. After you pick a preset, the app reopens on your pick (`app/js/lib/preset-choice.js`; `/api/workflows` also returns this `default`).
+- **Preset picker** (top): **Models | Workflows** tabs, the same as ComfyUI's right-click *AI Models* / *AI Workflows* menus. **Workflows** holds the task pipelines: Textures / Concept / VFX (see *Models and Workflows*). **Models** has the sections 3D / Image / Video / Audio, with Image split into **Text to Image, Image Edit, Inpainting, Upscale** (from each preset's `menuPath`, e.g. `Image/Text to Image/Z-Image Turbo`; the last part is the short name the row shows, `menuOrder` sorts the rows; the button reads *Image › Text to Image › Z-Image Turbo* and drops *Image ›* on a narrow phone), and **My presets** at the bottom: setups saved from the chat builder, plus any workflow you import or drop into `workflows/`. The default preset is **FLUX.2 Klein 4B Text to Image**. A fresh client opens on it whenever it is available; if it is not, on the first available AI Workflow entry, never on My presets. After you pick a preset, the app reopens on your pick (`app/js/lib/preset-choice.js`; `/api/workflows` also returns this `default`).
   - The old built-in presets *Fast concept* and *From reference image* (the "App presets" section) are retired. Anything saved with them still works: the chosen preset in the browser, history entries (Reuse) and chat images map *Fast concept* to **FLUX.2 Klein 4B Text to Image** and *From reference image* to **FLUX.2 Klein 4B Image Edit**, and an old reference image lands in the Image Edit slot. The mapping happens when the app reads the data (`app/js/lib/legacy-presets.js`); `data/history.json`, `data/chats.json` and settings are not rewritten. Each row shows its live availability. **needs download** and **missing node** rows are greyed out; tap one to see why. **slow · RAM offload** and **tight on 11 GB** are hints. See *AI Workflow presets*.
 - **Prompt, Aspect** (1:1 / 4:3 / 3:2 / 16:9 chips plus a portrait/landscape flip; the size is shown and kept inside the preset's range), **Batch (1-20), Seed** (Lock = fixed; the dice button picks a new one). The negative prompt toggle appears only if the workflow has a real negative text node. The klein presets do not: their negative is a zeroed copy.
 - **Run** (the blue button; blue is used only here) queues *N separate jobs*. Thumbnails in the bottom strip (phone) or the right-hand grid (tablet) show progress, and each fills in as its job finishes.
@@ -210,6 +210,43 @@ History stores only metadata: prompt, seed, preset, size, favourite, and the ima
 - **VRAM fit.** usable = GPU total - 1.2 GB for the desktop. A preset estimated at up to 85% of usable is ok; up to 100% is **tight**; up to usable + (free RAM - 8 GB) is **slow · RAM offload**; anything more is unavailable.
 - **Memory profiles.** On the small profile (11 GB), Ollama is unloaded before every job. ComfyUI is also asked to `/free` its cached models when you switch to a different workflow and the free VRAM is below what that workflow needs (`freeComfyBeforeQueue: "on-switch"` in `config/memory-profiles.json`). The large profile never does this.
 - Every value is clamped before queueing, and a message lists what changed. All outputs go under `output/concept-app/`. Video, audio and 3D results are download tiles ("Video ↓", "Audio ↓", "3D ↓").
+
+### Models and Workflows
+
+Presets come in two kinds (manifest `kind`, default `model`):
+
+- **Models** run one model as it comes. They are grouped by output: 3D / Image / Video / Audio.
+- **Workflows** (`kind: "workflow"`, files `workflows/ai/wf-*.json`) are multi-step pipelines for a task, grouped by task: **Textures**, **Concept**, **VFX**. They come from the *Comfy UI Ideas* doc.
+
+The picker has a **Models | Workflows** tab for each kind. It opens on the tab of the current preset. ComfyUI's canvas right-click menu has two matching entries, **AI Models** and **AI Workflows**.
+
+| Workflow | What it does | Needs |
+| --- | --- | --- |
+| Textures › Upscale Texture | Enlarges with an upscale model (4x), then fits to 1K / 2K / 4K on the long side. Nothing is repainted, so logos and text stay exact. | an upscale model |
+| Textures › Remove Lighting | Removes baked-in shadows and highlights so a photo texture works as albedo. Uses the Qwen Image Edit 2511 graph with a built-in instruction. | as Qwen Edit 2511 |
+| Textures › Make Seamless | Shifts the image by half so the old edges meet as a cross in the middle, fixes the cross, then shifts back. Only the cross changes. **AI repaint** (default): Z-Image Turbo plus the Fun ControlNet in inpaint mode redraws the cross, so shapes like bricks join up. **Blend**: the original is faded over the cross with a wide soft mask. It is instant, uses no AI, and suits noise-like surfaces. | Z-Image Turbo, lite ControlNet |
+| Textures › Grunge Map | Z-Image Turbo makes the pattern. An offset blend makes it tile; in testing, an AI repaint flattened the grain into grey bands. Then grayscale (luma) and a contrast push. | Z-Image Turbo |
+| Concept › Concept Looks (Edges / Depth Pass) | Keeps the camera and layout of a Cinema 4D greybox, Redshift frame or depth pass, and takes the look from the prompt (Z-Image Turbo + Fun ControlNet). | Z-Image Turbo, full or lite ControlNet |
+| VFX › Flipbook Sheet | Wan 2.2 5B clip on black. Evenly spaced frames are tiled into a 4×4 / 6×6 / 8×8 sheet for particle materials. | Wan 2.2 5B |
+
+ControlNet files go in `models/model_patches`, from alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1:
+- `…-2.1-2602-8steps.safetensors`: full, 6.7 GB.
+- `…-2.1-lite-2602-8steps.safetensors`: lite, 2 GB.
+
+The full file plus Z-Image does not fit on an 11 GB card, so ComfyUI keeps the rest in system RAM.
+
+Manifest extras used by workflows:
+- `promptDefault`: a built-in instruction. It is shown as the prompt placeholder, and an empty prompt uses it.
+- `promptFormat.template`: wraps what you type.
+- `ComfyMathExpression` nodes: work out crop and mask sizes from the input picture, so any size works.
+
+**ComfyUI menus:** the menu add-on lives in the repo at `comfyui/ComfyUI-AIWorkflowMenu`. After adding or changing a preset, rebuild its menus and install it:
+
+```
+node scripts/sync-comfy-menu.mjs --install "<ComfyUI>/custom_nodes"
+```
+
+Then reload the ComfyUI page; no restart is needed. Model presets that came from one of the add-on's hand-laid-out UI files keep that file. Everything else opens from an API-format copy and is laid out automatically. A unit test fails if the committed menu manifest is out of date.
 
 ## Setup builder (in the Prompt assistant)
 

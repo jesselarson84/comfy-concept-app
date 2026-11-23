@@ -1,4 +1,4 @@
-/* styles.css - dark, touch-first. Phone = one column with the thumbnail strip
+﻿/* styles.css - dark, touch-first. Phone = one column with the thumbnail strip
    and Generate button at the bottom (thumb reach). Tablet (>= 820px wide) =
    prompt panel left, thumbnail grid right. Viewer is always full screen. */
 :root {
@@ -225,7 +225,7 @@ input[type=range], .switch input { accent-color: var(--c-node-fg); }
 
 /* picker */
 .picker { flex: 1; min-width: 0; justify-content: flex-start; border: 1px solid var(--c-border); background: var(--c-bg); padding: 0 12px; }
-/* "Image › Text to Image › Z-Image Turbo": the crumb gives way first (shrinks 4x
+/* "Image â€º Text to Image â€º Z-Image Turbo": the crumb gives way first (shrinks 4x
    faster, ellipsis), the preset name keeps at least ~6 characters. */
 .picker .crumb { color: var(--c-muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 4 auto; min-width: 0; }
 .picker .crumb:empty { display: none; }
@@ -636,3 +636,9 @@ body.node-view-on #btn-canvas { margin-left: 0; }
 /* History: back arrow inside a folder / Favorites */
 .history-top .hist-back { margin-left: -4px; }
 .history-top .hist-back[hidden] { display: none; }
+
+/* Picker: Models | Workflows tabs (sticky under the title) */
+.picker-pop .picker-tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 4px; padding: 4px 8px 8px; background: var(--c-bg); }
+.picker-pop .picker-tab { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border: 1px solid var(--c-border); border-radius: 8px; background: transparent; color: var(--c-muted); font: inherit; font-weight: 600; cursor: pointer; }
+.picker-pop .picker-tab .cnt { font-weight: 400; font-size: 12px; opacity: .8; }
+.picker-pop .picker-tab[aria-selected="true"] { color: var(--c-fg); background: #3a3a3a; border-color: #555; }
