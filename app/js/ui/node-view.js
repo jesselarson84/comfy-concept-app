@@ -23,6 +23,26 @@
 // -----------------------------------------------------------------------------
 import { h, toast } from './dom.js';
 
+/**
+ * The API graph with plain numeric node ids (1, 2, 3 ...), links renumbered to
+ * match; "_" keys dropped. Presets exported from subgraphs use ids like "75:68",
+ * which ComfyUI's loadApiJson cannot link (found on the phone: widgets showed
+ * NaN and links were lost).
+ */
+export function canvasIds(workflow) {
+  const keys = Object.keys(workflow).filter((k) => !k.startsWith('_'));
+  const map = new Map(keys.map((k, i) => [k, String(i + 1)]));
+  const out = {};
+  for (const k of keys) {
+    const n = structuredClone(workflow[k]);
+    for (const [name, v] of Object.entries(n.inputs || {})) {
+      if (Array.isArray(v) && v.length === 2 && map.has(String(v[0])) && Number.isInteger(v[1])) n.inputs[name] = [map.get(String(v[0])), v[1]];
+    }
+    out[map.get(k)] = n;
+  }
+  return out;
+}
+
 export class NodeView {
   /**
    * @param o.button  the top bar toggle  @param o.host  where the iframe goes  @param o.onChange(on)
@@ -80,14 +100,15 @@ export class NodeView {
     if (!app) { console.warn('node view: ComfyUI app not found, preset graph not loaded'); return; }
     if (!this.on && this.graph?.()?.id !== g.id) return; // the user moved on meanwhile
     try {
-      const wf = Object.fromEntries(Object.entries(structuredClone(g.workflow)).filter(([k]) => !k.startsWith('_')));
+      const wf = canvasIds(g.workflow);
       const name = `${g.label}.json`;
-      await app.loadApiJson(wf, name);
+      const load = async () => { await app.loadApiJson(structuredClone(wf), name); try { app.graph.arrange?.(); app.graph.setDirtyCanvas?.(true, true); } catch {} };
+      await load();
       // Tested on the phone (batch 5): on the very first open ComfyUI can still
       // put its last tab back on top after we load. Make ours the active tab.
       await new Promise((r) => setTimeout(r, 400));
       const ws = app.extensionManager?.workflow;
-      if (ws?.activeWorkflow && !String(ws.activeWorkflow.path || '').endsWith(name)) await app.loadApiJson(structuredClone(wf), name);
+      if (ws?.activeWorkflow && !String(ws.activeWorkflow.path || '').endsWith(name)) await load();
       this.loadedId = g.id;
     } catch (e) { toast('Could not open the preset graph: ' + e.message, 6000); }
   }

@@ -59,6 +59,19 @@ test('the picker applies to text-to-image presets only; their size cap is 2048 s
   }
 });
 
+test('node view: subgraph ids ("75:68") become plain numbers with links renumbered (ComfyUI loadApiJson cannot link them)', async () => {
+  const { canvasIds } = await import('../../app/js/ui/node-view.js');
+  const g = JSON.parse(read('workflows/ai/klein-4b-t2i.json')).workflow;
+  const out = canvasIds(g);
+  assert.ok(Object.keys(out).every((k) => /^\d+$/.test(k)));
+  assert.equal(Object.keys(out).length, Object.keys(g).filter((k) => !k.startsWith('_')).length);
+  const byType = (t) => Object.entries(out).find(([, n]) => n.class_type === t);
+  const [, latent] = byType('EmptyFlux2LatentImage');
+  const w = out[latent.inputs.width[0]];
+  assert.equal(w.class_type, 'PrimitiveInt'); assert.equal(w.inputs.value, 1024, 'link follows the renumbered id');
+  for (const n of Object.values(out)) for (const v of Object.values(n.inputs || {})) if (Array.isArray(v) && v.length === 2 && typeof v[0] === 'string') assert.ok(out[v[0]], `dangling link ${v[0]}`);
+});
+
 test('index.html: no ⋮ menu or import input; folder History toggle; gear Settings; icon-only seed lock', () => {
   const html = read('app/index.html');
   for (const re of [/details class="menu"/, /id="btn-import"/, /id="import-file"/, /id="builder-model"/, /id="mem-te-cpu"/, /id="mem-ollama-cpu"/, /i-history/, /i-sliders-horizontal/, /<span>Lock<\/span>/]) assert.doesNotMatch(html, re);
