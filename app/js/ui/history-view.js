@@ -16,7 +16,7 @@ import { getHistory, deleteHistory, getFolders, createFolder, addToFolder, remov
 import { viewUrl } from '../comfy-client.js';
 import { deleteThumb, thumbKey } from '../lib/thumb-cache.js';
 import { fileLabel } from '../lib/outputs.js';
-import { Overlay, overlayTop } from './overlay.js';
+import { Overlay, overlayTop, afterBack } from './overlay.js';
 import { bridge, has, absoluteUrl } from '../native.js';
 
 const LONG_PRESS_MS = 450;
@@ -38,10 +38,12 @@ export class HistoryView {
     this.entries = new Map();    // id -> entry (current list)
     this.list = h('div.history-list');
     this.title = h('h2', {}, 'History');
-    this.favBtn = h('button.btn', { type: 'button', onclick: () => { this.favOnly = !this.favOnly; this.folder = null; this.favBtn.classList.toggle('on', this.favOnly); this.load(); } }, '★ Favorites');
+    this.favBtn = h('button.btn', { type: 'button', onclick: () => this.setView(null, !this.favOnly) }, '★ Favorites');
+    // Inside a folder or Favorites: back to all of History (Back does the same).
+    this.backBtn = h('button.icon-btn.hist-back', { type: 'button', hidden: true, 'aria-label': 'All history', title: 'All history', dataset: { act: 'all-history' }, onclick: () => this.setView(null, false) }, h('i.i.i-chevron-left'));
     this.foldersBtn = h('button.btn.icon', { type: 'button', 'aria-label': 'Folders', dataset: { act: 'folders' }, onclick: () => this.openFolders() }, h('i.i.i-folder'));
     // No close button: the History toggle in the top bar (or Back) closes it.
-    this.normalBar = h('div.history-top', {}, this.title, h('span.spacer'), this.foldersBtn, this.favBtn);
+    this.normalBar = h('div.history-top', {}, this.backBtn, this.title, h('span.spacer'), this.foldersBtn, this.favBtn);
     this.count = h('span.sel-count', {}, '0');
     // Batch favourite: favourites the whole selection, or unfavourites it when it is all favourites already.
     this.selFavBtn = h('button.icon-btn.sel-fav', { type: 'button', 'aria-label': 'Favorite', dataset: { act: 'favorite' }, onclick: () => this.favoriteSelected() }, '☆');
@@ -55,16 +57,35 @@ export class HistoryView {
       h('button.icon-btn', { type: 'button', 'aria-label': 'More', dataset: { act: 'more' }, onclick: (e) => this.openMore(e.currentTarget) }, h('i.i.i-more-vertical')));
     this.root = h('div.history', { hidden: true }, this.normalBar, this.selBar, this.list);
     this.host.append(this.root);
-    this.folders = new FoldersScreen((f) => { this.folder = f; this.favOnly = f?.id === 'favorites'; if (this.favOnly) this.folder = null; this.favBtn.classList.toggle('on', this.favOnly); this.load(); });
+    this.folders = new FoldersScreen((f) => (f?.id === 'favorites' ? this.setView(null, true) : this.setView(f, false)));
     // Android back button / gesture: leaves selection first, then closes History.
     window.addEventListener('popstate', () => {
       if (this.root.hidden) return;
       if (this.selecting && !history.state?.historySel) { this.endSelect(true); return; }
-      if (!history.state?.history) this.close(true);
+      if (!history.state?.history) { this.close(true); return; }
+      if (this.inSub && !history.state.historySub) this.setView(null, false, true);
     });
   }
 
   get on() { return !this.root.hidden; }
+  /** Showing one folder or Favorites (not all of History). */
+  get inSub() { return !!(this.folder || this.favOnly); }
+
+  /**
+   * Switch between all of History, Favorites and one folder. Going from all of
+   * History into a folder / Favorites adds one Back entry ({ historySub }), so
+   * Back (or the arrow) returns to all of History before it closes History.
+   */
+  setView(folder, favOnly, fromPop = false) {
+    const wasSub = this.inSub;
+    this.folder = folder || null; this.favOnly = !!favOnly && !folder;
+    this.favBtn.classList.toggle('on', this.favOnly);
+    if (this.on && !fromPop) {
+      if (this.inSub && !wasSub && !history.state?.historySub) history.pushState({ history: true, historySub: true }, '');
+      else if (!this.inSub && wasSub && history.state?.historySub) history.back();
+    }
+    return this.load();
+  }
 
   toggle() { return this.on ? this.close() : this.open(); }
 
@@ -72,6 +93,8 @@ export class HistoryView {
   async open({ replace = false } = {}) {
     if (this.root.hidden) {
       if (replace) history.replaceState({ history: true }, ''); else history.pushState({ history: true }, '');
+      // Opening History always starts on all of it, not the folder you left it in.
+      this.folder = null; this.favOnly = false; this.favBtn.classList.remove('on');
       this.#paintOn(true);
     }
     await this.load();
@@ -82,7 +105,8 @@ export class HistoryView {
     if (this.root.hidden) return;
     this.endSelect(true);
     this.#paintOn(false);
-    if (!fromPop && history.state?.history) history.back();
+    // Pops this view's entries in one go (a folder and a selection add one each).
+    if (!fromPop && history.state?.history) history.go(-(1 + (history.state.historySub ? 1 : 0) + (history.state.historySel ? 1 : 0)));
   }
 
   #paintOn(on) {
@@ -114,7 +138,7 @@ export class HistoryView {
 
   // ---- selection ------------------------------------------------------------
   startSelect(id) {
-    if (!this.selecting) { this.selecting = true; history.pushState({ history: true, historySel: true }, ''); }
+    if (!this.selecting) { this.selecting = true; history.pushState({ history: true, historySub: !!history.state?.historySub, historySel: true }, ''); }
     if (id) this.selected.add(id);
     this.paintSelection();
   }
@@ -263,6 +287,7 @@ export class HistoryView {
   // ---- list ----------------------------------------------------------------
   async load() {
     this.title.textContent = this.folder ? this.folder.name : this.favOnly ? 'Favorites' : 'History';
+    this.backBtn.hidden = !this.inSub;
     this.list.replaceChildren(h('p.muted', {}, 'Loading…'));
     let sessions;
     try { sessions = await getHistory(this.favOnly, this.folder?.id); } catch (e) { this.list.replaceChildren(h('p.muted', {}, e.message)); return; }
@@ -350,7 +375,7 @@ class FoldersScreen {
     this.grid.replaceChildren(h('p.muted', {}, 'Loading…'));
     let data;
     try { data = await getFolders(); } catch (e) { this.grid.replaceChildren(h('p.muted', {}, e.message)); return; }
-    const card = (id, name, count, cover, pick) => h('button.folder-card', { type: 'button', dataset: { folder: id }, onclick: () => { this.ov.close(); setTimeout(() => pick(), 0); } },
+    const card = (id, name, count, cover, pick) => h('button.folder-card', { type: 'button', dataset: { folder: id }, onclick: () => { this.ov.close(); afterBack().then(pick); } },
       h('span.folder-cover', {}, cover && !/\.(glb|gltf|mp3|wav|flac|ogg|mp4|webm|mov|mkv)$/i.test(cover.filename) ? h('img', { src: viewUrl(cover, { thumb: true }), loading: 'lazy', alt: '' }) : h('i.i.i-folder')),
       h('span.folder-name', {}, name), h('span.folder-count', {}, String(count)));
     this.grid.replaceChildren(

@@ -91,33 +91,42 @@ export class NodeView {
     this.onChange?.(false);
   }
 
-  /** Load the selected preset's graph unless the canvas already shows it. */
+  /**
+   * Make the canvas show the selected preset's graph. Kept as it is (with your
+   * canvas edits) only while that preset's tab is still the active ComfyUI tab;
+   * if you closed it or switched tabs inside ComfyUI, the preset is loaded again
+   * (found on the phone: after closing the tab, coming back showed a blank canvas).
+   */
   async syncGraph() {
     const g = this.graph?.();
-    if (!g || g.id === this.loadedId) return;
+    if (!g) return;
     const app = await this.#comfyApp();
     if (!app) { console.warn('node view: ComfyUI app not found, preset graph not loaded'); return; }
     if (!this.on && this.graph?.()?.id !== g.id) return; // the user moved on meanwhile
+    const store = app.extensionManager?.workflow;
+    const name = `${g.label}.json`;
+    const esc = g.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const same = new RegExp(`(^|/)${esc}( \\(\\d+\\))?\\.json$`);
+    const showing = () => same.test(String(store?.activeWorkflow?.path || ''));
+    if (g.id === this.loadedId && (!store || showing())) return;
     try {
       const wf = canvasIds(g.workflow);
-      const name = `${g.label}.json`;
       // Build the object inside the iframe: ComfyUI tells links from values with
       // `instanceof Array`, which is false for arrays made in this page (found on
       // the phone: every link became a NaN value and nothing was connected).
       const fw = this.frame.contentWindow;
       // One tab per preset: close earlier copies ("<label>.json", "<label> (2).json" ...)
       // instead of stacking a new numbered tab every time the app starts.
-      const store = app.extensionManager?.workflow;
-      const esc = g.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const same = new RegExp(`(^|/)${esc}( \\(\\d+\\))?\\.json$`);
       for (const w of [...(store?.openWorkflows || [])]) if (same.test(w.path || '')) { try { await store.closeWorkflow(w); } catch {} }
       const load = async () => { await app.loadApiJson(fw.JSON.parse(JSON.stringify(wf)), name); try { app.graph.arrange?.(); app.graph.setDirtyCanvas?.(true, true); } catch {} };
       await load();
       // Tested on the phone (batch 5): on the very first open ComfyUI can still
       // put its last tab back on top after we load. Make ours the active tab.
-      await new Promise((r) => setTimeout(r, 400));
-      const ws = app.extensionManager?.workflow;
-      if (ws?.activeWorkflow && !String(ws.activeWorkflow.path || '').endsWith(name)) await load();
+      for (let i = 0; i < 3 && store; i++) {
+        await new Promise((r) => setTimeout(r, 400));
+        if (!store.activeWorkflow || showing()) break;
+        await load();
+      }
       this.loadedId = g.id;
     } catch (e) { toast('Could not open the preset graph: ' + e.message, 6000); }
   }

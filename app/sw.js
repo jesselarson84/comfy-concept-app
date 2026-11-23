@@ -1,10 +1,10 @@
-// sw.js - service worker. Caches ONLY the app shell (HTML/CSS/JS/icons) so the
+﻿// sw.js - service worker. Caches ONLY the app shell (HTML/CSS/JS/icons) so the
 // app opens instantly and installs as a PWA. Images, /api, /comfy, /ollama and /share
 // always go to the network (never cached) - they live on the PC. The vendored
 // three.js (/vendor/, only used by the 3D viewer) is cached the first time it
 // is fetched, so the 3D viewer also opens without a network round trip later.
 // Bump VERSION when you change app files so phones pick up the new shell.
-const VERSION = 'shell-v18';
+const VERSION = 'shell-v19';
 const SHELL = [
   '/', '/index.html', '/styles.css', '/icons.css', '/fonts/inter-latin-normal.woff2', '/manifest.webmanifest',
   '/js/main.js', '/js/api.js', '/js/comfy-client.js', '/js/job-queue.js',
