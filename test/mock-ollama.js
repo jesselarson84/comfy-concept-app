@@ -100,6 +100,11 @@ export function createMockOllama({ tokenMs = 5, extraModels = [], vramFraction =
       if (!m) return json(res, 404, { error: 'model not found' });
       if (body.keep_alive === 0 || body.keep_alive === '0') { loaded.delete(m.name); return json(res, 200, { model: m.name, response: '', done: true, done_reason: 'unload' }); }
       loaded.add(m.name);
+      // Batch 9: the History tagger (a picture + a JSON schema) gets tags back.
+      if (body.images?.length && body.format) {
+        if (!m.vision) return json(res, 400, { error: 'this model does not support images' });
+        return json(res, 200, { model: m.name, done: true, response: JSON.stringify({ genre: ['Sci-Fi', 'product'], mood: ['epic'], palette: ['cool blues'], colors: ['blue', 'Orange', 'blue'], setting: ['studio'], lighting: ['neon lit'], medium: ['3D Render', 'photograph'] }) });
+      }
       return json(res, 200, { model: m.name, response: 'ok', done: true });
     }
     if (p === '/api/chat') {

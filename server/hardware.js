@@ -14,6 +14,13 @@ export function runNvidiaSmi(timeoutMs = 4000) {
   });
 }
 
+/** Batch 9: GPU utilisation in % (the History tagger stays off the GPU while it is busy). */
+export function runNvidiaUtil(timeoutMs = 4000) {
+  return new Promise((resolve, reject) => {
+    execFile('nvidia-smi', ['--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'], { timeout: timeoutMs, windowsHide: true }, (err, stdout) => (err ? reject(err) : resolve(String(stdout))));
+  });
+}
+
 /** "NVIDIA GeForce RTX 2080 Ti, 11264, 1328" lines -> [{ name, totalMB, freeMB }] */
 export function parseNvidiaSmi(text) {
   return String(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {

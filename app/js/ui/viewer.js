@@ -51,6 +51,7 @@ export class Viewer {
     this.stage.addEventListener('dragstart', (e) => e.preventDefault());
     this.counter = h('span.viewer-counter');
     this.caption = h('div.viewer-caption');
+    this.tags = h('div.viewer-tags', { hidden: true });
     this.favBtn = h('button.icon-btn', { title: 'Favorite', 'aria-label': 'Favorite', onclick: () => this.favorite() }, '☆');
     this.delBtn = h('button.icon-btn.viewer-del', { title: 'Delete', 'aria-label': 'Delete', onclick: () => this.remove() }, h('i.i.i-trash-2'));
     const btn = (label, title, fn) => h('button.icon-btn', { title, 'aria-label': title, onclick: fn }, label);
@@ -59,6 +60,7 @@ export class Viewer {
     this.bottom = h('div.viewer-bottom', {},
       this.strip,
       this.caption,
+      this.tags,
       h('div.viewer-actions', {},
         btn('↓ Save', 'Save to device', () => this.save()),
         btn('↪ Share', 'Share', () => this.share()),
@@ -201,6 +203,10 @@ export class Viewer {
     this.delBtn.hidden = !(it.historyId && this.hooks.onDelete);
     const m = it.meta || {};
     this.caption.textContent = `${m.prompt || ''}${m.seed !== undefined ? `  · seed ${m.seed}` : ''}`;
+    // Batch 9: the picture's tags (History pictures); a tap searches History for it.
+    const tags = (it.tags || []).slice(0, 12);
+    this.tags.replaceChildren(...tags.map((t) => h('button.vtag', { type: 'button', dataset: { tag: t }, onclick: () => { this.close(); this.hooks.onTag?.(t); } }, t)));
+    this.tags.hidden = !tags.length;
     this.#paintStrip(list);
   }
 

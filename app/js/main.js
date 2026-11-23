@@ -122,6 +122,8 @@ const viewer = new Viewer({
   onDiscuss: (it) => chat.discuss(it),
   onUseAsReference: (it) => useAsReference(it.image),
   onSaveToDrive: (it) => saveToDrive(it.image, 'image'),
+  // Batch 9: a tag under the picture -> History searched for it.
+  onTag: (tag) => { if (!historyView.on) $('#btn-history').click(); historyView.searchTag(tag); },
   // Trash in the viewer: this one picture, from the PC (History entries hold one picture each).
   onDelete: async (it) => {
     const r = await api.deleteHistory([it.historyId]);
@@ -140,6 +142,8 @@ const modelThumbs = new ModelThumbs();
 const historyView = new HistoryView((getItems, i) => viewer.open(getItems, i), (f, meta) => openFile(f, meta), {
   modelThumbs, host: $('#history-host'), button: $('#btn-history'),
   onChange: () => { picker.close(); paintThumbs(); },
+  // Batch 9: model names for History search / filters / stats (old ids map to today's presets).
+  labelOf: (id) => { const w = workflows.find((x) => x.id === resolvePresetId(id)) || workflows.find((x) => x.id === id); return w ? (w.short || w.label) : String(id || '').replace(/^(ai|user|graph):/, ''); },
 });
 $('#btn-history').addEventListener('click', () => {
   if (historyView.on) return historyView.close();
