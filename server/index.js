@@ -48,6 +48,7 @@ import { readBody, parseMultipart } from './multipart.js';
 import { createComfyInfo } from './comfy-info.js';
 import { PresetStore } from './presets.js';
 import { UserPresetStore } from './user-presets.js';
+import { GraphPresetStore, outputKind } from './graph-presets.js';
 import { createBuilder } from './builder.js';
 import { detectControls } from '../app/js/lib/workflow-detect.js';
 import { vramFit } from '../app/js/lib/presets.js';
@@ -91,6 +92,7 @@ export function createApp(cfg, opts = {}) {
   const comfyInfo = createComfyInfo({ getComfyUrl: () => cfg.comfyUrl });
   const presets = new PresetStore(path.join(cfg.workflowsDir, 'ai'));
   const userPresets = new UserPresetStore(cfg.dataDir);
+  const graphPresets = new GraphPresetStore(cfg.dataDir); // saved from the node view (Save as preset)
   const builder = createBuilder({ cfg, comfyInfo, presets, memory, hardware });
   const sseClients = new Set();
   // ComfyUI's output folder (delete, "From Comfy UI"): last good value cached in data/.
@@ -116,7 +118,14 @@ export function createApp(cfg, opts = {}) {
       return { ...base, ok: true, workflow: r.graph, controls: detectControls(r.graph), description: r.summary.join(' · '), output: r.output, ai: { output: r.output, params: {}, size: null, maxBatch: r.output === 'image' ? 8 : 2, vram: { estMB: r.estMB }, promptFormat: r.blocks.some((b) => b.type === 'audio' && b.params.engine === 'vibevoice') ? { unless: '\\[\\d+\\]|Speaker \\d+:', template: '[1] {text}' } : null }, availability: { ...vramFit({ estMB: r.estMB, ...hwOpts, profileId }), estMB: r.estMB } };
     }));
     const folder = workflows.list().filter((w) => !isLegacyPreset(w.id)).map((w) => ({ ...w, group: 'My presets', folder: true }));
-    const list = [...ai, ...mine, ...folder];
+    // Saved from the node view: in the section / sub section the user picked;
+    // controls detected like a dropped-in workflow.
+    const graphs = graphPresets.list().map((g) => {
+      const controls = detectControls(g.workflow);
+      const base = { id: `graph:${g.id}`, file: null, label: g.name, short: g.name, group: g.group, subgroup: g.subgroup || undefined, menuOrder: 900, output: outputKind(g.workflow), graph: { id: g.id, name: g.name, group: g.group, subgroup: g.subgroup, from: g.from, updatedAt: g.updatedAt } };
+      return controls.ok ? { ...base, ok: true, controls, workflow: g.workflow } : { ...base, ok: false, error: controls.error };
+    });
+    const list = [...ai, ...mine, ...graphs, ...folder];
     // default: what a fresh client opens on (same rule as the browser, lib/preset-choice.js).
     return { workflows: list, default: defaultPreset(list), comfy: { reachable: !!info.objectInfo, error: info.error || null } };
   }
@@ -184,6 +193,26 @@ export function createApp(cfg, opts = {}) {
       const um = /^\/api\/user-presets\/(?:user:)?([\w-]+)$/.exec(dp);
       if (um && req.method === 'PATCH') { try { const u = await userPresets.rename(um[1], body.name); if (!u) return json(res, 404, { error: 'Not found' }); for (const c of sseClients) c.write('event: workflows\ndata: {}\n\n'); return json(res, 200, { ...u, id: `user:${u.id}` }); } catch (e) { return json(res, e.status || 500, { error: e.message }); } }
       if (um && req.method === 'DELETE') { const ok = await userPresets.remove(um[1]); if (ok) for (const c of sseClients) c.write('event: workflows\ndata: {}\n\n'); return ok ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Not found' }); }
+      return json(res, 404, { error: 'Unknown API route' });
+    }
+    // ---- Save as preset (node view) ----
+    //   POST /api/graph-presets {name, group, subgroup, workflow, from}   new preset
+    //   PATCH /api/graph-presets/:id {name?, group?, subgroup?, workflow?} rename / move / update graph
+    //   DELETE /api/graph-presets/:id
+    if (p.startsWith('/api/graph-presets')) {
+      let body = {};
+      if (req.method === 'POST' || req.method === 'PATCH') {
+        try { const t = (await readBody(req, 5 * 1024 * 1024)).toString('utf8'); body = t ? JSON.parse(t) : {}; } catch { return json(res, 400, { error: 'Bad JSON' }); }
+      }
+      const changed = () => { for (const c of sseClients) c.write('event: workflows\ndata: {}\n\n'); };
+      const reply = (g, status = 200) => json(res, status, { ...g, id: `graph:${g.id}`, workflow: undefined });
+      try {
+        if (p === '/api/graph-presets' && req.method === 'POST') { const g = await graphPresets.add(body); changed(); return reply(g, 201); }
+        let dp = p; try { dp = decodeURIComponent(p); } catch {}
+        const gm = /^\/api\/graph-presets\/(?:graph:)?([\w-]+)$/.exec(dp);
+        if (gm && req.method === 'PATCH') { const g = await graphPresets.update(gm[1], body); if (!g) return json(res, 404, { error: 'Not found' }); changed(); return reply(g); }
+        if (gm && req.method === 'DELETE') { const ok = await graphPresets.remove(gm[1]); if (ok) changed(); return ok ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Not found' }); }
+      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
       return json(res, 404, { error: 'Unknown API route' });
     }
     if (p === '/api/workflows' && req.method === 'POST') {
