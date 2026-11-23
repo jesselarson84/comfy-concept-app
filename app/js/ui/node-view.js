@@ -81,18 +81,27 @@ export class NodeView {
     if (!this.on && this.graph?.()?.id !== g.id) return; // the user moved on meanwhile
     try {
       const wf = Object.fromEntries(Object.entries(structuredClone(g.workflow)).filter(([k]) => !k.startsWith('_')));
-      await app.loadApiJson(wf, `${g.label}.json`);
+      const name = `${g.label}.json`;
+      await app.loadApiJson(wf, name);
+      // Tested on the phone (batch 5): on the very first open ComfyUI can still
+      // put its last tab back on top after we load. Make ours the active tab.
+      await new Promise((r) => setTimeout(r, 400));
+      const ws = app.extensionManager?.workflow;
+      if (ws?.activeWorkflow && !String(ws.activeWorkflow.path || '').endsWith(name)) await app.loadApiJson(structuredClone(wf), name);
       this.loadedId = g.id;
     } catch (e) { toast('Could not open the preset graph: ' + e.message, 6000); }
   }
 
-  /** ComfyUI's app object inside the iframe, once its frontend has started (up to ~20 s). */
+  /** ComfyUI's app object inside the iframe, once its frontend has started and restored its tabs (up to ~20 s). */
   async #comfyApp() {
     for (let i = 0; i < 80; i++) {
       try {
         const w = this.frame?.contentWindow;
         const app = w?.app || w?.comfyAPI?.app?.app;
-        if (app?.graph && typeof app.loadApiJson === 'function') return app;
+        // tabsRestored: ComfyUI reopens the tabs from last time on start; loading
+        // before that finishes would be covered by the restored tab.
+        const restored = app?.extensionManager?.workflow?.tabsRestored;
+        if (app?.graph && typeof app.loadApiJson === 'function' && restored !== false) return app;
       } catch { return null; } // not same origin
       await new Promise((r) => setTimeout(r, 250));
     }
