@@ -59,7 +59,7 @@ test('the picker applies to text-to-image presets only; their size cap is 2048 s
   }
 });
 
-test('node view: subgraph ids ("75:68") become plain numbers with links renumbered (ComfyUI loadApiJson cannot link them)', async () => {
+test('node view: subgraph ids ("75:68") become plain numbers with links renumbered', async () => {
   const { canvasIds } = await import('../../app/js/ui/node-view.js');
   const g = JSON.parse(read('workflows/ai/klein-4b-t2i.json')).workflow;
   const out = canvasIds(g);

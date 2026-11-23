@@ -25,9 +25,8 @@ import { h, toast } from './dom.js';
 
 /**
  * The API graph with plain numeric node ids (1, 2, 3 ...), links renumbered to
- * match; "_" keys dropped. Presets exported from subgraphs use ids like "75:68",
- * which ComfyUI's loadApiJson cannot link (found on the phone: widgets showed
- * NaN and links were lost).
+ * match; "_" keys dropped. Presets exported from subgraphs use ids like "75:68";
+ * plain ids keep the canvas tidy and avoid any id parsing in loadApiJson.
  */
 export function canvasIds(workflow) {
   const keys = Object.keys(workflow).filter((k) => !k.startsWith('_'));
@@ -102,7 +101,11 @@ export class NodeView {
     try {
       const wf = canvasIds(g.workflow);
       const name = `${g.label}.json`;
-      const load = async () => { await app.loadApiJson(structuredClone(wf), name); try { app.graph.arrange?.(); app.graph.setDirtyCanvas?.(true, true); } catch {} };
+      // Build the object inside the iframe: ComfyUI tells links from values with
+      // `instanceof Array`, which is false for arrays made in this page (found on
+      // the phone: every link became a NaN value and nothing was connected).
+      const fw = this.frame.contentWindow;
+      const load = async () => { await app.loadApiJson(fw.JSON.parse(JSON.stringify(wf)), name); try { app.graph.arrange?.(); app.graph.setDirtyCanvas?.(true, true); } catch {} };
       await load();
       // Tested on the phone (batch 5): on the very first open ComfyUI can still
       // put its last tab back on top after we load. Make ours the active tab.
