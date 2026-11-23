@@ -7,28 +7,43 @@
 // and its websocket survive, and ComfyUI's "Changes you made may not be saved"
 // prompt never fires (that prompt is a beforeunload, and nothing unloads).
 //
+// Batch 5:
+//   - It opens the SELECTED PRESET's graph (ComfyUI's app.loadApiJson, same
+//     origin). The graph is loaded when you enter the node view after picking
+//     a different preset; going in and out with the same preset keeps whatever
+//     you changed on the canvas.
+//   - The workflow dropdown is hidden meanwhile (CSS: body.node-view-on).
+//   - History and the node view are one or the other: switching takes over the
+//     other's Back entry (replaceState) instead of stacking a new one.
+//
 // Back (browser, Android back button / gesture): opening the node view pushes
 // one history entry ({ nodeView: true }); Back pops it and returns to the
 // normal view, the same pattern as the overlays (ui/overlay.js). The Android
 // app's onBackPressed already calls WebView.goBack(), so no native change.
-// While the node view is shown the workflow dropdown is greyed out.
 // -----------------------------------------------------------------------------
-import { h } from './dom.js';
+import { h, toast } from './dom.js';
 
 export class NodeView {
-  /** @param o.button  the top bar toggle  @param o.host  where the iframe goes  @param o.onChange(on) */
-  constructor({ button, host, onChange, src = '/comfy/' }) {
-    Object.assign(this, { button, host, onChange, src });
+  /**
+   * @param o.button  the top bar toggle  @param o.host  where the iframe goes  @param o.onChange(on)
+   * @param o.graph()  -> { id, label, workflow } of the selected preset (API format), or null
+   * @param o.beforeShow()  async; lets main close History first
+   */
+  constructor({ button, host, onChange, graph, beforeShow, src = '/comfy/' }) {
+    Object.assign(this, { button, host, onChange, graph, beforeShow, src });
     this.frame = null;
     this.on = false;
+    this.loadedId = null; // preset whose graph the canvas shows
     button.addEventListener('click', () => this.toggle());
     window.addEventListener('popstate', () => { if (this.on && history.state?.nodeView !== true && !history.state?.overlay) this.hide(true); });
   }
 
   toggle() { return this.on ? this.hide() : this.show(); }
 
-  show() {
+  async show() {
     if (this.on) return;
+    let replace = false;
+    if (this.beforeShow) { await this.beforeShow(); replace = history.state?.history === true; }
     if (!this.frame) {
       // allow: ComfyUI's copy / paste of nodes uses the clipboard.
       this.frame = h('iframe.node-frame', { src: this.src, title: 'ComfyUI node view', allow: 'clipboard-read; clipboard-write; fullscreen' });
@@ -39,8 +54,11 @@ export class NodeView {
     document.body.classList.add('node-view-on');
     this.button.setAttribute('aria-pressed', 'true');
     this.button.classList.add('on');
-    if (history.state?.nodeView !== true) history.pushState({ nodeView: true }, '');
+    // Coming from History: take over its Back entry.
+    if (replace) history.replaceState({ nodeView: true }, '');
+    else if (history.state?.nodeView !== true) history.pushState({ nodeView: true }, '');
     this.onChange?.(true);
+    this.syncGraph();
   }
 
   hide(fromPop = false) {
@@ -52,5 +70,32 @@ export class NodeView {
     this.button.classList.remove('on');
     if (!fromPop && history.state?.nodeView === true) history.back();
     this.onChange?.(false);
+  }
+
+  /** Load the selected preset's graph unless the canvas already shows it. */
+  async syncGraph() {
+    const g = this.graph?.();
+    if (!g || g.id === this.loadedId) return;
+    const app = await this.#comfyApp();
+    if (!app) { console.warn('node view: ComfyUI app not found, preset graph not loaded'); return; }
+    if (!this.on && this.graph?.()?.id !== g.id) return; // the user moved on meanwhile
+    try {
+      const wf = Object.fromEntries(Object.entries(structuredClone(g.workflow)).filter(([k]) => !k.startsWith('_')));
+      await app.loadApiJson(wf, `${g.label}.json`);
+      this.loadedId = g.id;
+    } catch (e) { toast('Could not open the preset graph: ' + e.message, 6000); }
+  }
+
+  /** ComfyUI's app object inside the iframe, once its frontend has started (up to ~20 s). */
+  async #comfyApp() {
+    for (let i = 0; i < 80; i++) {
+      try {
+        const w = this.frame?.contentWindow;
+        const app = w?.app || w?.comfyAPI?.app?.app;
+        if (app?.graph && typeof app.loadApiJson === 'function') return app;
+      } catch { return null; } // not same origin
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return null;
   }
 }

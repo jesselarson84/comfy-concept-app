@@ -59,6 +59,7 @@ test('header says Comfy UI; Run button is the only blue element; picker has 3D /
   assert.deepEqual(await page.$$eval('#aspect-ratio option', (o) => o.map((x) => x.value)), ['1:1', '4:3', '3:2', '16:9']);
   const dd = await page.$eval('#aspect-ratio', (b) => { const c = getComputedStyle(b); return [c.backgroundColor, c.color, c.borderTopColor]; });
   assert.deepEqual(dd, ['rgb(38, 39, 41)', 'rgb(255, 255, 255)', 'rgba(0, 0, 0, 0)'], 'dropdown = ComfyUI card gray, never blue');
+  await page.selectOption('#aspect-ratio', '3:2'); // batch 5: no orientation buttons on 1:1
   await page.click('#aspect-field .seg [data-orient="landscape"]');
   const seg = await page.$eval('#aspect-field .seg button.on', (b) => getComputedStyle(b).backgroundColor);
   assert.equal(seg, 'rgb(60, 61, 66)', 'selected = gray, not blue');

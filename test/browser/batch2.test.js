@@ -97,11 +97,9 @@ test('picker: rows are names only; a grayed-out (missing) row says what is missi
   await page.waitForSelector('#picker', { state: 'hidden' });
 });
 
-test('menu: no GPU & memory readout / Refresh / profile setting, no builder recommendation', async () => {
-  await page.click('details.menu > summary');
-  assert.doesNotMatch(await page.textContent('.menu-pop'), /GPU|memory|Refresh|Profile|Recommended/i);
-  await shot('menu');
-  await page.click('details.menu > summary');
+test('top bar: no ⋮ menu any more (batch 5), so no GPU & memory readout / Refresh / profile setting', async () => {
+  assert.equal(await page.$('details.menu, .menu-pop'), null);
+  assert.doesNotMatch(await page.textContent('.topbar'), /GPU|memory|Refresh|Profile|Recommended/i);
 });
 
 test('Use as reference (current preset has no image input): short list of 3D + Image Edit presets -> switches and loads the full-res picture', async () => {

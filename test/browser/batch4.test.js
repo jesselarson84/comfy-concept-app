@@ -42,7 +42,7 @@ const formState = () => app(() => {
     prompt: q('#prompt'), ratio: q('#aspect-ratio'), orient: q('[data-orient="portrait"]'), batch: q('#batch'), batchPlus: q('#batch-plus'),
     seedLock: q('#seed-lock'), seedDice: q('#seed-dice'), seedVal: q('#seed'),
     params: [...document.querySelectorAll('#params input, #params select, #params button:not(.info-btn)')].map(st),
-    chatInput: q('.chat-input'), menuSwitch: q('#mem-te-cpu'), importBtn: q('#btn-import'),
+    chatInput: q('.chat-input'),
     cancel: q('#btn-cancel'), history: q('#btn-history'), canvas: q('#btn-canvas'),
   };
 });
@@ -60,7 +60,7 @@ test('B: the whole form is locked during a run and comes back exactly as it was'
   await page.click('#btn-generate');
   await page.waitForFunction(() => document.querySelector('#prompt').readOnly);
   const during = await formState();
-  for (const k of ['prompt', 'ratio', 'orient', 'batch', 'batchPlus', 'seedLock', 'seedDice', 'seedVal', 'chatInput', 'menuSwitch', 'importBtn']) assert.equal(during[k], false, `${k} is locked`);
+  for (const k of ['prompt', 'ratio', 'orient', 'batch', 'batchPlus', 'seedLock', 'seedDice', 'seedVal', 'chatInput']) assert.equal(during[k], false, `${k} is locked`);
   assert.ok(during.params.every((x) => x === false), 'Settings are locked');
   assert.equal(during.cancel, true, 'Cancel stays usable');
   assert.equal(during.history, true, 'History stays usable');
@@ -294,17 +294,15 @@ test('G: canvas toggle shows ComfyUI under the persistent top bar; menu has no "
   await page.waitForFunction(() => (window.conceptApp?.workflows?.length || 0) > 10 && window.conceptApp.current);
   const dialogs = [];
   page.on('dialog', (d) => { dialogs.push(d.message()); d.dismiss().catch(() => {}); });
-  await page.click('details.menu > summary');
-  assert.deepEqual(await page.$$eval('.menu-pop > *', (els) => els.map((e) => e.id || e.className)), ['btn-import', 'field builder-model', 'menu-switches']);
-  await page.click('details.menu > summary');
+  assert.equal(await page.$('details.menu'), null, 'batch 5: no ⋮ menu');
   assert.equal(await page.$('#node-view iframe'), null, 'nothing loaded before the first toggle');
   await page.click('#btn-canvas');
   await page.waitForSelector('#node-view iframe');
   const frame = page.frame({ url: /\/comfy\/$/ }) || (await (await page.$('#node-view iframe')).contentFrame());
   await frame.waitForSelector('h1');
   assert.equal(await page.getAttribute('#btn-canvas', 'aria-pressed'), 'true');
-  assert.equal(await page.isDisabled('#preset-btn'), true, 'workflow dropdown greyed out in node view');
-  for (const sel of ['.topbar', '#preset-btn', '#btn-history', 'details.menu', '#btn-canvas']) assert.equal(await page.isVisible(sel), true, sel);
+  assert.equal(await page.isVisible('#preset-btn'), false, 'batch 5: workflow dropdown hidden in node view');
+  for (const sel of ['.topbar', '#btn-history', '#btn-canvas']) assert.equal(await page.isVisible(sel), true, sel);
   for (const sel of ['#panel', '#results', '.actionbar']) assert.equal(await page.isVisible(sel), false, sel);
   const geo = await page.evaluate(() => { const t = document.querySelector('.topbar').getBoundingClientRect(), f = document.querySelector('#node-view iframe').getBoundingClientRect(); return { top: t.bottom, ft: f.top, fb: f.bottom, fw: f.width, vh: innerHeight, vw: innerWidth }; });
   assert.ok(geo.ft >= geo.top - 1 && geo.fb <= geo.vh + 1 && geo.vh - geo.fb < 40 && geo.fw >= geo.vw - 2, JSON.stringify(geo));
@@ -336,15 +334,19 @@ test('G: Back (Android back button) in node view returns to the default view, no
   assert.equal(await page.getAttribute('#btn-canvas', 'aria-pressed'), 'false');
   assert.equal(new URL(page.url()).pathname, '/');
   assert.ok(await app(() => !!window.conceptApp), 'still the app page');
-  // History opened from the node view closes back to the node view
+  // Batch 5: History and the node view are one or the other. Switching takes
+  // over the Back entry, so Back from either returns to the default view.
   await page.click('#btn-canvas');
   await page.click('#btn-history');
-  await page.waitForFunction(() => !document.querySelector('.history')?.hidden);
-  await page.goBack();
-  await page.waitForFunction(() => document.querySelector('.history')?.hidden !== false);
-  assert.equal(await app(() => document.body.classList.contains('node-view-on')), true);
+  await page.waitForFunction(() => document.body.classList.contains('history-on') && !document.body.classList.contains('node-view-on'));
+  assert.equal(await page.getAttribute('#btn-canvas', 'aria-pressed'), 'false');
+  assert.equal(await page.isVisible('.actionbar'), false, 'Run hidden in History');
   await page.click('#btn-canvas');
-  assert.equal(await app(() => document.body.classList.contains('node-view-on')), false);
+  await page.waitForFunction(() => document.body.classList.contains('node-view-on') && !document.body.classList.contains('history-on'));
+  await page.goBack();
+  await page.waitForFunction(() => !document.body.classList.contains('node-view-on') && !document.body.classList.contains('history-on'));
+  assert.equal(new URL(page.url()).pathname, '/');
+  assert.ok(await app(() => !!window.conceptApp), 'still the app page');
 });
 
 test('G: a run keeps going and stays locked across node-view toggles; canvas toggle works during it; tablet layout', async () => {

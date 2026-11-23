@@ -44,6 +44,7 @@ import { ConnectionBanner } from './lib/conn-banner.js';
 import { infoFor } from './lib/setting-info.js';
 import { NodeView } from './ui/node-view.js';
 import { textEncoderOnCpu, tiledVaeDecode, hasVaeDecode, wantTiledDecode, isOom } from './lib/memory-options.js';
+import { withUpscale, pickUpscaleModel, RESOLUTIONS } from './lib/resolution.js';
 
 const comfy = new ComfyClient();
 const queue = new JobQueue(comfy);
@@ -64,8 +65,20 @@ const lock = new RunLock();
 const isLocked = () => lock.locked() || queue.active.length > 0;
 const busy = () => { toast('Running'); };
 // Node view (canvas button): ComfyUI's graph in an iframe under the top bar,
-// kept alive between toggles; the workflow dropdown is greyed out meanwhile.
-const nodeView = new NodeView({ button: $('#btn-canvas'), host: $('#node-view'), onChange: () => { picker.close(); paintThumbs(); } });
+// kept alive between toggles. Batch 5: the workflow dropdown is hidden while it
+// is shown, it opens the selected preset's graph, and it switches straight
+// over to / from History (one or the other, never both).
+const nodeView = new NodeView({
+  button: $('#btn-canvas'), host: $('#node-view'),
+  graph: () => (current?.ok && current.workflow ? { id: current.id, label: current.label, workflow: current.workflow } : null),
+  beforeShow: async () => { if (historyView.on) await leaveHistory(); },
+  onChange: () => { picker.close(); paintThumbs(); },
+});
+/** Close History without leaving a stale Back entry, so the node view can take its place. */
+async function leaveHistory() {
+  if (historyView.selecting) { historyView.endSelect(); await afterBack(); }
+  historyView.close(true);
+}
 
 const viewer = new Viewer({
   onFavorite: (it) => (it.historyId ? api.patchHistory(it.historyId, { favorite: it.favorite }) : Promise.reject(new Error('not saved yet'))),
@@ -89,11 +102,32 @@ const viewer = new Viewer({
   onDiscuss: (it) => chat.discuss(it),
   onUseAsReference: (it) => useAsReference(it.image),
   onSaveToDrive: (it) => saveToDrive(it.image, 'image'),
+  // Trash in the viewer: this one picture, from the PC (History entries hold one picture each).
+  onDelete: async (it) => {
+    const r = await api.deleteHistory([it.historyId]);
+    if (r.refused.length) { toast(`Not deleted: ${r.refused[0].reason}`, 8000); return false; }
+    for (const q of queue.items) if (q.historyId === it.historyId) q.deleted = true;
+    toast('Deleted');
+    historyDirty = true;
+    return true;
+  },
 });
-viewer.onClose = () => paintThumbs();
+let historyDirty = false;
+viewer.onClose = () => { paintThumbs(); if (historyDirty && historyView.on) historyView.load(); historyDirty = false; };
 // 3D tiles: preview stills rendered once (one shared offscreen renderer, lazy) and cached on this device.
 const modelThumbs = new ModelThumbs();
-const historyView = new HistoryView((getItems, i) => viewer.open(getItems, i), (f, meta) => openFile(f, meta), { modelThumbs });
+// History (batch 5): a top bar toggle like the node view; the top bar stays put.
+const historyView = new HistoryView((getItems, i) => viewer.open(getItems, i), (f, meta) => openFile(f, meta), {
+  modelThumbs, host: $('#history-host'), button: $('#btn-history'),
+  onChange: () => { picker.close(); paintThumbs(); },
+});
+$('#btn-history').addEventListener('click', () => {
+  if (historyView.on) return historyView.close();
+  // Switching over from the node view: take over its Back entry instead of stacking a new one.
+  const replace = nodeView.on;
+  if (replace) nodeView.hide(true);
+  historyView.open({ replace });
+});
 
 // ---- non-image results: 3D viewer, audio player, file sheet ------------------
 const fileHooks = { onDownload: (f) => downloadFile(f), onSaveToDrive: (f) => saveToDrive(f, fileKind(f)) };
@@ -205,7 +239,16 @@ async function generate() {
   if (maskSlot.missing()) return toast('Paint a mask first');
   if (c.prompt.length && !v.prompt.trim()) return toast('Type a prompt');
   const ai = current.ai;
-  let size = c.width.length && c.height.length ? sizeFor(v.aspect, ...(ai?.size ? ai.size.base : [c.defaults.width || 1024, c.defaults.height || 1024]), ai?.size?.multiple || 16) : {};
+  // Text-to-image presets: the 1K / 2K / 4K picker sets the size (lib/resolution.js);
+  // others keep the preset's pixel count.
+  let size = c.width.length && c.height.length ? (v.res ? panel.renderSize() : sizeFor(v.aspect, ...(ai?.size ? ai.size.base : [c.defaults.width || 1024, c.defaults.height || 1024]), ai?.size?.multiple || 16)) : {};
+  // 4K = 2K render + 2x upscale in the same graph; needs an installed upscale model.
+  const upscale = v.res ? RESOLUTIONS[v.res].upscale : 1;
+  let upscaleModel = null;
+  if (upscale > 1) {
+    upscaleModel = pickUpscaleModel(await installedUpscaleModels());
+    if (!upscaleModel) return toast('4K needs an upscale model (e.g. 4x-UltraSharp) in ComfyUI/models/upscale_models', 8000);
+  }
   // AI Workflow presets: every value is clamped to the preset's range (notes say what changed).
   let params = {}, batch = v.batch;
   if (ai) {
@@ -224,11 +267,12 @@ async function generate() {
       workflow = applyPresetParams(ai, workflow, params); fileInputs.apply(workflow); maskSlot.apply(workflow);
       dropEmptyOptional(ai, workflow, new Set([...Object.keys(refs.values).filter((n) => refs.values[n]), ...fileInputs.filled()]));
     }
+    if (upscaleModel) workflow = withUpscale(workflow, upscaleModel, upscale);
     return {
       workflow,
       meta: {
-        workflow: current.id, prompt: v.prompt, negative: v.negative || undefined, seed, aspect: v.aspect,
-        width: size.width, height: size.height, steps: v.steps, strength: v.strength, params: ai ? params : undefined, output: ai?.output,
+        workflow: current.id, prompt: v.prompt, negative: v.negative || undefined, seed, aspect: v.aspect, res: v.res,
+        width: size.width * upscale, height: size.height * upscale, renderWidth: upscale > 1 ? size.width : undefined, renderHeight: upscale > 1 ? size.height : undefined, steps: v.steps, strength: v.strength, params: ai ? params : undefined, output: ai?.output,
         reference: c.images.length ? Object.fromEntries(c.images.map((s) => [s.node, refs.values[s.node]])) : undefined,
         mask: maskSlot.value || undefined,
       },
@@ -260,15 +304,21 @@ queue.addEventListener('change', (e) => {
     toast('Out of memory: the next run decodes in tiles', 6000);
   }
 });
-async function paintMemorySettings() {
-  try { memSettings = await api.getMemorySettings(); } catch { return; }
-  $('#mem-te-cpu').checked = memSettings.textEncoderCpu;
-  $('#mem-ollama-cpu').checked = memSettings.ollamaCpu;
+// Batch 5: the menu switches are gone; a value saved earlier on the server
+// (data/memory.json) is still honoured.
+async function loadMemorySettings() {
+  try { memSettings = await api.getMemorySettings(); } catch {}
 }
-for (const [sel, key] of [['#mem-te-cpu', 'textEncoderCpu'], ['#mem-ollama-cpu', 'ollamaCpu']]) {
-  $(sel).addEventListener('change', async (e) => {
-    try { memSettings = await api.setMemorySettings({ [key]: e.target.checked }); } catch (err) { e.target.checked = !e.target.checked; toast(err.message, 6000); }
-  });
+
+/** Upscale models ComfyUI has installed (for 4K), from /object_info. */
+async function installedUpscaleModels() {
+  try {
+    const j = await (await fetch('/comfy/object_info/UpscaleModelLoader')).json();
+    const spec = j?.UpscaleModelLoader?.input?.required?.model_name;
+    // Old format: [[names...]]; new format: ['COMBO', { options: [names...] }].
+    const list = Array.isArray(spec?.[0]) ? spec[0] : spec?.[1]?.options;
+    return Array.isArray(list) ? list : [];
+  } catch { return []; }
 }
 
 /** Lock, free memory, queue the run's jobs; the lock lifts when they all end. */
@@ -335,11 +385,12 @@ $('#btn-clear').addEventListener('click', () => queue.clearFinished());
 
 // ---- thumbnails ------------------------------------------------------------
 function paintThumbs() {
-  renderThumbs($('#thumbs'), queue.items, (it) => {
+  const live = () => queue.items.filter((x) => !x.deleted); // deleted from the viewer's trash
+  renderThumbs($('#thumbs'), live(), (it) => {
     if (!it.image && it.files?.length) { openFile(it.files[0], it.meta); return; }
     if (!it.image) { if (it.error) toast(it.error, 8000); return; }
-    const done = queue.items.filter((x) => x.image);
-    viewer.open(() => queue.items, done.indexOf(it));
+    const done = live().filter((x) => x.image);
+    viewer.open(live, done.indexOf(it));
   }, modelThumbs);
   const locked = isLocked();
   setKeepAwake(locked); // Android app: screen stays on while a run is going
@@ -347,10 +398,9 @@ function paintThumbs() {
   const run = $('#btn-generate');
   run.disabled = locked;
   run.classList.toggle('is-running', locked);
-  $('#preset-btn').disabled = locked || nodeView.on;
-  // The whole form is read-only during a run (ui/form-lock.js); the menu still
-  // opens but its switches and Import wait too (Import could switch the preset).
-  lockControls([$('#panel'), $('.menu-pop')], locked);
+  $('#preset-btn').disabled = locked;
+  // The whole form is read-only during a run (ui/form-lock.js).
+  lockControls([$('#panel')], locked);
   const pr = runProgress(lock.run.length ? lock.run : queue.active);
   $('#run-label').textContent = locked && pr.total ? `Running ${pr.current} of ${pr.total}` : 'Run';
   // Android: foreground service with "Running N of M"; vibrates when the run ends.
@@ -387,31 +437,9 @@ const chat = new ChatPanel($('#chat-mount'), {
   onTestRun: (r) => runBuilderTest(r),
   onSavedPreset: (id) => loadWorkflows(id, { remember: true }).then(() => toast('Saved under My presets')),
 });
-// The memory profile is always Auto (picked on the server from the detected
-// VRAM); the menu has no GPU & memory section.
-$('details.menu').addEventListener('toggle', (e) => { if (e.target.open) { paintBuilderModel(); paintMemorySettings(); } });
-
-// Setup builder model (server: data/builder.json): a plain picker of the models Ollama has.
-async function paintBuilderModel() {
-  const sel = $('#builder-model');
-  try {
-    const [cfgB, tags] = await Promise.all([api.getBuilderConfig(), fetch('/ollama/api/tags').then((r) => r.json()).catch(() => ({ models: [] }))]);
-    const names = [...new Set([cfgB.model, ...(tags.models || []).map((m) => m.name)])];
-    sel.replaceChildren(...names.map((n) => new Option(n, n)));
-    sel.value = cfgB.model;
-  } catch (e) { toast('Builder settings unavailable: ' + e.message, 6000); }
-}
-$('#builder-model').addEventListener('change', async (e) => { try { await api.setBuilderModel(e.target.value); toast(`Setup builder uses ${e.target.value}`); } catch (err) { toast(err.message, 6000); } });
-
-// ---- menu: history, advanced (real ComfyUI), import -------------------------
-$('#btn-history').addEventListener('click', () => historyView.open());
-$('#btn-import').addEventListener('click', () => $('#import-file').click());
-$('#import-file').addEventListener('change', async (e) => {
-  const f = e.target.files[0];
-  e.target.value = '';
-  if (!f) return;
-  try { const r = await api.importWorkflow(f); toast(`Imported "${r.file}"`); await loadWorkflows(r.id, { remember: true }); } catch (err) { toast(err.message, 8000); }
-});
+// Batch 5: the ⋮ menu (Import workflow, Setup builder model, the CPU switches)
+// is gone. Workflows still arrive by exporting from ComfyUI into workflows/;
+// the builder model stays what data/builder.json says (default gemma3:4b).
 
 // ---- connection banner -------------------------------------------------------
 function banner(text) { const b = $('#banner'); b.textContent = text || ''; b.hidden = !text; }
@@ -467,7 +495,7 @@ function resume() {
 async function start() {
   try { config = await api.getConfig(); if (!config.comfyReachable) banner(`ComfyUI not reachable at ${config.comfyUrl}`); } catch { banner('App server not reachable'); }
   await loadWorkflows();
-  paintMemorySettings();
+  loadMemorySettings();
   await handleLaunchParams();
   // Jobs still active when the page was dropped (Android background): back in
   // the strip and locked, results caught up from /history.

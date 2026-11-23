@@ -65,7 +65,6 @@ test('saved preset "fast-concept" opens FLUX.2 Klein 4B Text to Image; no saved 
 test('old history: Reuse on a From reference image result -> Klein 4B Image Edit with the old reference in its slot; Fast concept result -> Klein 4B T2I', async () => {
   const { ctx, page } = await openWith(oldLocalStorage('fast-concept'));
   try {
-    await page.click('.menu summary');
     await page.click('#btn-history');
     await page.waitForSelector('.history-session .thumb img');
     assert.equal(await page.$$eval('.history-session .thumb', (t) => t.length), 3);
@@ -79,7 +78,7 @@ test('old history: Reuse on a From reference image result -> Klein 4B Image Edit
     assert.equal(await page.inputValue('#seed'), '77');
         await page.screenshot({ path: path.join(SHOTS, 'legacy-reuse-edit.png') });
     if (await page.locator('.viewer:not([hidden])').count()) await page.keyboard.press('Escape');
-    if (await page.locator('.history:not([hidden])').count()) await page.click('.history-top button[aria-label=Close]').catch(() => {});
+    if (await page.locator('.history:not([hidden])').count()) await page.click('#btn-history').catch(() => {});
     await page.evaluate(() => window.conceptApp.viewer.open(() => [{ image: { filename: 'concept_00001_.png', subfolder: 'concept-app', type: 'output' }, meta: { workflow: 'ai:klein-4b-t2i', legacyWorkflow: 'fast-concept', prompt: 'a brass airship over a canyon', seed: 4242 } }], 0));
     await page.waitForSelector('.viewer:not([hidden])');
     await page.click('.viewer-actions button[title="Reuse prompt + seed"]');

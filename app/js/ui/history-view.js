@@ -22,9 +22,15 @@ import { bridge, has, absoluteUrl } from '../native.js';
 const LONG_PRESS_MS = 450;
 
 export class HistoryView {
-  /** openViewer(getItems, index) for pictures; openFile(file, meta) for 3D / audio / video. */
-  constructor(openViewer, openFile, { modelThumbs } = {}) {
+  /**
+   * openViewer(getItems, index) for pictures; openFile(file, meta) for 3D / audio / video.
+   * Batch 5: History is a top bar toggle like the node view. It lives in `host`
+   * (under the top bar, which stays put); `button` shows the pressed state;
+   * onChange(on) lets main hide the node view / picker.
+   */
+  constructor(openViewer, openFile, { modelThumbs, host, button, onChange } = {}) {
     this.openViewer = openViewer; this.openFile = openFile; this.modelThumbs = modelThumbs;
+    this.host = host || document.body; this.button = button; this.onChange = onChange;
     this.favOnly = false;
     this.folder = null;          // { id, name } when showing one folder
     this.selected = new Set();   // history entry ids
@@ -34,17 +40,21 @@ export class HistoryView {
     this.title = h('h2', {}, 'History');
     this.favBtn = h('button.btn', { type: 'button', onclick: () => { this.favOnly = !this.favOnly; this.folder = null; this.favBtn.classList.toggle('on', this.favOnly); this.load(); } }, '★ Favorites');
     this.foldersBtn = h('button.btn.icon', { type: 'button', 'aria-label': 'Folders', dataset: { act: 'folders' }, onclick: () => this.openFolders() }, h('i.i.i-folder'));
-    this.normalBar = h('div.history-top', {}, h('button.icon-btn', { type: 'button', 'aria-label': 'Close', onclick: () => this.close() }, '✕'), this.title, h('span.spacer'), this.foldersBtn, this.favBtn);
+    // No close button: the History toggle in the top bar (or Back) closes it.
+    this.normalBar = h('div.history-top', {}, this.title, h('span.spacer'), this.foldersBtn, this.favBtn);
     this.count = h('span.sel-count', {}, '0');
+    // Batch favourite: favourites the whole selection, or unfavourites it when it is all favourites already.
+    this.selFavBtn = h('button.icon-btn.sel-fav', { type: 'button', 'aria-label': 'Favorite', dataset: { act: 'favorite' }, onclick: () => this.favoriteSelected() }, '☆');
     this.selBar = h('div.history-top.sel-bar', { hidden: true },
       h('button.icon-btn', { type: 'button', 'aria-label': 'Cancel selection', dataset: { act: 'cancel-sel' }, onclick: () => this.endSelect() }, '✕'),
       this.count, h('span.spacer'),
+      this.selFavBtn,
       h('button.icon-btn', { type: 'button', 'aria-label': 'Share', dataset: { act: 'share' }, onclick: () => this.share() }, h('i.i.i-share-2')),
       h('button.icon-btn', { type: 'button', 'aria-label': 'Add to', dataset: { act: 'add' }, onclick: () => this.openAddTo() }, h('i.i.i-plus')),
       h('button.icon-btn', { type: 'button', 'aria-label': 'Delete', dataset: { act: 'delete' }, onclick: () => this.confirmDelete() }, h('i.i.i-trash-2')),
       h('button.icon-btn', { type: 'button', 'aria-label': 'More', dataset: { act: 'more' }, onclick: (e) => this.openMore(e.currentTarget) }, h('i.i.i-more-vertical')));
-    this.root = h('div.history', { hidden: true, role: 'dialog' }, this.normalBar, this.selBar, this.list);
-    document.body.append(this.root);
+    this.root = h('div.history', { hidden: true }, this.normalBar, this.selBar, this.list);
+    this.host.append(this.root);
     this.folders = new FoldersScreen((f) => { this.folder = f; this.favOnly = f?.id === 'favorites'; if (this.favOnly) this.folder = null; this.favBtn.classList.toggle('on', this.favOnly); this.load(); });
     // Android back button / gesture: leaves selection first, then closes History.
     window.addEventListener('popstate', () => {
@@ -54,17 +64,52 @@ export class HistoryView {
     });
   }
 
-  async open() {
-    if (this.root.hidden) history.pushState({ history: true }, '');
-    this.root.hidden = false;
+  get on() { return !this.root.hidden; }
+
+  toggle() { return this.on ? this.close() : this.open(); }
+
+  /** @param o.replace  take over the current history entry (switching over from the node view) */
+  async open({ replace = false } = {}) {
+    if (this.root.hidden) {
+      if (replace) history.replaceState({ history: true }, ''); else history.pushState({ history: true }, '');
+      this.#paintOn(true);
+    }
     await this.load();
   }
 
+  /** @param fromPop  Back already popped the entry (or another view took it over) */
   close(fromPop) {
     if (this.root.hidden) return;
     this.endSelect(true);
-    this.root.hidden = true;
+    this.#paintOn(false);
     if (!fromPop && history.state?.history) history.back();
+  }
+
+  #paintOn(on) {
+    this.root.hidden = !on;
+    if (this.host !== document.body) this.host.hidden = !on;
+    document.body.classList.toggle('history-on', on);
+    this.button?.setAttribute('aria-pressed', String(on));
+    this.button?.classList.toggle('on', on);
+    this.onChange?.(on);
+  }
+
+  /** Favourite every selected picture, or unfavourite them all when they all are already. */
+  async favoriteSelected() {
+    const ids = [...this.selected].filter((id) => this.entries.has(id));
+    if (!ids.length) return;
+    const fav = !ids.every((id) => this.entries.get(id).favorite);
+    try { await Promise.all(ids.map((id) => patchHistory(id, { favorite: fav }))); } catch (e) { toast(e.message, 6000); }
+    for (const id of ids) { const e = this.entries.get(id); if (e) e.favorite = fav; }
+    toast(`${fav ? 'Added' : 'Removed'} ${ids.length} ${fav ? 'to' : 'from'} Favorites`);
+    // Stay in selection mode; repaint the stars on the tiles (and drop them from the Favorites view).
+    if (this.favOnly && !fav) { this.endSelect(); await this.load(); return; }
+    for (const t of this.list.querySelectorAll('.thumb[data-id]')) {
+      const e = this.entries.get(t.dataset.id);
+      const label = t.querySelector('.thumb-label');
+      if (e && label && e.images?.length) label.textContent = e.favorite ? '★' : '';
+    }
+    this.paintSelection();
   }
 
   // ---- selection ------------------------------------------------------------
@@ -99,6 +144,11 @@ export class HistoryView {
     this.root.classList.toggle('selecting', this.selecting);
     this.selBar.hidden = !this.selecting; this.normalBar.hidden = this.selecting;
     this.count.textContent = String(this.selected.size);
+    const sel = [...this.selected].map((id) => this.entries.get(id)).filter(Boolean);
+    const allFav = sel.length > 0 && sel.every((e) => e.favorite);
+    this.selFavBtn.textContent = allFav ? '★' : '☆';
+    this.selFavBtn.classList.toggle('on', allFav);
+    this.selFavBtn.setAttribute('aria-label', allFav ? 'Remove from Favorites' : 'Add to Favorites');
     for (const t of this.list.querySelectorAll('.thumb[data-id]')) {
       const on = this.selected.has(t.dataset.id);
       t.classList.toggle('selected', on); t.setAttribute('aria-pressed', String(on));

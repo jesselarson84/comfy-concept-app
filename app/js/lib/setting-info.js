@@ -19,7 +19,7 @@ export const GLOSSARY = {
   // ---- main screen ----
   prompt: 'Describe what you want to see. Plain sentences work: say the subject first, then the style, lighting and framing. The more specific, the closer the result.',
   negative: 'Things you do NOT want in the result (for example: blurry, text, watermark, extra fingers). Only some models use a negative prompt, so the switch only appears for those.',
-  aspect: 'The shape and size of the result. Pick a ratio (1:1 is square); the two icons flip it to portrait (tall) or landscape (wide). The numbers show the exact size in pixels, kept inside what this model supports.',
+  aspect: 'The shape and size of the result. Pick a ratio (1:1 is square); the two icons swap it between portrait (tall) and landscape (wide), e.g. 16:9 and 9:16. Where shown, 1K / 2K / 4K sets the long side: 1K = 1024, 2K = 2048, 4K = rendered at 2K and then upscaled 2x. The numbers show the final size in pixels.',
   batch: 'How many results one Run makes. Each one is its own job with its own seed, so you get different variations of the same prompt. They appear one by one as they finish.',
   seed: 'The random number a result starts from. The same prompt, settings and seed give the same result again. Lock keeps the number (a batch then uses it, +1, +2, and so on); the shuffle button picks a new one and locks it. Unlocked, every result gets a new random seed.',
   strength: 'How much the reference picture may change. Low keeps the result close to the original; 1.0 repaints almost everything. (This is the sampler\'s "denoise".)',

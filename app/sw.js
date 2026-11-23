@@ -4,11 +4,11 @@
 // three.js (/vendor/, only used by the 3D viewer) is cached the first time it
 // is fetched, so the 3D viewer also opens without a network round trip later.
 // Bump VERSION when you change app files so phones pick up the new shell.
-const VERSION = 'shell-v16';
+const VERSION = 'shell-v17';
 const SHELL = [
   '/', '/index.html', '/styles.css', '/icons.css', '/fonts/inter-latin-normal.woff2', '/manifest.webmanifest',
   '/js/main.js', '/js/api.js', '/js/comfy-client.js', '/js/job-queue.js',
-  '/js/lib/workflow-detect.js', '/js/lib/workflow-inject.js', '/js/lib/aspect.js', '/js/lib/seed.js',
+  '/js/lib/workflow-detect.js', '/js/lib/workflow-inject.js', '/js/lib/aspect.js', '/js/lib/resolution.js', '/js/lib/seed.js',
   '/js/native.js', '/js/ollama-client.js',
   '/js/lib/chat-reply.js', '/js/lib/chat-context.js', '/js/lib/prompt-diff.js', '/js/lib/actions.js',
   '/js/lib/presets.js', '/js/lib/builder.js', '/js/lib/outputs.js', '/js/lib/legacy-presets.js', '/js/lib/preset-choice.js',

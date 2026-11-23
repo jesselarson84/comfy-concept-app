@@ -216,16 +216,16 @@ test('Android share target flow: POST /share -> redirect -> FLUX.2 Klein 4B Imag
   await page.waitForFunction(() => document.querySelector('#prompt')?.value === 'shared words', null, { timeout: 5000 });
 });
 
-test('import workflow via file picker -> appears in dropdown', async () => {
-  await page.setInputFiles('#import-file', path.join(ROOT, 'test/fixtures/sd15-negative.json'));
-  await page.waitForFunction(() => (window.conceptApp?.workflows || []).some((w) => w.id === 'sd15-negative'));
-  assert.equal(await currentPreset(), 'sd15-negative');
+// Batch 5: the Import workflow button (⋮ menu) is gone; a graph dropped into
+// workflows/ still appears on its own (SSE).
+test('workflow dropped into the folder -> appears in dropdown, negative prompt works', async () => {
+  assert.equal(await page.$('#import-file, #btn-import, details.menu'), null, 'no ⋮ menu, no Import');
+  fs.copyFileSync(path.join(ROOT, 'test/fixtures/sd15-negative.json'), path.join(s.wfDir, 'sd15-negative.json'));
+  await page.waitForFunction(() => (window.conceptApp?.workflows || []).some((w) => w.id === 'sd15-negative'), null, { timeout: 5000 });
+  await pick('sd15-negative');
   assert.equal(await visible('#neg-row'), true, 'SD graph has a negative prompt');
   await page.check('#neg-toggle');
   assert.equal(await visible('#negative'), true);
-  // UI-format import shows the error message
-  await page.setInputFiles('#import-file', path.join(ROOT, 'test/fixtures/ui-format.json'));
-  await page.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('Export (API)'));
 });
 
 test('workflow dropped into folder shows up without reload (SSE); unknown graph shows message', async () => {
@@ -242,7 +242,7 @@ test('history view lists the session with images', async () => {
   assert.ok(n >= 4, `history thumbs ${n}`);
   assert.ok(await page.$$eval('.history-session .thumb-label', (l) => l.some((x) => x.textContent === '★')));
   await page.screenshot({ path: path.join(SHOTS, 'phone-history.png') });
-  await page.click('.history-top button[aria-label=Close]');
+  await page.click('#btn-history');
 });
 
 test('history: Back closes a viewer opened from History, then History, without leaving the page', async () => {
@@ -260,7 +260,7 @@ test('history: Back closes a viewer opened from History, then History, without l
   // Closing with the ✕ button also unwinds its history entry.
   await page.click('#btn-history');
   await page.waitForSelector('.history:not([hidden])');
-  await page.click('.history-top button[aria-label=Close]');
+  await page.click('#btn-history');
   await page.waitForFunction(() => document.querySelector('.history').hidden && !history.state?.history);
 });
 
