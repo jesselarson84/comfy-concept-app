@@ -124,6 +124,9 @@ export class ModelThumbs {
     const blob = await this.#still(t.file, wanted).catch((e) => { skipped = e === SKIP; return null; });
     if (skipped) { if (tile.isConnected && this.io) this.io.observe(tile); return; }
     if (blob) {
+      // Batch 9: History hands the still to the tagger (only stills already made for
+      // tiles on screen, so the lazy one-at-a-time rendering stays as it is).
+      try { this.onStill?.(t.file, blob); } catch {}
       const key = thumbKey(t.file);
       let url = this.urls.get(key);
       if (!url) { url = URL.createObjectURL(blob); this.urls.set(key, url); }

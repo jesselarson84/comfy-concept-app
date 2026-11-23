@@ -6,6 +6,8 @@
 //   /api/workflows  GET   presets with detected controls + default (fresh-client preset); POST import (multipart or JSON)
 //   /api/history    GET   sessions -> entries; POST add entry
 //   /api/history/:id PATCH favourite / images / status
+//   /api/history/:id/preview POST image bytes: 3D still / video first frame for the tagger (batch 9)
+//   /api/tagger     GET status, POST {enabled}  background History tags (server/tagger.js)
 //   /api/events     GET   Server-Sent Events ("workflows" when the folder changes)
 //   /share          POST  Android share target
 //   /ollama/*       -> allow-listed proxy to a local Ollama (Chat tab), see ollama.js
@@ -42,7 +44,8 @@ import { HistoryStore } from './history.js';
 import { ChatStore } from './chats.js';
 import { createOllama } from './ollama.js';
 import { ActionStore } from './actions.js';
-import { createHardware } from './hardware.js';
+import { createHardware, runNvidiaUtil } from './hardware.js';
+import { createTagger, readGpuUtil } from './tagger.js';
 import { createMemory } from './memory.js';
 import { handleShare } from './share.js';
 import { readBody, parseMultipart } from './multipart.js';
@@ -91,6 +94,8 @@ export function createApp(cfg, opts = {}) {
   const hardware = createHardware({ getComfyUrl: () => cfg.comfyUrl, ...(runSmi ? { runSmi } : {}), ...(os ? { os } : {}) });
   const memory = createMemory({ cfg, hardware, ollama, getComfyUrl: () => cfg.comfyUrl, ...(env ? { env } : {}) });
   const comfyInfo = createComfyInfo({ getComfyUrl: () => cfg.comfyUrl });
+  // Batch 9: History tags in the background, only while the GPU is quiet (no game, no ComfyUI job).
+  const tagger = createTagger({ history, dataDir: cfg.dataDir, getComfyUrl: () => cfg.comfyUrl, getOllamaUrl: () => cfg.ollamaUrl, gpuUtil: opts.gpuUtil || (() => readGpuUtil(runNvidiaUtil)), log, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}), ...(opts.tagger || {}) });
   const presets = new PresetStore(path.join(cfg.workflowsDir, 'ai'));
   const userPresets = new UserPresetStore(cfg.dataDir);
   const graphPresets = new GraphPresetStore(cfg.dataDir); // saved from the node view (Save as preset)
@@ -232,7 +237,22 @@ export function createApp(cfg, opts = {}) {
       const fid = url.searchParams.get('folder');
       const folder = fid ? folders.get(fid) : null;
       if (fid && !folder) return json(res, 404, { error: 'No such folder' });
-      return json(res, 200, { sessions: history.list({ favoritesOnly: url.searchParams.get('favorites') === '1', only: folder ? new Set(folder.items) : null }) });
+      const sessions = history.list({ favoritesOnly: url.searchParams.get('favorites') === '1', only: folder ? new Set(folder.items) : null });
+      // preview: the tagger already has a still for this 3D model / video (batch 9)
+      for (const s of sessions) s.entries = s.entries.map((e) => (tagger.hasPreview(e.id) ? { ...e, preview: true } : e));
+      return json(res, 200, { sessions });
+    }
+    if (p === '/api/tagger' && req.method === 'GET') return json(res, 200, tagger.status());
+    if (p === '/api/tagger' && req.method === 'POST') {
+      let body;
+      try { body = JSON.parse((await readBody(req, 16 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
+      return json(res, 200, await tagger.setEnabled(body.enabled !== false));
+    }
+    const pv = /^\/api\/history\/([\w-]+)\/preview$/.exec(p);
+    if (pv && req.method === 'POST') {
+      const buf = await readBody(req, 4 * 1024 * 1024);
+      if (!buf.length) return json(res, 400, { error: 'Empty image' });
+      try { return json(res, 200, await tagger.savePreview(pv[1], buf)); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     // Delete results from the PC (History multi-select). Each file must resolve
     // inside ComfyUI's output/<outputSubfolder>/ (server/outputs.js deleteAppFile);
@@ -268,6 +288,7 @@ export function createApp(cfg, opts = {}) {
         }
       } finally {
         await history.remove(deleted);
+        await tagger.dropPreviews(deleted);
         for (const [id, left] of trimmed) await history.update(id, left);
         await folders.forget(deleted);
       }
@@ -414,12 +435,13 @@ export function createApp(cfg, opts = {}) {
   const close = server.close.bind(server);
   server.close = (cb) => {
     workflows.close();
+    tagger.stop();
     for (const r of sseClients) r.end();
     for (const sock of upgraded) sock.destroy();
     server.closeAllConnections?.();
     return close(cb);
   };
-  return { server, workflows, history, folders, chats, memory, hardware, cfg, presets, userPresets, builder, comfyInfo };
+  return { server, workflows, history, folders, chats, memory, hardware, cfg, presets, userPresets, builder, comfyInfo, tagger };
 }
 
 // Run directly: `node server/index.js` / `npm start` / start.bat
@@ -427,7 +449,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const cfg = loadConfig();
   const probe = await probeComfy(cfg);
   if (probe.ok) cfg.comfyUrl = probe.url;
-  const { server, memory } = createApp(cfg);
+  const { server, memory, tagger } = createApp(cfg);
+  tagger.start(); // only in the real server (tests drive tagger.tick() themselves)
   server.listen(cfg.port, cfg.host, () => {
     console.log(`Comfy UI app:       http://${cfg.host}:${cfg.port}/`);
     console.log(`ComfyUI target:     ${cfg.comfyUrl}  (${probe.ok ? 'reachable' : 'NOT reachable yet - start Comfy Desktop'})`);

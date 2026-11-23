@@ -48,3 +48,11 @@ export const saveToDrive = (f, kind, folder) => req('POST', '/api/drive/save', {
 // Batch 8: Save to… folder chooser (folders of My Drive).
 export const getDriveFolders = (path = '') => req('GET', `/api/drive/folders?${new URLSearchParams({ path })}`);
 export const makeDriveFolder = (path, name) => req('POST', '/api/drive/folders', { path, name });
+// Batch 9: History tags (background tagger) and the stills it reads for 3D / video.
+export const getTagger = () => req('GET', '/api/tagger');
+export const setTagger = (enabled) => req('POST', '/api/tagger', { enabled });
+export async function uploadPreview(id, blob) {
+  const r = await fetch(`/api/history/${encodeURIComponent(id)}/preview`, { method: 'POST', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
+  if (!r.ok) throw new Error(`Preview upload failed (${r.status})`);
+  return r.json();
+}

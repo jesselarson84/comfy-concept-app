@@ -96,6 +96,24 @@ export class HistoryStore {
     return e;
   }
 
+  /** Batch 9: tags from the background tagger (server/tagger.js). */
+  async setTags(id, tags) {
+    const e = this.data.entries.find((x) => x.id === id);
+    if (!e) return null;
+    e.tags = tags; delete e.tagFails;
+    await this.#save();
+    return e;
+  }
+
+  /** A tagging attempt failed; after a few the entry is skipped. */
+  async tagFailed(id, n = 1) {
+    const e = this.data.entries.find((x) => x.id === id);
+    if (!e) return null;
+    e.tagFails = (e.tagFails || 0) + n;
+    await this.#save();
+    return e;
+  }
+
   /** Newest session first, entries newest first. Entries made with a retired
    *  preset id come back mapped (copies; the stored data is never rewritten). */
   list({ favoritesOnly = false, only = null } = {}) {
