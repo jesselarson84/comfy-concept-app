@@ -39,6 +39,7 @@ import { OutputPicker } from './ui/output-picker.js';
 import { PresetChooser } from './ui/preset-chooser.js';
 import { ImportSheet, presetsFor } from './ui/import-sheet.js';
 import { afterBack } from './ui/overlay.js';
+import { DriveFolderSheet, rememberFolder } from './ui/drive-folder.js';
 import { RunLock, runProgress } from './lib/run-lock.js';
 import { lockControls } from './ui/form-lock.js';
 import { ConnectionBanner } from './lib/conn-banner.js';
@@ -163,11 +164,19 @@ function openFile(f, meta = {}) {
   return fileSheet.open(f, meta);
 }
 
-// ---- Save to Drive (server copies the file into Q:\My Drive\Comfy UI\<kind>\) ----
+// ---- Save to Drive (server copies the file into a folder of Q:\My Drive) ----
+// Batch 8: asks where every time (ui/drive-folder.js), starting in the folder
+// last used for that kind of file.
+const driveSheet = new DriveFolderSheet();
 async function saveToDrive(f, kind) {
+  const k = kind || fileKind(f);
+  const driveKind = ['3d', 'audio', 'video'].includes(k) ? k : 'image';
+  const folder = await driveSheet.choose(driveKind);
+  if (folder === null) return null;
   try {
-    const r = await api.saveToDrive(f, kind);
-    toast(`Saved to Drive: Comfy UI/${r.folder}/${r.name}`, 5000);
+    const r = await api.saveToDrive(f, kind, folder);
+    rememberFolder(driveKind, r.drivePath ?? folder);
+    toast(`Saved to Drive: ${r.drivePath ? `${r.drivePath}/` : ''}${r.name}`, 5000);
     return r;
   } catch (e) { toast(e.message, 8000); return null; }
 }
@@ -199,10 +208,25 @@ async function useAsReference(img) {
 // only the presets that take that kind of file (grouped like the picker), and
 // the picked one gets it in its slot.
 const importSheet = new ImportSheet({
-  button: $('#btn-import-media'),
+  button: $('#btn-attach'),
   upload: async (file) => (await comfy.uploadImage(file)).ref,
+  // "From Comfy UI": one of the app's pictures, at full size, like a picked file.
+  fromComfy: () => outputPicker.open({ session: sessionImages, onPick: async (img) => {
+    try {
+      const r = await fetch(viewUrl(img));
+      if (!r.ok) throw new Error(`Could not load ${img.filename} (${r.status})`);
+      const blob = await r.blob();
+      await importSheet.take(new File([blob], img.filename, { type: blob.type || 'image/png' }));
+    } catch (e) { toast(e.message, 6000); }
+  } }),
   onImported: async ({ kind, ref }) => {
     if (isLocked()) return busy();
+    // Batch 8 (+ button): the current preset takes it -> straight into its slot.
+    if (current?.ok && kind === 'image' && current.controls?.images?.length) { refs.set(refs.targetNode(), ref); return toast('Picture added'); }
+    if (current?.ok && kind !== 'image') {
+      const slot = fileInputs.slots.find((s) => s.kind === kind && !fileInputs.values[fileInputs.key(s)]) || fileInputs.slots.find((s) => s.kind === kind);
+      if (slot) { fileInputs.set(slot, ref); return toast(`${kind === 'video' ? 'Video' : 'Recording'} added`); }
+    }
     const list = presetsFor(kind, workflows, usable);
     if (!list.length) return toast(`No preset takes ${kind === 'image' ? 'a picture' : `a ${kind} file`}`, 6000);
     const preview = kind === 'image' ? h('img', { src: inputViewUrl(ref), alt: 'Imported photo' })
@@ -244,8 +268,36 @@ async function loadWorkflows(keepId, { fresh = false, remember = false } = {}) {
   selectPreset(pick.id, { remember: remember && pick.source === 'keep' });
 }
 
+/**
+ * Batch 8: switching presets keeps what was loaded. Pictures move into the new
+ * preset's image slots in order, videos / recordings into its slots of the same
+ * kind; they are dropped only when the new preset has no slot for them (a
+ * text-only preset). The picture slots are keyed by node id, which differs
+ * between presets, so the values are re-keyed here.
+ */
+function carryInputs(prev, next) {
+  if (!prev || !next || prev.id === next.id) return;
+  const imgs = refs.slots.map((s) => refs.values[s.node]).filter(Boolean);
+  const files = {};
+  for (const s of fileInputs.slots) { const v = fileInputs.values[fileInputs.key(s)]; if (v) (files[s.kind] ||= []).push(v); }
+  const nextImgs = next.ok ? next.controls?.images || [] : [];
+  refs.values = {};
+  nextImgs.forEach((s, i) => { if (imgs[i]) refs.values[s.node] = imgs[i]; });
+  fileInputs.values = {};
+  const used = {};
+  for (const s of (next.ok ? next.ai?.inputs || [] : [])) {
+    const i = used[s.kind] = (used[s.kind] ?? -1) + 1;
+    const v = files[s.kind]?.[i];
+    if (v) fileInputs.values[fileInputs.key(s)] = v;
+  }
+  // A painted mask belongs to the old picture and the old preset.
+  maskSlot.value = null; maskSlot.preview = null;
+}
+
 function selectPreset(id, { remember = true } = {}) {
+  const prev = current;
   current = workflows.find((w) => w.id === id) || null;
+  carryInputs(prev, current);
   picker.setCurrent(current);
   if (id && current && remember) localStorage.setItem('preset', id);
   panel.setWorkflow(current);

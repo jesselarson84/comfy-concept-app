@@ -29,7 +29,7 @@ const shot = (n) => page.screenshot({ path: path.join(SHOTS, `aiw-${n}.png`) });
 const sections = () => page.$$eval('#picker .grp', (g) => g.map((x) => x.dataset.section));
 const tab = () => page.$eval('#picker .picker-tab[aria-selected="true"]', (b) => b.dataset.tab);
 
-test('picker: Models tab by default with the model sections; Workflows tab lists Textures / Concept / VFX', async () => {
+test('picker: Models tab by default with the model sections; Workflows tab lists Textures / Concept / VFX / 3D Assets / Sound; search + hints (batch 8)', async () => {
   await app(() => window.conceptApp.selectPreset('ai:z-image-turbo'));
   await page.click('#preset-btn');
   await page.waitForSelector('#picker .picker-tab');
@@ -39,13 +39,21 @@ test('picker: Models tab by default with the model sections; Workflows tab lists
   await shot('models');
   await page.click('#picker .picker-tab[data-tab="workflow"]');
   assert.equal(await tab(), 'workflow');
-  assert.deepEqual(await sections(), ['Textures', 'Concept', 'VFX']);
+  assert.deepEqual(await sections(), ['Textures', 'Concept', 'VFX', '3D Assets', 'Sound']);
   const rows = await page.$$eval('#picker .ent .nm', (n) => n.map((x) => x.textContent));
-  assert.deepEqual(rows, ['Photo to Texture', 'Upscale Texture', 'Remove Lighting', 'Make Seamless', 'Grunge Map', 'PBR Maps', 'PBR Maps (CHORD)', 'Depth + Normal', 'Concept Looks (Edges)', 'Concept Looks (Depth)', 'Flipbook Sheet']);
-  assert.equal(await page.$eval('#picker .picker-tab[data-tab="workflow"] .cnt', (c) => c.textContent), '11');
+  assert.deepEqual(rows, ['Photo to Texture', 'Upscale Texture', 'Remove Lighting', 'Make Seamless', 'Grunge Map', 'PBR Maps', 'PBR Maps (CHORD)', 'Depth + Normal', 'Concept Looks (Edges)', 'Concept Looks (Depth)', 'Flipbook Sheet', 'Photo to 3D Model', 'Voice Line in Any Voice', 'Voice Line with Sound', 'Sound Effect Set']);
+  assert.equal(await page.$eval('#picker .picker-tab[data-tab="workflow"] .cnt', (c) => c.textContent), '15');
   await shot('workflows');
   // tabs stay put while the list scrolls
   assert.equal(await page.$eval('#picker .picker-tabs', (t) => getComputedStyle(t).position), 'sticky');
+  // batch 8: search covers both tabs and hides them; rows carry a short hint
+  await page.fill('#picker .picker-search', 'voice');
+  assert.equal(await page.locator('#picker .picker-tabs').count(), 0);
+  const found = await page.$$eval('#picker .ent[data-preset] .nm', (n) => n.map((x) => x.textContent));
+  assert.ok(found.includes('Chatterbox Voice Swap') && found.includes('Voice Line in Any Voice'), found.join());
+  assert.equal(await page.$eval('#picker .ent:has(.nm:text-is("Voice Line in Any Voice")) .hint', (x) => x.textContent), 'Needs a recording');
+  await page.fill('#picker .picker-search', '');
+  assert.equal(await page.locator('#picker .picker-tabs').count(), 1);
 });
 
 test('picking a workflow: crumb shows its section; the picker reopens on the Workflows tab', async () => {
@@ -76,7 +84,7 @@ test('Grunge Map: the 1K / 2K / 4K picker applies (square base); input-driven wo
   assert.equal(await page.isVisible('#aspect-res'), true);
   await app(() => window.conceptApp.selectPreset('ai:wf-make-seamless'));
   assert.equal(await page.isVisible('#aspect-res'), false);
-  assert.equal(await page.isVisible('#aspect-ratio'), false);
+  assert.equal(await page.isVisible('#aspect-btn'), false);
   await app(() => window.conceptApp.selectPreset('ai:z-image-turbo'));
 });
 

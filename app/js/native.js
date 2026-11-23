@@ -31,9 +31,9 @@ export function setKeepAwake(on) {
 
 let runKey = null; // last run status sent
 /**
- * Run progress for the Android app (batch 3): while running it shows a
- * "Running N of M" notification from a foreground service, so the run keeps
- * going with the app in the background; when it ends the phone vibrates.
+ * Run progress for the Android app: while running the WebView is not paused
+ * in the background; when it ends the phone vibrates. (Batch 8: no run
+ * notification any more.)
  * Sent only on changes. No-op without the bridge.
  */
 export function setRunStatus({ current = 0, total = 0, running = false, done = 0 } = {}) {

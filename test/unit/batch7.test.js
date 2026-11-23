@@ -118,9 +118,10 @@ test('audio: Stable Audio 3 SFX and Chatterbox Voice Swap are Models › Audio; 
   assert.match(vs.manifest.description, /permission/);
 });
 
-test('app: Import button, "What next?" chooser title, Record on audio slots; service worker lists the new modules', () => {
+test('app: + in the prompt box (batch 8, was the Import button), "What next?" chooser title, Record on audio slots; service worker lists the new modules', () => {
   const html = read('app/index.html');
-  assert.match(html, /id="btn-import-media"[^>]*aria-label="Import a photo, video or recording"/);
+  assert.match(html, /id="btn-attach"[^>]*aria-label="Attach a photo, video, recording or file"/);
+  assert.doesNotMatch(html, /btn-import-media/);
   assert.match(read('app/js/ui/import-sheet.js'), /'Take a photo'[\s\S]*'Record a video'[\s\S]*'Record audio'[\s\S]*'Photo or video from this device'/);
   assert.match(read('app/js/main.js'), /title: 'What next\?'/);
   assert.match(read('app/js/ui/file-inputs.js'), /toggleRecord/);
@@ -128,7 +129,7 @@ test('app: Import button, "What next?" chooser title, Record on audio slots; ser
   assert.match(sw, /'\/js\/ui\/import-sheet\.js'/); assert.match(sw, /'\/js\/lib\/recorder\.js'/);
 });
 
-test('Android: video capture through the camera app, microphone for the server page only, versionCode 3', () => {
+test('Android: video capture through the camera app, microphone for the server page only, versionCode 4', () => {
   const java = read('android/app/src/main/java/app/jesse/comfyconcept/MainActivity.java');
   assert.match(java, /captureIntent\(MediaStore\.ACTION_VIDEO_CAPTURE, "\.mp4"\)/);
   assert.match(java, /EXTRA_MIME_TYPES, new String\[\] \{"image\/\*", "video\/\*"\}/);
@@ -138,7 +139,7 @@ test('Android: video capture through the camera app, microphone for the server p
   assert.match(manifest, /android\.permission\.RECORD_AUDIO/);
   assert.match(manifest, /android\.media\.action\.VIDEO_CAPTURE/);
   assert.doesNotMatch(manifest, /android\.permission\.CAMERA"/, 'still no CAMERA permission (the camera app takes the picture)');
-  assert.match(read('android/app/build.gradle'), /versionCode = 3/);
+  assert.match(read('android/app/build.gradle'), /versionCode = 4/); // batch 8: no run notification, document picker
   // no byte-order marks (Gradle refuses build files that start with one)
   for (const f of ['android/app/build.gradle', 'app/sw.js', 'app/styles.css']) assert.notEqual(fs.readFileSync(path.join(ROOT, f))[0], 0xEF, f);
 });

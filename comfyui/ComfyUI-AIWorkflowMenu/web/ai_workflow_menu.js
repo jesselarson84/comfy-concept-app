@@ -1,6 +1,6 @@
 // AI menus on the canvas right-click:
 //   AI Models    > 3D / Image / Video / Audio (> sub section) > <model preset>
-//   AI Workflows > Textures / Concept / VFX                  > <multi-step workflow>
+//   AI Workflows > Textures / Concept / VFX / 3D Assets / Sound > <multi-step workflow>
 // The same presets as the Comfy Concept app's picker (Models | Workflows tabs).
 // The manifest and the API-format graphs are written by the app's
 // scripts/sync-comfy-menu.mjs from its workflows/ai/*.json; don't edit them here.

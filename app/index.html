@@ -22,8 +22,6 @@
       </button>
       <!-- Save as preset (node view only): the canvas graph into a picker section (ui/save-preset.js) -->
       <button id="btn-save-graph" class="btn save-graph" type="button" aria-label="Save as preset" title="Save as preset"><i class="i i-save"></i><span>Save preset</span></button>
-      <!-- Import (batch 7): photo / video / recording, live or from the device, then "What next?" (ui/import-sheet.js) -->
-      <button id="btn-import-media" class="btn icon" type="button" aria-label="Import a photo, video or recording" title="Import"><i class="i i-image-plus"></i></button>
       <!-- Node view toggle: ComfyUI's graph in the app (ui/node-view.js); pressed = node view shown -->
       <button id="btn-canvas" class="btn icon toggle-btn" type="button" aria-pressed="false" aria-controls="node-view" aria-label="Node view (ComfyUI canvas)" title="Node view (ComfyUI canvas)"><i class="i i-blocks"></i></button>
       <!-- History toggle (batch 5): like the node view, it swaps what is under the top bar -->
@@ -40,7 +38,11 @@
       <div id="preset-msg" class="msg" hidden></div>
       <label class="field prompt-field">
         <span class="label"><span>Prompt</span></span>
-        <textarea id="prompt" rows="5" placeholder="Describe the concept&hellip;" enterkeyhint="done"></textarea>
+        <!-- Batch 8: + attaches a photo, video, recording or file (it replaced the top bar's Import button; ui/import-sheet.js) -->
+        <span class="prompt-box">
+          <textarea id="prompt" rows="5" placeholder="Describe the concept&hellip;" enterkeyhint="done"></textarea>
+          <button id="btn-attach" class="btn icon attach-btn" type="button" aria-label="Attach a photo, video, recording or file" title="Attach"><i class="i i-plus"></i></button>
+        </span>
       </label>
       <div id="neg-row" class="field inline" hidden>
         <label class="switch"><input type="checkbox" id="neg-toggle"> <span>Negative prompt</span></label>
@@ -65,18 +67,13 @@
         <div id="aspect-field" class="ctl" hidden>
           <span class="label"><span>Aspect</span><span id="aspect-size" class="val"></span></span>
           <div class="aspect-row">
-            <label class="ratio-select">
-              <select id="aspect-ratio" aria-label="Aspect ratio">
-                <option value="1:1">1:1</option>
-                <option value="4:3">4:3</option>
-                <option value="3:2">3:2</option>
-                <option value="16:9">16:9</option>
-              </select>
-              <i class="i i-chevron-down" aria-hidden="true"></i>
-            </label>
-            <div id="orient-seg" class="seg" role="radiogroup" aria-label="Orientation">
-              <button type="button" data-orient="portrait" role="radio" aria-label="Portrait"><i class="rect" style="width:10px;height:15px"></i></button>
-              <button type="button" data-orient="landscape" role="radio" aria-label="Landscape"><i class="rect" style="width:15px;height:10px"></i></button>
+            <!-- Batch 8: one button that opens a grid of ratios (both orientations) with a preview shape (ui/prompt-panel.js) -->
+            <div class="aspect-pick">
+              <button id="aspect-btn" class="ratio-select aspect-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Aspect ratio">
+                <i id="aspect-shape" class="ar-shape" aria-hidden="true"></i><span id="aspect-label">1:1</span>
+                <i class="i i-chevron-down" aria-hidden="true"></i>
+              </button>
+              <div id="aspect-pop" class="aspect-pop" role="dialog" aria-label="Aspect ratio" hidden></div>
             </div>
             <!-- Resolution (batch 5): long side 1K / 2K; 4K = 2K render + 2x upscale. Hidden where it does not apply. -->
             <label id="res-select" class="ratio-select res-select" hidden>

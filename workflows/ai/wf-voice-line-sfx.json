@@ -1,0 +1,391 @@
+{
+ "preset": {
+  "kind": "workflow",
+  "group": "Sound",
+  "label": "Voice Line with Sound",
+  "menuPath": "Sound/Voice Line with Sound",
+  "menuOrder": 2,
+  "source": "Batch 8 (1123 Change List): Chatterbox TTS + Stable Audio 3 Small SFX, mixed with ComfyUI's audio nodes.",
+  "output": "audio",
+  "description": "A spoken line with a sound effect or ambience under it: Chatterbox speaks the text, Stable Audio 3 makes the sound, and the two are mixed. The result is as long as the sound, so set Length longer than the line.",
+  "params": {
+   "sound": {
+    "node": "s3",
+    "input": "text",
+    "type": "text",
+    "default": "quiet room tone",
+    "label": "Sound under the line",
+    "open": true,
+    "info": "The sound effect or ambience to put under the line: \"rain on a tin roof\", \"busy tavern chatter\", \"radio static with faint beeps\"."
+   },
+   "seconds": {
+    "node": "s5",
+    "input": "seconds",
+    "type": "number",
+    "min": 1,
+    "max": 120,
+    "step": 0.5,
+    "default": 6,
+    "label": "Length",
+    "control": "slider",
+    "format": "s",
+    "info": "Length of the result in seconds. The sound fills it; the line is cut off if it runs longer, so leave a second or two spare."
+   },
+   "level": {
+    "node": "3",
+    "input": "volume",
+    "type": "int",
+    "min": -30,
+    "max": 0,
+    "step": 1,
+    "default": -12,
+    "label": "Sound level",
+    "control": "slider",
+    "format": "dB",
+    "info": "How loud the sound is under the voice, in dB. -12 sits well under speech; closer to 0 is louder."
+   },
+   "delay": {
+    "node": "1",
+    "input": "duration",
+    "type": "number",
+    "min": 0,
+    "max": 10,
+    "step": 0.25,
+    "default": 0.5,
+    "label": "Line starts at",
+    "control": "slider",
+    "format": "s",
+    "info": "When the voice comes in, in seconds from the start of the sound."
+   },
+   "voice": {
+    "node": "t1",
+    "input": "model_pack_name",
+    "type": "enum",
+    "options": [
+     "chatterbox",
+     "chatterbox-turbo",
+     "chatterbox-multilingual-es-mx-latam",
+     "chatterbox-multilingual-es-es",
+     "chatterbox-multilingual-pt-br",
+     "chatterbox-multilingual-pt-pt",
+     "chatterbox-multilingual-hi",
+     "chatterbox-multilingual-zh-cmn"
+    ],
+    "default": "chatterbox",
+    "label": "Voice model",
+    "control": "select",
+    "labels": {
+     "chatterbox": "Chatterbox (English)",
+     "chatterbox-turbo": "Chatterbox Turbo",
+     "chatterbox-multilingual-es-mx-latam": "Multilingual · Spanish (LatAm)",
+     "chatterbox-multilingual-es-es": "Multilingual · Spanish (Spain)",
+     "chatterbox-multilingual-pt-br": "Multilingual · Portuguese (BR)",
+     "chatterbox-multilingual-pt-pt": "Multilingual · Portuguese (PT)",
+     "chatterbox-multilingual-hi": "Multilingual · Hindi",
+     "chatterbox-multilingual-zh-cmn": "Multilingual · Mandarin"
+    },
+    "span2": true,
+    "installed": {
+     "folder": "chatterbox",
+     "prefix": "{v}/"
+    },
+    "info": "Which Chatterbox model to use: English, Turbo, or a multilingual model for another language. Only models installed on the PC are listed."
+   },
+   "exaggeration": {
+    "node": "t1",
+    "input": "exaggeration",
+    "type": "number",
+    "min": 0.25,
+    "max": 2,
+    "default": 0.5,
+    "label": "Expressiveness",
+    "control": "slider",
+    "step": 0.05,
+    "info": "How expressive and emotional the voice is. 0.5 is neutral; higher is more dramatic (and tends to speak faster)."
+   }
+  },
+  "maxBatch": 4,
+  "vram": {
+   "estMB": 7500,
+   "basis": "Chatterbox (3.5 GB) + Stable Audio 3 Small SFX with T5Gemma (~4 GB)"
+  },
+  "files": [
+   {
+    "folder": "chatterbox",
+    "file": "chatterbox/t3_cfg.safetensors"
+   },
+   {
+    "folder": "chatterbox",
+    "file": "chatterbox/s3gen.safetensors"
+   },
+   {
+    "folder": "chatterbox",
+    "file": "chatterbox/ve.safetensors"
+   },
+   {
+    "folder": "checkpoints",
+    "file": "stable_audio_3_small_sfx.safetensors"
+   },
+   {
+    "folder": "text_encoders",
+    "file": "t5gemma_b_b_ul2.safetensors"
+   }
+  ],
+  "inputs": [
+   {
+    "kind": "audio",
+    "node": "t3",
+    "input": "audio",
+    "label": "Voice sample",
+    "optional": true
+   }
+  ],
+  "optional": [
+   {
+    "node": "t3",
+    "drop": [
+     {
+      "node": "t1",
+      "input": "audio_prompt"
+     }
+    ]
+   }
+  ],
+  "info": {
+   "prompt": "The line to speak, as you want it said. Punctuation shapes the delivery.",
+   "audio": "Optional: a few seconds of clean speech to copy the voice from. Leave empty to use the built-in voice."
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "duration": 0.5,
+    "sample_rate": 24000,
+    "channels": 1
+   },
+   "class_type": "EmptyAudio",
+   "_meta": {
+    "title": "Lead-in silence"
+   }
+  },
+  "2": {
+   "inputs": {
+    "audio1": [
+     "1",
+     0
+    ],
+    "audio2": [
+     "t1",
+     0
+    ],
+    "direction": "after"
+   },
+   "class_type": "AudioConcat",
+   "_meta": {
+    "title": "Line after the lead-in"
+   }
+  },
+  "3": {
+   "inputs": {
+    "audio": [
+     "s7",
+     0
+    ],
+    "volume": -12
+   },
+   "class_type": "AudioAdjustVolume",
+   "_meta": {
+    "title": "Sound level"
+   }
+  },
+  "4": {
+   "inputs": {
+    "audio": [
+     "2",
+     0
+    ],
+    "volume": -3
+   },
+   "class_type": "AudioAdjustVolume",
+   "_meta": {
+    "title": "Voice headroom"
+   }
+  },
+  "5": {
+   "inputs": {
+    "audio1": [
+     "3",
+     0
+    ],
+    "audio2": [
+     "4",
+     0
+    ],
+    "merge_method": "add"
+   },
+   "class_type": "AudioMerge",
+   "_meta": {
+    "title": "Mix"
+   }
+  },
+  "6": {
+   "inputs": {
+    "filename_prefix": "concept-app/voice_line_sfx",
+    "audio": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "SaveAudio",
+   "_meta": {
+    "title": "Save Audio"
+   }
+  },
+  "t1": {
+   "class_type": "ChatterboxTTS",
+   "inputs": {
+    "model_pack_name": "chatterbox",
+    "text": "Hello. This is a short test.",
+    "max_new_tokens": 400,
+    "flow_cfg_scale": 0.7,
+    "exaggeration": 0.5,
+    "temperature": 0.8,
+    "cfg_weight": 0.5,
+    "repetition_penalty": 1.2,
+    "min_p": 0.05,
+    "top_p": 1,
+    "seed": 1,
+    "use_watermark": false,
+    "device": "default",
+    "dtype": "auto",
+    "attention_mode": "sdpa",
+    "top_k": 1000,
+    "normalize_loudness": true,
+    "num_steps": 10,
+    "cfg_scale": 1,
+    "enable_chunking": true,
+    "max_chars_per_chunk": 400,
+    "chunk_combination_method": "auto",
+    "silence_between_chunks_ms": 100,
+    "audio_prompt": [
+     "t3",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "Line to speak #prompt"
+   }
+  },
+  "t3": {
+   "inputs": {
+    "audio": "voice_sample.wav"
+   },
+   "class_type": "LoadAudio",
+   "_meta": {
+    "title": "Voice sample"
+   }
+  },
+  "s1": {
+   "inputs": {
+    "ckpt_name": "stable_audio_3_small_sfx.safetensors"
+   },
+   "class_type": "CheckpointLoaderSimple",
+   "_meta": {
+    "title": "Load Checkpoint"
+   }
+  },
+  "s2": {
+   "inputs": {
+    "clip_name": "t5gemma_b_b_ul2.safetensors",
+    "type": "stable_audio",
+    "device": "default"
+   },
+   "class_type": "CLIPLoader",
+   "_meta": {
+    "title": "Load text encoder (T5Gemma)"
+   }
+  },
+  "s3": {
+   "inputs": {
+    "text": "quiet room tone",
+    "clip": [
+     "s2",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Sound under the line"
+   }
+  },
+  "s4": {
+   "inputs": {
+    "text": "",
+    "clip": [
+     "s2",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Negative"
+   }
+  },
+  "s5": {
+   "inputs": {
+    "seconds": 6,
+    "batch_size": 1
+   },
+   "class_type": "EmptyLatentAudio",
+   "_meta": {
+    "title": "Length"
+   }
+  },
+  "s6": {
+   "inputs": {
+    "seed": 0,
+    "steps": 8,
+    "cfg": 1,
+    "sampler_name": "lcm",
+    "scheduler": "simple",
+    "denoise": 1,
+    "model": [
+     "s1",
+     0
+    ],
+    "positive": [
+     "s3",
+     0
+    ],
+    "negative": [
+     "s4",
+     0
+    ],
+    "latent_image": [
+     "s5",
+     0
+    ]
+   },
+   "class_type": "KSampler",
+   "_meta": {
+    "title": "KSampler"
+   }
+  },
+  "s7": {
+   "inputs": {
+    "samples": [
+     "s6",
+     0
+    ],
+    "vae": [
+     "s1",
+     2
+    ]
+   },
+   "class_type": "VAEDecodeAudio",
+   "_meta": {
+    "title": "VAE Decode Audio"
+   }
+  }
+ }
+}

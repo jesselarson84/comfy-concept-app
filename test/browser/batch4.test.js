@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startStack, ROOT } from '../unit/helpers.js';
-import { launch } from './launch.js';
+import { launch, pickAspect } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -39,7 +39,7 @@ const formState = () => app(() => {
   const st = (el) => (el ? (el.tagName === 'TEXTAREA' ? !el.readOnly && el.getAttribute('aria-disabled') !== 'true' : !el.disabled) : null);
   const q = (sel) => st(document.querySelector(sel));
   return {
-    prompt: q('#prompt'), ratio: q('#aspect-ratio'), orient: q('[data-orient="portrait"]'), batch: q('#batch'), batchPlus: q('#batch-plus'),
+    prompt: q('#prompt'), ratio: q('#aspect-btn'), batch: q('#batch'), batchPlus: q('#batch-plus'),
     seedLock: q('#seed-lock'), seedDice: q('#seed-dice'), seedVal: q('#seed'),
     params: [...document.querySelectorAll('#params input, #params select, #params button:not(.info-btn)')].map(st),
     chatInput: q('.chat-input'),
@@ -60,7 +60,7 @@ test('B: the whole form is locked during a run and comes back exactly as it was'
   await page.click('#btn-generate');
   await page.waitForFunction(() => document.querySelector('#prompt').readOnly);
   const during = await formState();
-  for (const k of ['prompt', 'ratio', 'orient', 'batch', 'batchPlus', 'seedLock', 'seedDice', 'seedVal', 'chatInput']) assert.equal(during[k], false, `${k} is locked`);
+  for (const k of ['prompt', 'ratio', 'batch', 'batchPlus', 'seedLock', 'seedDice', 'seedVal', 'chatInput']) assert.equal(during[k], false, `${k} is locked`);
   assert.ok(during.params.every((x) => x === false), 'Settings are locked');
   assert.equal(during.cancel, true, 'Cancel stays usable');
   assert.equal(during.history, true, 'History stays usable');

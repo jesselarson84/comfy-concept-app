@@ -17,9 +17,6 @@ const MERGED = [
 export const ALLOWED = [
   'android.permission.INTERNET',
   'android.permission.WRITE_EXTERNAL_STORAGE',
-  'android.permission.FOREGROUND_SERVICE',
-  'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
-  'android.permission.POST_NOTIFICATIONS',
   'android.permission.VIBRATE',
   // batch 7: recording a voice line (granted to the server's page only, MainActivity.onPermissionRequest)
   'android.permission.RECORD_AUDIO',
@@ -37,13 +34,11 @@ function check(xml, label) {
   assert.deepEqual(perms.map((p) => p.name).sort(), [...ALLOWED].sort(), `${label}: permission set`);
   assert.equal(perms.find((p) => p.name === 'android.permission.WRITE_EXTERNAL_STORAGE').maxSdk, '28', `${label}: storage only up to Android 9`);
   assert.doesNotMatch(xml, /android\.permission\.CAMERA/, `${label}: no CAMERA (the camera button hands off to the system camera)`);
-  const svc = /<service\b([^>]*)\/?>/.exec(xml)?.[1] || '';
-  assert.match(svc, /android:name="[.\w]*RunService"/, `${label}: RunService declared`);
-  assert.match(svc, /android:foregroundServiceType="dataSync"/, `${label}: foreground service type matches FOREGROUND_SERVICE_DATA_SYNC`);
-  assert.match(svc, /android:exported="false"/, `${label}: RunService is not exported`);
+  // batch 8: no RunService, no run notification
+  assert.doesNotMatch(xml, /RunService|POST_NOTIFICATIONS|FOREGROUND_SERVICE/, `${label}: no run notification service`);
 }
 
-test('source AndroidManifest: only INTERNET, storage (<= API 28), FOREGROUND_SERVICE + DATA_SYNC, POST_NOTIFICATIONS, VIBRATE, RECORD_AUDIO + MODIFY_AUDIO_SETTINGS', () => {
+test('source AndroidManifest: only INTERNET, storage (<= API 28), VIBRATE, RECORD_AUDIO + MODIFY_AUDIO_SETTINGS', () => {
   check(fs.readFileSync(SRC, 'utf8'), 'source');
 });
 
@@ -53,15 +48,16 @@ test('merged release manifest (if built): same permission set as the source', (t
   check(fs.readFileSync(f, 'utf8'), 'release');
 });
 
-test('RunService: "Running N of M" notification, dataSync start, vibration on finish; bridge exposes runStatus', () => {
+test('batch 8: no run notification; the bridge still reports runs (vibrate on finish); the file picker is OPEN_DOCUMENT (shows Google Drive)', () => {
   const j = (f) => fs.readFileSync(path.join(ROOT, 'android/app/src/main/java/app/jesse/comfyconcept', f), 'utf8');
-  const svc = j('RunService.java'), bridge = j('NativeBridge.java'), act = j('MainActivity.java');
-  assert.match(svc, /FOREGROUND_SERVICE_TYPE_DATA_SYNC/);
-  assert.match(svc, /R\.string\.run_running/);
-  assert.match(svc, /vibrate\(\)/);
+  assert.equal(fs.existsSync(path.join(ROOT, 'android/app/src/main/java/app/jesse/comfyconcept/RunService.java')), false);
+  const bridge = j('NativeBridge.java'), act = j('MainActivity.java');
   assert.match(bridge, /@JavascriptInterface\s+public void runStatus\(/);
   assert.match(bridge, /if \(!allowed\) return;\s+activity\.runOnUiThread\(new Runnable\(\) \{\s+@Override\s+public void run\(\) \{\s+activity\.setRunStatus/);
-  assert.match(act, /POST_NOTIFICATIONS/);
+  assert.doesNotMatch(act, /POST_NOTIFICATIONS|RunService|askForNotifications/);
+  assert.match(act, /if \(total > 0\) vibrate\(\);/);
+  assert.match(act, /new Intent\(Intent\.ACTION_OPEN_DOCUMENT\)/);
+  assert.doesNotMatch(act, /ACTION_GET_CONTENT/);
   const strings = fs.readFileSync(path.join(ROOT, 'android/app/src/main/res/values/strings.xml'), 'utf8');
-  assert.match(strings, /name="run_running">Running %1\$d of %2\$d</);
+  assert.doesNotMatch(strings, /run_running/);
 });

@@ -25,7 +25,8 @@
 //   /api/builder/config  GET / PUT {model}            builder model (data/builder.json)
 //   /api/user-presets    GET, POST {name, blocks}; /api/user-presets/:id PATCH {name}, DELETE
 //   /api/outputs    GET   ?kind=image&offset&limit  the app's results on the PC ("From Comfy UI"), see outputs.js
-//   /api/drive/save POST  {filename, subfolder, type, kind}  copy a result into Google Drive (drive.js)
+//   /api/drive/save POST  {filename, subfolder, type, kind, folder?}  copy a result into Google Drive (drive.js)
+//   /api/drive/folders GET ?path= / POST {path, name}  list / make folders in My Drive (Save to…)
 //   /scripts/* /extensions/* /assets/* -> ComfyUI too (custom-node extensions
 //                   that import from the ComfyUI root instead of /comfy/)
 // Binds 127.0.0.1 only. Remote access = `tailscale serve` in front of it.
@@ -58,7 +59,7 @@ import { isLegacyPreset, migrateHistoryEntry } from '../app/js/lib/legacy-preset
 import { defaultPreset } from '../app/js/lib/preset-choice.js';
 import { historyOutputs, comfyOutputDir, createOutputDirCache, scanAppFolder, mergeOutputs, deleteAppFile } from './outputs.js';
 import { FolderStore } from './folders.js';
-import { saveToDrive } from './drive.js';
+import { saveToDrive, listDriveFolders, makeDriveFolder } from './drive.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
 const COMFY_SNIPPET = '<link rel="stylesheet" href="/comfy-tweaks.css" data-concept-tweaks><script src="/js/comfy-tweaks.js" data-concept-tweaks></script>';
@@ -347,6 +348,15 @@ export function createApp(cfg, opts = {}) {
       const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 120));
       const dir = await outputDirOf();
       return json(res, 200, { ...mergeOutputs([historyOutputs(history), scanAppFolder(dir, cfg.outputSubfolder)], { kind, offset, limit }), scanned: !!dir });
+    }
+    // Batch 8: the "Save to…" folder chooser (any folder in My Drive).
+    if (p === '/api/drive/folders' && req.method === 'GET') {
+      try { return json(res, 200, listDriveFolders(cfg.driveDir, url.searchParams.get('path') || '')); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+    }
+    if (p === '/api/drive/folders' && req.method === 'POST') {
+      let body;
+      try { body = JSON.parse((await readBody(req, 16 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
+      try { return json(res, 200, makeDriveFolder(cfg.driveDir, body.path || '', body.name)); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     if (p === '/api/drive/save' && req.method === 'POST') {
       let body;

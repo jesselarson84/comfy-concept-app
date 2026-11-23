@@ -10,7 +10,7 @@
 // lib/presets.js). Lyrics (manifest "open") stay a visible text box.
 import { h, $ } from './dom.js';
 import { randomSeed } from '../lib/seed.js';
-import { parseAspect, aspectKey, sizeFor, RATIOS } from '../lib/aspect.js';
+import { parseAspect, aspectKey, sizeFor, aspectShape, aspectLabel, ASPECT_GRID } from '../lib/aspect.js';
 import { resolutionApplies, renderSize, finalSize, normRes } from '../lib/resolution.js';
 import { controlFor, formatParam, paramRange, paramActive } from '../lib/presets.js';
 import { infoFor } from '../lib/setting-info.js';
@@ -26,7 +26,7 @@ export class PromptPanel {
     this.el = {
       prompt: $('#prompt'), negToggle: $('#neg-toggle'), negRow: $('#neg-row'), negative: $('#negative'),
       msg: $('#preset-msg'), strengthField: $('#strength-field'), strength: $('#strength'), strengthOut: $('#strength-out'),
-      aspectField: $('#aspect-field'), aspectSize: $('#aspect-size'), ratio: $('#aspect-ratio'), orientSeg: $('#orient-seg'), resSelect: $('#res-select'), res: $('#aspect-res'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
+      aspectField: $('#aspect-field'), aspectSize: $('#aspect-size'), aspectBtn: $('#aspect-btn'), aspectLabel: $('#aspect-label'), aspectShape: $('#aspect-shape'), aspectPop: $('#aspect-pop'), resSelect: $('#res-select'), res: $('#aspect-res'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
       seedField: $('#seed-field'), seedLock: $('#seed-lock'), seed: $('#seed'), seedDice: $('#seed-dice'),
       params: $('#params'), paramsOpen: $('#params-open'), settings: $('#settings'), batchField: $('#batch-field'),
     };
@@ -48,15 +48,12 @@ export class PromptPanel {
     e.negative.addEventListener('input', () => { s.negative = e.negative.value; this.save(); });
     e.negToggle.addEventListener('change', () => { s.negOn = e.negToggle.checked; e.negative.hidden = !s.negOn; this.save(); });
     e.strength.addEventListener('input', () => { s.strength = Number(e.strength.value); e.strengthOut.textContent = s.strength.toFixed(2); this.save(); });
-    // Ratio dropdown (1:1 / 4:3 / 3:2 / 16:9); the orientation toggle beside it is separate.
-    e.ratio.addEventListener('change', () => { const a = parseAspect(s.aspect); this.setAspect(aspectKey({ ...a, ratio: e.ratio.value })); });
-    // Orientation only swaps the ratio's numbers (16:9 <-> 9:16); it never picks
-    // another ratio. On 1:1 there is nothing to swap, so the buttons are hidden.
-    document.querySelectorAll('[data-orient]').forEach((b) => b.addEventListener('click', () => {
-      const a = parseAspect(s.aspect);
-      if (a.ratio === '1:1') return;
-      this.setAspect(aspectKey({ ratio: a.ratio, orient: b.dataset.orient }));
-    }));
+    // Batch 8: the ratio button opens a grid of every ratio in both orientations
+    // (9:16 and 16:9 side by side) with a preview of the shape and its size.
+    e.aspectBtn.addEventListener('click', () => (e.aspectPop.hidden ? this.openAspect() : this.closeAspect()));
+    document.addEventListener('pointerdown', (ev) => { if (!e.aspectPop.hidden && !ev.target.closest('.aspect-pick')) this.closeAspect(); });
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !e.aspectPop.hidden) this.closeAspect(); });
+    document.getElementById('panel')?.addEventListener('scroll', () => { if (!e.aspectPop.hidden) this.closeAspect(); }, { passive: true });
     e.res.addEventListener('change', () => { s.res = normRes(e.res.value); this.#paintAspect(); this.save(); });
     const setBatch = (n) => { s.batch = Math.max(1, Math.min(this.maxBatch(), n || 1)); e.batch.value = s.batch; this.save(); };
     this.setBatch = setBatch;
@@ -90,16 +87,52 @@ export class PromptPanel {
     return [c?.defaults?.width || 1024, c?.defaults?.height || 1024];
   }
 
+  /** The ratio grid, in both orientations: [key, "9:16"] in reading order. */
+  aspectChoices() { return ASPECT_GRID.map((k) => [k, aspectLabel(k)]); }
+
+  /** A ratio this preset can't really make: its allowed size range bends the shape (> 4 % off). */
+  aspectOff(key) {
+    const [rw, rh] = aspectShape(key);
+    const { width, height } = this.renderSizeFor(key);
+    return Math.abs(width / height / (rw / rh) - 1) > 0.04;
+  }
+
+  openAspect() {
+    const e = this.el, cur = aspectKey(parseAspect(this.state.aspect));
+    const shape = h('i.ar-preview'), name = h('b'), size = h('span.muted');
+    const show = (key) => {
+      const [rw, rh] = aspectShape(key), k = 64 / Math.max(rw, rh);
+      shape.style.width = `${Math.round(rw * k)}px`; shape.style.height = `${Math.round(rh * k)}px`;
+      name.textContent = aspectLabel(key);
+      const s = this.usesResolution() ? finalSize(key, this.state.res, this.wf?.ai?.size?.multiple || 16) : this.renderSizeFor(key);
+      size.textContent = `${s.width} × ${s.height}`;
+    };
+    const grid = h('div.ar-grid', { role: 'radiogroup', 'aria-label': 'Aspect ratio' }, ...this.aspectChoices().map(([key, label]) => {
+      const off = this.aspectOff(key);
+      return h('button.ar-opt', { type: 'button', role: 'radio', 'aria-checked': String(key === cur), disabled: off, title: off ? 'This preset can\'t make this shape' : undefined, dataset: { aspect: key },
+        onpointerenter: () => !off && show(key), onfocus: () => !off && show(key),
+        onclick: () => { this.setAspect(key); this.closeAspect(); } }, label);
+    }));
+    show(cur);
+    e.aspectPop.replaceChildren(h('div.ar-head', {}, h('div.ar-box', {}, shape), h('div.ar-info', {}, name, size)), grid);
+    e.aspectPop.hidden = false;
+    // Fixed position (the form scrolls and the Run bar covers its bottom): below the
+    // button when it fits, else above it.
+    const r = e.aspectBtn.getBoundingClientRect(), pop = e.aspectPop, ph = pop.offsetHeight, pw = pop.offsetWidth;
+    const below = r.bottom + 6 + ph <= innerHeight - 8;
+    pop.style.top = `${Math.max(8, below ? r.bottom + 6 : r.top - 6 - ph)}px`;
+    pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - pw - 8))}px`;
+    e.aspectBtn.setAttribute('aria-expanded', 'true'); e.aspectBtn.classList.add('open');
+  }
+
+  closeAspect() { const e = this.el; e.aspectPop.hidden = true; e.aspectBtn.setAttribute('aria-expanded', 'false'); e.aspectBtn.classList.remove('open'); }
+
   #paintAspect() {
     const a = parseAspect(this.state.aspect), e = this.el;
-    e.ratio.value = a.ratio;
-    // The dropdown shows the ratio the way it will come out: 9:16 in portrait.
-    for (const o of e.ratio.options) {
-      const [x, y] = RATIOS[o.value] || [1, 1];
-      o.textContent = a.orient === 'portrait' && x !== y ? `${Math.min(x, y)}:${Math.max(x, y)}` : `${Math.max(x, y)}:${Math.min(x, y)}`;
-    }
-    e.orientSeg.hidden = a.ratio === '1:1';
-    document.querySelectorAll('[data-orient]').forEach((b) => { const on = a.ratio !== '1:1' && b.dataset.orient === a.orient; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+    const key = aspectKey(a), [rw, rh] = aspectShape(key), k = 16 / Math.max(rw, rh);
+    e.aspectLabel.textContent = aspectLabel(key);
+    e.aspectShape.style.width = `${Math.max(6, Math.round(rw * k))}px`; e.aspectShape.style.height = `${Math.max(6, Math.round(rh * k))}px`;
+    e.aspectBtn.dataset.aspect = key;
     const res = this.usesResolution();
     e.resSelect.hidden = !res;
     e.res.value = this.state.res;
@@ -112,11 +145,13 @@ export class PromptPanel {
   usesResolution() { return resolutionApplies(this.wf); }
 
   /** The size the sampler renders at (before a 4K upscale). */
-  renderSize() {
+  renderSize() { return this.renderSizeFor(this.state.aspect); }
+
+  renderSizeFor(aspect) {
     const m = this.wf?.ai?.size?.multiple || 16;
-    if (this.usesResolution()) return this.clampSize(renderSize(this.state.aspect, this.state.res, m));
+    if (this.usesResolution()) return this.clampSize(renderSize(aspect, this.state.res, m));
     const [bw, bh] = this.baseSize();
-    return this.clampSize(sizeFor(this.state.aspect, bw, bh, m));
+    return this.clampSize(sizeFor(aspect, bw, bh, m));
   }
 
   /** Keep a size inside the preset's allowed range (AI presets only). */
@@ -140,6 +175,7 @@ export class PromptPanel {
   /** Show/hide controls for a preset ({ id, label, controls, ok, error, ai?, availability? }). */
   setWorkflow(wf) {
     this.wf = wf;
+    this.closeAspect();
     const e = this.el, s = this.state, c = wf?.ok ? wf.controls : null;
     const show = (el, on) => { el.hidden = !on; };
     // No description box: only real problems with the selected preset show here

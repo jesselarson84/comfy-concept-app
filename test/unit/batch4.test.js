@@ -251,13 +251,13 @@ test('banner: resume() hides it and starts a fresh grace period', () => {
 
 // ---- D. an info text for every control every bundled workflow exposes -------------
 
-test('info: every control of every bundled AI preset (21 models + 11 workflows) has a plain-language text', async () => {
+test('info: every control of every bundled AI preset (21 models + 15 workflows) has a plain-language text', async () => {
   const st = await startStack({ folderWorkflows: false });
   try {
     const list = (await (await fetch(st.base + '/api/workflows')).json()).workflows.filter((w) => w.id.startsWith('ai:'));
     const files = fs.readdirSync(path.join(st.wfDir, 'ai')).filter((f) => f.endsWith('.json'));
-    assert.equal(files.length, 32);
-    assert.equal(list.length, 32, 'all 32 presets are listed');
+    assert.equal(files.length, 36);
+    assert.equal(list.length, 36, 'all 36 presets are listed');
     const missing = [];
     for (const w of list) {
       assert.ok(w.ok, `${w.id}: ${w.error}`);
@@ -336,7 +336,7 @@ test('Image presets are split into Text to Image / Image Edit / Inpainting / Ups
     assert.equal(z.short, 'Z-Image Turbo'); assert.equal(z.label, 'Z-Image Turbo Text to Image', 'the full name is unchanged (history, chat, legacy mapping)');
     const { pickerLayout } = await import('../../app/js/ui/workflow-picker.js');
     const lay = pickerLayout(list);
-    assert.deepEqual(lay.map((x) => x.sec.key), ['3D', 'Image', 'Video', 'Audio', 'Textures', 'Concept', 'VFX', 'My presets']);
+    assert.deepEqual(lay.map((x) => x.sec.key), ['3D', 'Image', 'Video', 'Audio', 'Textures', 'Concept', 'VFX', '3D Assets', 'Sound', 'My presets']);
     const img = lay.find((x) => x.sec.key === 'Image');
     assert.deepEqual(img.subs.map((x) => x.name), ['Text to Image', 'Image Edit', 'Inpainting', 'Upscale'], 'Upscale last');
     assert.equal(img.rows.length, 0); assert.equal(img.count, 11);

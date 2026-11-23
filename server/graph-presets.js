@@ -13,7 +13,7 @@ import { SUBGROUPS } from '../app/js/lib/presets.js';
 import { cleanName } from './user-presets.js';
 
 const MAX = 200;
-export const GROUPS = ['3D', 'Image', 'Video', 'Audio', 'Textures', 'Concept', 'VFX', 'My presets'];
+export const GROUPS = ['3D', 'Image', 'Video', 'Audio', 'Textures', 'Concept', 'VFX', '3D Assets', 'Sound', 'My presets'];
 // Anything that writes a result: SaveImage, SaveVideo, SaveAudio, SaveGLB, VHS_VideoCombine ...
 const OUTPUT_NODES = /Save|PreviewImage|VideoCombine/;
 const bad = (msg) => Object.assign(new Error(msg), { status: 400 });

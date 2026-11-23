@@ -1,8 +1,10 @@
-// import-sheet.js - the Import button in the top bar (batch 7, "Camera import").
-// Bring in a photo, a video or a voice recording - taken live (camera / camcorder
-// through the system camera app, microphone in the app) or picked from the
-// device - then "What next?" lists only the presets that take that kind of
-// file, and the picked one gets it in its slot.
+// import-sheet.js - the + in the prompt box (batch 8; it was the top bar's Import
+// button in batch 7). Bring in a photo, a video or a voice recording - taken live
+// (camera / camcorder through the system camera app, microphone in the app),
+// picked from the device or Google Drive, pasted, or one of the app's results.
+// If the current preset takes that kind of file it goes straight into its slot;
+// otherwise "What next?" lists only the presets that take it and the picked one
+// gets it. The app never switches presets on its own.
 import { h, toast } from './dom.js';
 import { startRecording } from '../lib/recorder.js';
 
@@ -23,9 +25,12 @@ export function presetsFor(kind, workflows, usable = (w) => w.ok) {
 }
 
 export class ImportSheet {
-  /** @param o.upload(file) -> ref   @param o.onImported({ kind, ref, file }) */
-  constructor({ button, upload, onImported }) {
-    Object.assign(this, { button, upload, onImported });
+  /**
+   * @param o.upload(file) -> ref   @param o.onImported({ kind, ref, file })
+   * @param o.fromComfy()  batch 8: "From Comfy UI" (one of the app's results)
+   */
+  constructor({ button, upload, onImported, fromComfy }) {
+    Object.assign(this, { button, upload, onImported, fromComfy });
     button.addEventListener('click', () => this.open());
     const input = (accept, capture) => h('input', { type: 'file', accept, ...(capture ? { capture } : {}), hidden: true, onchange: (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) this.take(f); } });
     this.inputs = { photo: input('image/*', 'environment'), video: input('video/*', 'environment'), device: input('image/*,video/*'), audioFile: input('audio/*') };
@@ -36,13 +41,27 @@ export class ImportSheet {
     if (this.el) return;
     const row = (act, icon, label, sub, fn) => h('button.sheet-row', { type: 'button', dataset: { act }, onclick: () => { this.close(); fn(); } }, h(`i.i.${icon}`), h('span', {}, label, h('small.muted', {}, sub)));
     this.scrim = h('div.sheet-scrim', { onclick: () => this.close() });
-    this.el = h('div.sheet.import-sheet', { role: 'dialog', 'aria-label': 'Import' }, h('div.sheet-title', {}, 'Import'),
+    // Batch 8: opened from the + in the prompt box; Paste and From Comfy UI added.
+    this.el = h('div.sheet.import-sheet', { role: 'dialog', 'aria-label': 'Attach' }, h('div.sheet-title', {}, 'Attach'),
       row('photo', 'i-image-plus', 'Take a photo', 'Camera', () => this.inputs.photo.click()),
       row('video', 'i-video', 'Record a video', 'Camera', () => this.inputs.video.click()),
       row('record', 'i-audio-lines', 'Record audio', 'Microphone, e.g. a voice line', () => this.record()),
-      row('device', 'i-folder', 'Photo or video from this device', 'Gallery or files', () => this.inputs.device.click()),
-      row('audio-file', 'i-music', 'Audio file from this device', 'WAV, MP3, M4A …', () => this.inputs.audioFile.click()));
+      row('device', 'i-folder', 'Photo or video from this device', 'Gallery, files or Google Drive', () => this.inputs.device.click()),
+      row('audio-file', 'i-music', 'Audio file from this device', 'WAV, MP3, M4A … or Google Drive', () => this.inputs.audioFile.click()),
+      row('paste', 'i-images', 'Paste a picture', 'From the clipboard', () => this.paste()),
+      ...(this.fromComfy ? [row('comfy', 'i-blocks', 'From Comfy UI', 'One of your results', () => this.fromComfy())] : []));
     document.body.append(this.scrim, this.el);
+  }
+
+  /** A picture on the clipboard (Async Clipboard API: HTTPS, asks permission on Android). */
+  async paste() {
+    try {
+      for (const item of await navigator.clipboard.read()) {
+        const type = item.types.find((t) => t.startsWith('image/'));
+        if (type) return this.take(new File([await item.getType(type)], `pasted.${type.split('/')[1]}`, { type }));
+      }
+      toast('No picture on the clipboard');
+    } catch { toast('Clipboard not available'); }
   }
 
   close() { this.scrim?.remove(); this.el?.remove(); this.scrim = this.el = null; }

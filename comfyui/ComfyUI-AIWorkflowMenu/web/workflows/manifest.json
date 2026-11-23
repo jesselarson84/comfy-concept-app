@@ -17,7 +17,9 @@
       "groups": [
         "Textures",
         "Concept",
-        "VFX"
+        "VFX",
+        "3D Assets",
+        "Sound"
       ]
     }
   ],
@@ -251,6 +253,34 @@
       "file": "api/wf-flipbook.json",
       "format": "api",
       "preset": "ai:wf-flipbook"
+    },
+    {
+      "menu": "workflows",
+      "path": "3D Assets/Photo to 3D Model",
+      "file": "api/wf-photo-to-3d.json",
+      "format": "api",
+      "preset": "ai:wf-photo-to-3d"
+    },
+    {
+      "menu": "workflows",
+      "path": "Sound/Voice Line in Any Voice",
+      "file": "api/wf-voice-line-swap.json",
+      "format": "api",
+      "preset": "ai:wf-voice-line-swap"
+    },
+    {
+      "menu": "workflows",
+      "path": "Sound/Voice Line with Sound",
+      "file": "api/wf-voice-line-sfx.json",
+      "format": "api",
+      "preset": "ai:wf-voice-line-sfx"
+    },
+    {
+      "menu": "workflows",
+      "path": "Sound/Sound Effect Set",
+      "file": "api/wf-sfx-set.json",
+      "format": "api",
+      "preset": "ai:wf-sfx-set"
     }
   ]
 }

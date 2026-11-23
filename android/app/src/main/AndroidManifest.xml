@@ -6,13 +6,9 @@
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
-    <!-- Batch 3, background runs: RunService is a foreground service (type
-         dataSync: it follows a job on the PC) with a "Running N of M"
-         notification (POST_NOTIFICATIONS, asked on Android 13+) and one
-         vibration when the run ends (VIBRATE). -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- One vibration when a run ends. Batch 8: no run notification and no
+         foreground service any more (the owner doesn't want the notification ask);
+         the run goes on on the PC and the app catches up when it comes back. -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Batch 7: recording a voice line in the app (getUserMedia in the WebView,
          granted in Chrome.onPermissionRequest for the server's page only). -->
@@ -84,11 +80,6 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
-
-        <service
-            android:name=".RunService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
 
         <!-- Tiny in-house replacement for androidx FileProvider (AndroidX is not used).
              Serves cache/shared/ read-only (Share out) and cache/camera/ (camera capture). -->
