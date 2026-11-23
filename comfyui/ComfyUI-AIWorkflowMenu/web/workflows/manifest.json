@@ -142,6 +142,20 @@
     },
     {
       "menu": "models",
+      "path": "Audio/Stable Audio 3 SFX",
+      "file": "api/sa3-small-sfx.json",
+      "format": "api",
+      "preset": "ai:sa3-small-sfx"
+    },
+    {
+      "menu": "models",
+      "path": "Audio/Chatterbox Voice Swap",
+      "file": "api/chatterbox-voice-swap.json",
+      "format": "api",
+      "preset": "ai:chatterbox-voice-swap"
+    },
+    {
+      "menu": "models",
       "path": "Audio/ACE-Step 1.5 Text to Music",
       "file": "audio/ace_step_15_text_to_music.json",
       "format": "ui",
@@ -160,6 +174,13 @@
       "file": "api/tts-vibevoice.json",
       "format": "api",
       "preset": "ai:tts-vibevoice"
+    },
+    {
+      "menu": "workflows",
+      "path": "Textures/Photo to Texture",
+      "file": "api/wf-photo-texture.json",
+      "format": "api",
+      "preset": "ai:wf-photo-texture"
     },
     {
       "menu": "workflows",
@@ -191,6 +212,27 @@
     },
     {
       "menu": "workflows",
+      "path": "Textures/PBR Maps",
+      "file": "api/wf-pbr-maps.json",
+      "format": "api",
+      "preset": "ai:wf-pbr-maps"
+    },
+    {
+      "menu": "workflows",
+      "path": "Textures/PBR Maps (CHORD)",
+      "file": "api/wf-pbr-chord.json",
+      "format": "api",
+      "preset": "ai:wf-pbr-chord"
+    },
+    {
+      "menu": "workflows",
+      "path": "Textures/Depth + Normal",
+      "file": "api/wf-depth-normal.json",
+      "format": "api",
+      "preset": "ai:wf-depth-normal"
+    },
+    {
+      "menu": "workflows",
       "path": "Concept/Concept Looks (Edges)",
       "file": "api/wf-concept-edges.json",
       "format": "api",
@@ -198,7 +240,7 @@
     },
     {
       "menu": "workflows",
-      "path": "Concept/Concept Looks (Depth Pass)",
+      "path": "Concept/Concept Looks (Depth)",
       "file": "api/wf-concept-depth.json",
       "format": "api",
       "preset": "ai:wf-concept-depth"

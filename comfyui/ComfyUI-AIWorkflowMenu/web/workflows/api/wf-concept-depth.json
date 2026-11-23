@@ -74,7 +74,7 @@
   },
   "class_type": "LoadImage",
   "_meta": {
-   "title": "Depth or gray pass #image"
+   "title": "Depth pass or render #image"
   }
  },
  "8": {
@@ -94,6 +94,67 @@
  },
  "9": {
   "inputs": {
+   "model_name": "moge_2_vitl_normal_fp16.safetensors"
+  },
+  "class_type": "LoadMoGeModel",
+  "_meta": {
+   "title": "Load MoGe"
+  }
+ },
+ "10": {
+  "inputs": {
+   "moge_model": [
+    "9",
+    0
+   ],
+   "image": [
+    "8",
+    0
+   ],
+   "resolution_level": 9,
+   "fov_x_degrees": 0,
+   "batch_size": 1,
+   "force_projection": true,
+   "apply_mask": false,
+   "refine_steps": 0
+  },
+  "class_type": "MoGeInference",
+  "_meta": {
+   "title": "MoGe: estimate geometry"
+  }
+ },
+ "11": {
+  "inputs": {
+   "moge_geometry": [
+    "10",
+    0
+   ],
+   "output": "depth"
+  },
+  "class_type": "MoGeRender",
+  "_meta": {
+   "title": "MoGe: depth (white near)"
+  }
+ },
+ "12": {
+  "inputs": {
+   "switch": false,
+   "on_false": [
+    "8",
+    0
+   ],
+   "on_true": [
+    "11",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "Depth source (pass / estimated)"
+  }
+ },
+ "13": {
+  "inputs": {
    "image": [
     "8",
     0
@@ -104,14 +165,14 @@
    "title": "Size"
   }
  },
- "10": {
+ "14": {
   "inputs": {
    "width": [
-    "9",
+    "13",
     0
    ],
    "height": [
-    "9",
+    "13",
     1
    ],
    "batch_size": 1
@@ -121,7 +182,7 @@
    "title": "Latent (same shape as the render)"
   }
  },
- "11": {
+ "15": {
   "inputs": {
    "name": "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors"
   },
@@ -130,14 +191,14 @@
    "title": "Load ControlNet (model patch)"
   }
  },
- "12": {
+ "16": {
   "inputs": {
    "model": [
     "4",
     0
    ],
    "model_patch": [
-    "11",
+    "15",
     0
    ],
    "vae": [
@@ -146,7 +207,7 @@
    ],
    "strength": 0.75,
    "image": [
-    "8",
+    "12",
     0
    ],
    "start_percent": 0,
@@ -157,7 +218,7 @@
    "title": "Z-Image Fun ControlNet"
   }
  },
- "13": {
+ "17": {
   "inputs": {
    "seed": 0,
    "steps": 8,
@@ -166,7 +227,7 @@
    "scheduler": "simple",
    "denoise": 1,
    "model": [
-    "12",
+    "16",
     0
    ],
    "positive": [
@@ -178,7 +239,7 @@
     0
    ],
    "latent_image": [
-    "10",
+    "14",
     0
    ]
   },
@@ -187,10 +248,10 @@
    "title": "KSampler"
   }
  },
- "14": {
+ "18": {
   "inputs": {
    "samples": [
-    "13",
+    "17",
     0
    ],
    "vae": [
@@ -203,11 +264,11 @@
    "title": "VAE Decode"
   }
  },
- "15": {
+ "19": {
   "inputs": {
    "filename_prefix": "concept-app/concept_depth",
    "images": [
-    "14",
+    "18",
     0
    ]
   },

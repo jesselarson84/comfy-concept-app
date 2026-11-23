@@ -19,6 +19,9 @@ const STYLE = {
 };
 
 export function styleFor(workflow) {
+  // A preset can say how its prompt box is used (manifest "assistant"), e.g.
+  // Photo to Texture: the box holds edit notes, not a picture description.
+  if (workflow?.ai?.assistant) return workflow.ai.assistant;
   const nodes = Object.values(workflow?.workflow || {});
   const flux2 = nodes.some((n) => /flux-?2|klein/i.test(JSON.stringify(n.inputs || {})) || /Flux2/.test(n.class_type));
   return flux2 ? STYLE.flux2 : STYLE.generic;

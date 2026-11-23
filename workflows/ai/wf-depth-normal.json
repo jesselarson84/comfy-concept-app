@@ -1,0 +1,145 @@
+{
+ "preset": {
+  "kind": "workflow",
+  "group": "Textures",
+  "label": "Depth + Normal",
+  "menuPath": "Textures/Depth + Normal",
+  "menuOrder": 7,
+  "source": "Comfy UI Ideas doc, depth and normal estimation from images. MoGe-2 (installed, ComfyUI core nodes).",
+  "output": "image",
+  "description": "Depth and surface normals of a whole scene from one photo or piece of concept art (MoGe-2): sculpting reference, parallax cards, quick relief. For the fine detail of a flat texture use PBR Maps instead.",
+  "params": {
+   "detail": {
+    "node": "3",
+    "input": "resolution_level",
+    "also": [],
+    "type": "int",
+    "min": 0,
+    "max": 9,
+    "default": 9,
+    "label": "Detail",
+    "control": "stepper",
+    "info": "How much detail MoGe resolves: 9 is the most (and slowest), 0 the fastest."
+   },
+   "convention": {
+    "node": "5",
+    "input": "output",
+    "type": "enum",
+    "options": [
+     "normal_directx",
+     "normal_opengl"
+    ],
+    "default": "normal_directx",
+    "label": "Normal for",
+    "control": "seg",
+    "labels": {
+     "normal_directx": "Unreal (DirectX)",
+     "normal_opengl": "OpenGL"
+    },
+    "info": "Which way the normal map's green channel points. Unreal uses DirectX; Blender, Substance, Unity and glTF use OpenGL."
+   }
+  },
+  "maxBatch": 4,
+  "vram": {
+   "estMB": 2500,
+   "basis": "MoGe-2 ViT-L fp16 (0.6 GB) at full detail"
+  },
+  "info": {
+   "image": "A photo or concept art of a scene or object. MoGe estimates its 3D shape: depth is white near, black far."
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "image": "example.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Photo or concept art #image"
+   }
+  },
+  "2": {
+   "inputs": {
+    "model_name": "moge_2_vitl_normal_fp16.safetensors"
+   },
+   "class_type": "LoadMoGeModel",
+   "_meta": {
+    "title": "Load MoGe"
+   }
+  },
+  "3": {
+   "inputs": {
+    "moge_model": [
+     "2",
+     0
+    ],
+    "image": [
+     "1",
+     0
+    ],
+    "resolution_level": 9,
+    "fov_x_degrees": 0,
+    "batch_size": 1,
+    "force_projection": true,
+    "apply_mask": false,
+    "refine_steps": 0
+   },
+   "class_type": "MoGeInference",
+   "_meta": {
+    "title": "MoGe: estimate geometry"
+   }
+  },
+  "4": {
+   "inputs": {
+    "moge_geometry": [
+     "3",
+     0
+    ],
+    "output": "depth"
+   },
+   "class_type": "MoGeRender",
+   "_meta": {
+    "title": "Depth (white near)"
+   }
+  },
+  "5": {
+   "inputs": {
+    "moge_geometry": [
+     "3",
+     0
+    ],
+    "output": "normal_directx"
+   },
+   "class_type": "MoGeRender",
+   "_meta": {
+    "title": "Normal"
+   }
+  },
+  "6": {
+   "inputs": {
+    "filename_prefix": "concept-app/depth_map",
+    "images": [
+     "4",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save depth"
+   }
+  },
+  "7": {
+   "inputs": {
+    "filename_prefix": "concept-app/normal_map",
+    "images": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save normal"
+   }
+  }
+ }
+}

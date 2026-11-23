@@ -14,8 +14,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Batch 7: recording a voice line in the app (getUserMedia in the WebView,
+         granted in Chrome.onPermissionRequest for the server's page only). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- No CAMERA permission on purpose: the camera button hands off to the
-         system camera app (ACTION_IMAGE_CAPTURE), which needs no permission as
+         system camera app (ACTION_IMAGE_CAPTURE / ACTION_VIDEO_CAPTURE), which needs no permission as
          long as this app does NOT declare CAMERA. See README-ANDROID.md. -->
 
     <!-- Package visibility (Android 11+): find the Tailscale app and camera apps. -->
@@ -23,6 +27,9 @@
         <package android:name="com.tailscale.ipn" />
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.VIDEO_CAPTURE" />
         </intent>
     </queries>
 

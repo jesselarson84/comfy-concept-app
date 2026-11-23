@@ -1,0 +1,130 @@
+{
+ "preset": {
+  "kind": "model",
+  "group": "Audio",
+  "label": "Chatterbox Voice Swap",
+  "menuPath": "Audio/Chatterbox Voice Swap",
+  "menuOrder": 4,
+  "source": "Comfy UI Ideas doc, Audio: dialogue, option B (voice conversion). ChatterboxVC from ComfyUI-ChatterboxTTS (installed), zero-shot.",
+  "output": "audio",
+  "description": "Record a line yourself with the exact performance you want, then swap only the voice (Chatterbox voice conversion, no training): timing, pitch, slurring and emphasis carry over. Only use voices you have permission to use.",
+  "inputs": [
+   {
+    "kind": "audio",
+    "node": "1",
+    "input": "audio",
+    "label": "Your recording"
+   },
+   {
+    "kind": "audio",
+    "node": "2",
+    "input": "audio",
+    "label": "Target voice"
+   }
+  ],
+  "params": {
+   "likeness": {
+    "node": "3",
+    "input": "flow_cfg_scale",
+    "type": "number",
+    "min": 0.3,
+    "max": 1.5,
+    "step": 0.05,
+    "default": 0.7,
+    "label": "Voice likeness",
+    "control": "slider",
+    "info": "How closely it copies the target voice. Higher sounds more like the target but can lose naturalness; 0.7 is the default."
+   },
+   "passes": {
+    "node": "3",
+    "input": "refinement_passes",
+    "type": "int",
+    "min": 1,
+    "max": 5,
+    "default": 1,
+    "label": "Passes",
+    "control": "stepper",
+    "info": "Runs the conversion again on its own result to move further toward the target voice. More than 3 or so starts to distort."
+   },
+   "steps": {
+    "node": "3",
+    "input": "n_timesteps",
+    "type": "int",
+    "min": 4,
+    "max": 30,
+    "default": 10,
+    "label": "Steps",
+    "control": "stepper",
+    "info": "Refinement passes inside each conversion. 10 is the default; more is slower and only slightly cleaner."
+   }
+  },
+  "maxBatch": 1,
+  "vram": {
+   "estMB": 3500,
+   "basis": "Chatterbox S3Gen + voice encoder (as the Chatterbox TTS preset)"
+  },
+  "info": {
+   "audio": "Your recording: the line performed the way you want it (record it with the Record button, dry, in a quiet room). Target voice: 5-15 s of clean speech in the voice to end up with."
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "audio": "recording.wav"
+   },
+   "class_type": "LoadAudio",
+   "_meta": {
+    "title": "Your recording"
+   }
+  },
+  "2": {
+   "inputs": {
+    "audio": "voice_sample.wav"
+   },
+   "class_type": "LoadAudio",
+   "_meta": {
+    "title": "Target voice"
+   }
+  },
+  "3": {
+   "inputs": {
+    "model_pack_name": "chatterbox",
+    "source_audio": [
+     "1",
+     0
+    ],
+    "target_voice_audio": [
+     "2",
+     0
+    ],
+    "n_timesteps": 10,
+    "temperature": 1,
+    "flow_cfg_scale": 0.7,
+    "use_watermark": false,
+    "device": "default",
+    "dtype": "auto",
+    "attention_mode": "sdpa",
+    "refinement_passes": 1,
+    "max_chunk_duration": 30,
+    "chunk_method": "smart"
+   },
+   "class_type": "ChatterboxVC",
+   "_meta": {
+    "title": "Chatterbox voice conversion"
+   }
+  },
+  "4": {
+   "inputs": {
+    "filename_prefix": "concept-app/voice_swap",
+    "audio": [
+     "3",
+     0
+    ]
+   },
+   "class_type": "SaveAudio",
+   "_meta": {
+    "title": "Save Audio"
+   }
+  }
+ }
+}

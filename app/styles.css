@@ -1,4 +1,4 @@
-﻿/* styles.css - dark, touch-first. Phone = one column with the thumbnail strip
+/* styles.css - dark, touch-first. Phone = one column with the thumbnail strip
    and Generate button at the bottom (thumb reach). Tablet (>= 820px wide) =
    prompt panel left, thumbnail grid right. Viewer is always full screen. */
 :root {
@@ -642,3 +642,20 @@ body.node-view-on #btn-canvas { margin-left: 0; }
 .picker-pop .picker-tab { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border: 1px solid var(--c-border); border-radius: 8px; background: transparent; color: var(--c-muted); font: inherit; font-weight: 600; cursor: pointer; }
 .picker-pop .picker-tab .cnt { font-weight: 400; font-size: 12px; opacity: .8; }
 .picker-pop .picker-tab[aria-selected="true"] { color: var(--c-fg); background: #3a3a3a; border-color: #555; }
+
+/* Batch 7: Import button, "What next?" preview, recording */
+body.node-view-on #btn-import-media { display: none; }
+#btn-import-media.busy { opacity: .5; pointer-events: none; }
+.import-sheet .sheet-row span { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
+.import-sheet .sheet-row small { font-size: 12px; }
+.pc-preview { display: flex; justify-content: center; padding: 8px 10px 12px; }
+.pc-preview img, .pc-preview video { max-width: 100%; max-height: 32vh; border-radius: 8px; object-fit: contain; background: #000; }
+.pc-preview audio { width: 100%; }
+.rec-sheet .sheet-title { display: flex; align-items: center; gap: 8px; }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #e5484d; animation: rec-blink 1s infinite; }
+@keyframes rec-blink { 50% { opacity: .3; } }
+.rec-row { display: flex; align-items: center; gap: 12px; padding: 6px 2px 4px; }
+.rec-meter { flex: 1; height: 8px; border-radius: 4px; background: var(--c-border); overflow: hidden; }
+.rec-level { display: block; height: 100%; width: 0; background: #46a758; transition: width .08s linear; }
+.rec-time { font-variant-numeric: tabular-nums; min-width: 3.5ch; text-align: right; }
+.rec-btn.on { color: #e5484d; border-color: #e5484d; }

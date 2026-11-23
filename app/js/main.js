@@ -4,12 +4,12 @@
 //  Generate: for i in 1..N: injectParams(preset, controls, values+seed_i)
 //            --> JobQueue.submit --> ComfyClient POST /comfy/prompt
 //  websocket events --> JobQueue updates items --> thumbs + viewer re-render
-import { $, toast } from './ui/dom.js';
+import { $, h, toast } from './ui/dom.js';
 import * as api from './api.js';
 import { ComfyClient } from './comfy-client.js';
 import { JobQueue } from './job-queue.js';
 import { injectParams } from './lib/workflow-inject.js';
-import { viewUrl } from './comfy-client.js';
+import { viewUrl, inputViewUrl } from './comfy-client.js';
 import { sizeFor } from './lib/aspect.js';
 import { batchSeeds } from './lib/seed.js';
 import { PromptPanel } from './ui/prompt-panel.js';
@@ -37,6 +37,7 @@ import { FileSheet } from './ui/file-sheet.js';
 import { VideoPlayer } from './ui/video-player.js';
 import { OutputPicker } from './ui/output-picker.js';
 import { PresetChooser } from './ui/preset-chooser.js';
+import { ImportSheet, presetsFor } from './ui/import-sheet.js';
 import { afterBack } from './ui/overlay.js';
 import { RunLock, runProgress } from './lib/run-lock.js';
 import { lockControls } from './ui/form-lock.js';
@@ -192,6 +193,31 @@ async function useAsReference(img) {
   presetChooser.open(list, async (w) => { if (isLocked()) return busy(); selectPreset(w.id); await afterBack(); await load(); });
   return null;
 }
+
+// ---- Import (batch 7): photo / video / recording -> "What next?" ------------
+// The file is uploaded to ComfyUI's input folder first; the chooser then lists
+// only the presets that take that kind of file (grouped like the picker), and
+// the picked one gets it in its slot.
+const importSheet = new ImportSheet({
+  button: $('#btn-import-media'),
+  upload: async (file) => (await comfy.uploadImage(file)).ref,
+  onImported: async ({ kind, ref }) => {
+    if (isLocked()) return busy();
+    const list = presetsFor(kind, workflows, usable);
+    if (!list.length) return toast(`No preset takes ${kind === 'image' ? 'a picture' : `a ${kind} file`}`, 6000);
+    const preview = kind === 'image' ? h('img', { src: inputViewUrl(ref), alt: 'Imported photo' })
+      : kind === 'video' ? h('video', { src: inputViewUrl(ref), muted: true, playsInline: true, controls: true })
+        : h('audio', { src: inputViewUrl(ref), controls: true });
+    presetChooser.open(list, async (w) => {
+      if (isLocked()) return busy();
+      selectPreset(w.id);
+      await afterBack();
+      if (kind === 'image') refs.set(refs.targetNode(), ref);
+      else { const slot = fileInputs.slots.find((s) => s.kind === kind); if (slot) fileInputs.set(slot, ref); }
+      toast(`${kind === 'image' ? 'Photo' : kind === 'video' ? 'Video' : 'Recording'} ready in ${w.short || w.label}`);
+    }, { title: 'What next?', preview });
+  },
+});
 
 // ---- presets ---------------------------------------------------------------
 // The picker lists the AI Workflow presets (3D / Image / Video / Audio,
@@ -539,4 +565,4 @@ async function start() {
 start();
 // For tests and poking around from DevTools.
 window.conceptApp = { savePreset, maskSlot, modelThumbs, historyView, isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, chat, versions, picker, selectPreset, loadWorkflows,
-  lock, resume, connBanner, nodeView, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };
+  lock, resume, connBanner, nodeView, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, importSheet, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };
