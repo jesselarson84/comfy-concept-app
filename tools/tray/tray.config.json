@@ -1,0 +1,20 @@
+{
+  "Name": "Comfy UI app",
+  "Port": 3100,
+  "WorkingDirectory": "..\\..",
+  "Exe": "runtime\\node.exe",
+  "Args": "server\\index.js",
+  "LogPath": "data\\server.log",
+  "PidFile": "data\\tray-server.pid",
+  "ServerMatch": ["{exe}", "server\\index.js"],
+  "Ancestors": [ { "all": ["{exe}", "server\\index.js"] } ],
+  "Mutex": "Local\\ComfyConceptApp-Tray",
+  "PollSeconds": 3,
+  "StartTimeoutSec": 60,
+  "StopTimeoutSec": 20,
+  "StartServerOnLaunch": true,
+  "LaunchGraceSec": 30,
+  "IconRunning": "icon-running.ico",
+  "IconStarting": "icon-starting.ico",
+  "IconStopped": "icon-stopped.ico"
+}
