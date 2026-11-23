@@ -224,8 +224,8 @@ The picker has a **Models | Workflows** tab for each kind. It opens on the tab o
 | --- | --- | --- |
 | Textures › Upscale Texture | Enlarges with an upscale model (4x), then fits to 1K / 2K / 4K on the long side. Nothing is repainted, so logos and text stay exact. | an upscale model |
 | Textures › Remove Lighting | Removes baked-in shadows and highlights so a photo texture works as albedo. Uses the Qwen Image Edit 2511 graph with a built-in instruction. | as Qwen Edit 2511 |
-| Textures › Make Seamless | Shifts the image by half so the old edges meet as a cross in the middle. Repaints a band over the cross with Z-Image Turbo plus the Fun ControlNet in inpaint mode, then shifts back. Only the cross changes. | Z-Image Turbo, lite ControlNet |
-| Textures › Grunge Map | Z-Image Turbo makes the pattern. Then the same seam fix, grayscale (luma) and a contrast push. | Z-Image Turbo, lite ControlNet |
+| Textures › Make Seamless | Shifts the image by half so the old edges meet as a cross in the middle, fixes the cross, then shifts back. Only the cross changes. **AI repaint** (default): Z-Image Turbo plus the Fun ControlNet in inpaint mode redraws the cross, so shapes like bricks join up. **Blend**: the original is faded over the cross with a wide soft mask. It is instant, uses no AI, and suits noise-like surfaces. | Z-Image Turbo, lite ControlNet |
+| Textures › Grunge Map | Z-Image Turbo makes the pattern. An offset blend makes it tile; in testing, an AI repaint flattened the grain into grey bands. Then grayscale (luma) and a contrast push. | Z-Image Turbo |
 | Concept › Concept Looks (Edges / Depth Pass) | Keeps the camera and layout of a Cinema 4D greybox, Redshift frame or depth pass, and takes the look from the prompt (Z-Image Turbo + Fun ControlNet). | Z-Image Turbo, full or lite ControlNet |
 | VFX › Flipbook Sheet | Wan 2.2 5B clip on black. Evenly spaced frames are tiled into a 4×4 / 6×6 / 8×8 sheet for particle materials. | Wan 2.2 5B |
 

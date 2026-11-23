@@ -385,7 +385,7 @@
  },
  "24": {
   "inputs": {
-   "expression": "max(32, min(a, b) // 12 // 16 * 16)",
+   "expression": "max(64, min(a, b) // 3)",
    "values.a": [
     "11",
     1
@@ -397,7 +397,7 @@
   },
   "class_type": "ComfyMathExpression",
   "_meta": {
-   "title": "Seam: band width"
+   "title": "Blend: band width"
   }
  },
  "25": {
@@ -414,7 +414,7 @@
   },
   "class_type": "ComfyMathExpression",
   "_meta": {
-   "title": "Seam: band x"
+   "title": "Blend: band x"
   }
  },
  "26": {
@@ -431,7 +431,7 @@
   },
   "class_type": "ComfyMathExpression",
   "_meta": {
-   "title": "Seam: band y"
+   "title": "Blend: band y"
   }
  },
  "27": {
@@ -448,7 +448,7 @@
   },
   "class_type": "SolidMask",
   "_meta": {
-   "title": "Seam: empty mask"
+   "title": "Blend: empty mask"
   }
  },
  "28": {
@@ -465,7 +465,7 @@
   },
   "class_type": "SolidMask",
   "_meta": {
-   "title": "Seam: vertical band"
+   "title": "Blend: vertical band"
   }
  },
  "29": {
@@ -482,7 +482,7 @@
   },
   "class_type": "SolidMask",
   "_meta": {
-   "title": "Seam: horizontal band"
+   "title": "Blend: horizontal band"
   }
  },
  "30": {
@@ -504,7 +504,7 @@
   },
   "class_type": "MaskComposite",
   "_meta": {
-   "title": "Seam: + vertical"
+   "title": "Blend: + vertical"
   }
  },
  "31": {
@@ -526,7 +526,7 @@
   },
   "class_type": "MaskComposite",
   "_meta": {
-   "title": "Seam: cross mask"
+   "title": "Blend: cross mask"
   }
  },
  "32": {
@@ -538,7 +538,7 @@
   },
   "class_type": "MaskToImage",
   "_meta": {
-   "title": "Seam: mask to image"
+   "title": "Blend: mask to image"
   }
  },
  "33": {
@@ -547,12 +547,14 @@
     "32",
     0
    ],
-   "blur_radius": 31,
-   "sigma": 10
+   "upscale_method": "bilinear",
+   "width": 64,
+   "height": 64,
+   "crop": "disabled"
   },
-  "class_type": "ImageBlur",
+  "class_type": "ImageScale",
   "_meta": {
-   "title": "Seam: soften edge"
+   "title": "Blend: shrink mask"
   }
  },
  "34": {
@@ -561,155 +563,73 @@
     "33",
     0
    ],
-   "channel": "red"
+   "blur_radius": 8,
+   "sigma": 4
   },
-  "class_type": "ImageToMask",
+  "class_type": "ImageBlur",
   "_meta": {
-   "title": "Seam: soft mask"
+   "title": "Blend: feather"
   }
  },
  "35": {
   "inputs": {
-   "pixels": [
-    "23",
+   "image": [
+    "34",
     0
    ],
-   "vae": [
-    "3",
-    0
-   ]
+   "upscale_method": "bilinear",
+   "width": [
+    "11",
+    1
+   ],
+   "height": [
+    "12",
+    1
+   ],
+   "crop": "disabled"
   },
-  "class_type": "VAEEncode",
+  "class_type": "ImageScale",
   "_meta": {
-   "title": "Seam: encode"
+   "title": "Blend: mask full size"
   }
  },
  "36": {
   "inputs": {
-   "samples": [
+   "image": [
     "35",
     0
    ],
-   "mask": [
-    "31",
-    0
-   ]
+   "channel": "red"
   },
-  "class_type": "SetLatentNoiseMask",
+  "class_type": "ImageToMask",
   "_meta": {
-   "title": "Seam: repaint only the cross"
+   "title": "Blend: soft cross"
   }
  },
  "37": {
-  "inputs": {
-   "name": "Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors"
-  },
-  "class_type": "ModelPatchLoader",
-  "_meta": {
-   "title": "Seam: load ControlNet (inpaint)"
-  }
- },
- "38": {
-  "inputs": {
-   "model": [
-    "4",
-    0
-   ],
-   "model_patch": [
-    "37",
-    0
-   ],
-   "vae": [
-    "3",
-    0
-   ],
-   "strength": 1,
-   "inpaint_image": [
-    "23",
-    0
-   ],
-   "mask": [
-    "31",
-    0
-   ],
-   "start_percent": 0,
-   "end_percent": 1
-  },
-  "class_type": "ZImageFunControlnet",
-  "_meta": {
-   "title": "Seam: ControlNet inpaint"
-  }
- },
- "39": {
-  "inputs": {
-   "seed": 0,
-   "steps": 8,
-   "cfg": 1,
-   "sampler_name": "res_multistep",
-   "scheduler": "simple",
-   "denoise": 0.8,
-   "model": [
-    "38",
-    0
-   ],
-   "positive": [
-    "5",
-    0
-   ],
-   "negative": [
-    "6",
-    0
-   ],
-   "latent_image": [
-    "36",
-    0
-   ]
-  },
-  "class_type": "KSampler",
-  "_meta": {
-   "title": "Seam fix sampler"
-  }
- },
- "40": {
-  "inputs": {
-   "samples": [
-    "39",
-    0
-   ],
-   "vae": [
-    "3",
-    0
-   ]
-  },
-  "class_type": "VAEDecode",
-  "_meta": {
-   "title": "Seam: decode"
-  }
- },
- "41": {
   "inputs": {
    "destination": [
     "23",
     0
    ],
    "source": [
-    "40",
+    "9",
     0
    ],
    "x": 0,
    "y": 0,
    "resize_source": false,
    "mask": [
-    "34",
+    "36",
     0
    ]
   },
   "class_type": "ImageCompositeMasked",
   "_meta": {
-   "title": "Seam: blend repaint in"
+   "title": "Blend: original over the cross"
   }
  },
- "42": {
+ "38": {
   "inputs": {
    "expression": "a - b",
    "values.a": [
@@ -726,7 +646,7 @@
    "title": "Seam: shift back: rest of width"
   }
  },
- "43": {
+ "39": {
   "inputs": {
    "expression": "a - b",
    "values.a": [
@@ -743,10 +663,10 @@
    "title": "Seam: shift back: rest of height"
   }
  },
- "44": {
+ "40": {
   "inputs": {
    "image": [
-    "41",
+    "37",
     0
    ],
    "width": [
@@ -765,14 +685,14 @@
    "title": "Seam: shift back: top left"
   }
  },
- "45": {
+ "41": {
   "inputs": {
    "image": [
-    "41",
+    "37",
     0
    ],
    "width": [
-    "42",
+    "38",
     1
    ],
    "height": [
@@ -790,10 +710,10 @@
    "title": "Seam: shift back: top right"
   }
  },
- "46": {
+ "42": {
   "inputs": {
    "image": [
-    "41",
+    "37",
     0
    ],
    "width": [
@@ -801,7 +721,7 @@
     1
    ],
    "height": [
-    "43",
+    "39",
     1
    ],
    "x": 0,
@@ -815,18 +735,18 @@
    "title": "Seam: shift back: bottom left"
   }
  },
- "47": {
+ "43": {
   "inputs": {
    "image": [
-    "41",
+    "37",
     0
    ],
    "width": [
-    "42",
+    "38",
     1
    ],
    "height": [
-    "43",
+    "39",
     1
    ],
    "x": [
@@ -843,10 +763,10 @@
    "title": "Seam: shift back: bottom right"
   }
  },
- "48": {
+ "44": {
   "inputs": {
    "image1": [
-    "47",
+    "43",
     0
    ],
    "direction": "right",
@@ -854,7 +774,7 @@
    "spacing_width": 0,
    "spacing_color": "black",
    "image2": [
-    "46",
+    "42",
     0
    ]
   },
@@ -863,10 +783,10 @@
    "title": "Seam: shift back: top row"
   }
  },
- "49": {
+ "45": {
   "inputs": {
    "image1": [
-    "45",
+    "41",
     0
    ],
    "direction": "right",
@@ -874,7 +794,7 @@
    "spacing_width": 0,
    "spacing_color": "black",
    "image2": [
-    "44",
+    "40",
     0
    ]
   },
@@ -883,10 +803,10 @@
    "title": "Seam: shift back: bottom row"
   }
  },
- "50": {
+ "46": {
   "inputs": {
    "image1": [
-    "48",
+    "44",
     0
    ],
    "direction": "down",
@@ -894,7 +814,7 @@
    "spacing_width": 0,
    "spacing_color": "black",
    "image2": [
-    "49",
+    "45",
     0
    ]
   },
@@ -903,10 +823,10 @@
    "title": "Seam: shift back: shifted"
   }
  },
- "51": {
+ "47": {
   "inputs": {
    "image": [
-    "50",
+    "46",
     0
    ]
   },
@@ -915,10 +835,10 @@
    "title": "Grayscale (luma)"
   }
  },
- "52": {
+ "48": {
   "inputs": {
    "images": [
-    "51",
+    "47",
     0
    ],
    "factor": 1.4
@@ -928,11 +848,11 @@
    "title": "Push contrast"
   }
  },
- "53": {
+ "49": {
   "inputs": {
    "filename_prefix": "concept-app/grunge_map",
    "images": [
-    "52",
+    "48",
     0
    ]
   },

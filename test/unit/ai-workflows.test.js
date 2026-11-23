@@ -47,15 +47,23 @@ test('the seven workflows: sections, outputs, what the user fills in', () => {
   assert.equal(ce.workflow[ce.manifest.params.patch.node].class_type, 'ModelPatchLoader');
   assert.equal(Object.values(ce.workflow).filter((n) => n.class_type === 'Canny').length, 1);
   assert.equal(Object.values(load('wf-concept-depth').workflow).filter((n) => n.class_type === 'Canny').length, 0, 'the depth pass is used as it is');
-  for (const id of ['wf-make-seamless', 'wf-grunge-map']) {
-    const p = load(id);
-    assert.deepEqual(p.manifest.files, [{ folder: 'model_patches', file: 'Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors' }], id);
-    const inp = Object.values(p.workflow).find((n) => n.class_type === 'ZImageFunControlnet');
-    assert.ok(inp.inputs.inpaint_image && inp.inputs.mask, `${id}: seam repainted in inpaint mode`);
-    assert.equal(p.manifest.params.blend.default, 0.8);
-    // cross mask: two bands OR-ed (an add doubles the crossing square)
-    assert.deepEqual(Object.values(p.workflow).filter((n) => n.class_type === 'MaskComposite').map((n) => n.inputs.operation), ['or', 'or']);
-  }
+  // Make Seamless: AI repaint (lite ControlNet, inpaint mode) or blend, through a lazy switch
+  const ms = load('wf-make-seamless');
+  assert.deepEqual(ms.manifest.files, [{ folder: 'model_patches', file: 'Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors' }]);
+  const inp = Object.values(ms.workflow).find((n) => n.class_type === 'ZImageFunControlnet');
+  assert.ok(inp.inputs.inpaint_image && inp.inputs.mask, 'seam repainted in inpaint mode');
+  assert.equal(ms.workflow[inp.inputs.inpaint_image[0]].class_type, 'ImageCompositeMasked', 'the cross is blanked in the inpaint guide');
+  const sw = ms.workflow[ms.manifest.params.method.node];
+  assert.equal(sw.class_type, 'ComfySwitchNode');
+  assert.deepEqual([ms.manifest.params.method.default, ms.manifest.params.blend.default], [true, 1]);
+  assert.deepEqual(ms.manifest.params.blend.when, { param: 'method', is: true }, 'repaint settings dim with Blend');
+  // Grunge Map: blend only (the repaint flattened the grain into grey bands), so no ControlNet
+  const gm = load('wf-grunge-map');
+  assert.deepEqual(gm.manifest.files, []);
+  assert.ok(!Object.values(gm.workflow).some((n) => /ZImageFunControlnet|ModelPatchLoader/.test(n.class_type)));
+  assert.equal(Object.values(gm.workflow).filter((n) => n.class_type === 'KSampler').length, 1);
+  // cross masks: bands OR-ed (an add doubles the crossing square)
+  for (const p of [ms, gm]) assert.ok(Object.values(p.workflow).filter((n) => n.class_type === 'MaskComposite').every((n) => n.inputs.operation === 'or'));
   // flipbook: square grid, columns follow the frame count
   const fb = load('wf-flipbook');
   assert.deepEqual(fb.manifest.params.grid.options, [16, 36, 64]);

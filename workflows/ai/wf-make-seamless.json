@@ -7,7 +7,7 @@
   "menuOrder": 3,
   "source": "Comfy UI Ideas doc, Texture Cleanup and Prep: seamless tiling (half offset + seam inpaint, authored)",
   "output": "image",
-  "description": "Makes a texture tile: shifts it by half so the edges meet in the middle, repaints that cross with Z-Image Turbo, and shifts it back. The rest of the picture is untouched.",
+  "description": "Makes a texture tile: shifts it by half so the edges meet in the middle, fixes that cross (AI repaint with Z-Image Turbo, or a soft blend), and shifts it back. The rest of the picture is untouched.",
   "promptDefault": "seamless continuous texture, same material, same pattern and scale, flat lighting",
   "params": {
    "size": {
@@ -27,20 +27,42 @@
     },
     "info": "Size of the long side while the seam is repainted, and of the result. 2K keeps more detail but takes about four times as long."
    },
+   "method": {
+    "node": "62",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Seam fix",
+    "control": "seg",
+    "labels": {
+     "false": "Blend",
+     "true": "AI repaint"
+    },
+    "span2": true,
+    "info": "How the seam cross is fixed. AI repaint redraws it with Z-Image so shapes carry on across the seam: best for bricks, planks, tiles, anything with structure. Blend fades the original over the seam with a soft mask: instant, no AI, best for noise-like surfaces (concrete, dirt, grunge), where a repaint can come out flat."
+   },
    "blend": {
-    "node": "42",
+    "node": "45",
     "input": "denoise",
     "type": "number",
     "min": 0.5,
     "max": 1,
     "step": 0.05,
-    "default": 0.8,
-    "label": "Seam repaint",
+    "default": 1,
+    "label": "Repaint strength",
     "control": "slider",
-    "info": "How much the seam cross is repainted. 0.8 blends the join while keeping the texture there. Lower keeps more of the original but can leave a faint line; 1 repaints the cross completely (good for big shapes like bricks, can come out flatter on fine noisy textures)."
+    "when": {
+     "param": "method",
+     "is": true
+    },
+    "info": "How much of the seam cross is redrawn. 1 redraws it completely so shapes join up cleanly; lower keeps more of the original there but can leave a faint line."
    },
    "steps": {
-    "node": "42",
+    "node": "45",
     "input": "steps",
     "type": "int",
     "min": 4,
@@ -48,7 +70,11 @@
     "default": 8,
     "label": "Steps",
     "control": "stepper",
-    "info": "Refinement passes for the seam. Z-Image Turbo is made for about 8."
+    "when": {
+     "param": "method",
+     "is": true
+    },
+    "info": "Refinement passes for the seam repaint. Z-Image Turbo is made for about 8."
    }
   },
   "maxBatch": 4,
@@ -705,6 +731,58 @@
   },
   "41": {
    "inputs": {
+    "value": 0.5,
+    "width": [
+     "14",
+     1
+    ],
+    "height": [
+     "15",
+     1
+    ]
+   },
+   "class_type": "SolidMask",
+   "_meta": {
+    "title": "Seam: mid grey"
+   }
+  },
+  "42": {
+   "inputs": {
+    "mask": [
+     "41",
+     0
+    ]
+   },
+   "class_type": "MaskToImage",
+   "_meta": {
+    "title": "Seam: grey image"
+   }
+  },
+  "43": {
+   "inputs": {
+    "destination": [
+     "26",
+     0
+    ],
+    "source": [
+     "42",
+     0
+    ],
+    "x": 0,
+    "y": 0,
+    "resize_source": false,
+    "mask": [
+     "34",
+     0
+    ]
+   },
+   "class_type": "ImageCompositeMasked",
+   "_meta": {
+    "title": "Seam: cross blanked"
+   }
+  },
+  "44": {
+   "inputs": {
     "model": [
      "4",
      0
@@ -719,7 +797,7 @@
     ],
     "strength": 1,
     "inpaint_image": [
-     "26",
+     "43",
      0
     ],
     "mask": [
@@ -734,16 +812,16 @@
     "title": "Seam: ControlNet inpaint"
    }
   },
-  "42": {
+  "45": {
    "inputs": {
     "seed": 0,
     "steps": 8,
     "cfg": 1,
     "sampler_name": "res_multistep",
     "scheduler": "simple",
-    "denoise": 0.8,
+    "denoise": 1,
     "model": [
-     "41",
+     "44",
      0
     ],
     "positive": [
@@ -764,10 +842,10 @@
     "title": "Seam fix sampler"
    }
   },
-  "43": {
+  "46": {
    "inputs": {
     "samples": [
-     "42",
+     "45",
      0
     ],
     "vae": [
@@ -780,14 +858,14 @@
     "title": "Seam: decode"
    }
   },
-  "44": {
+  "47": {
    "inputs": {
     "destination": [
      "26",
      0
     ],
     "source": [
-     "43",
+     "46",
      0
     ],
     "x": 0,
@@ -803,7 +881,270 @@
     "title": "Seam: blend repaint in"
    }
   },
-  "45": {
+  "48": {
+   "inputs": {
+    "expression": "max(64, min(a, b) // 3)",
+    "values.a": [
+     "14",
+     1
+    ],
+    "values.b": [
+     "15",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Blend: band width"
+   }
+  },
+  "49": {
+   "inputs": {
+    "expression": "a - b // 2",
+    "values.a": [
+     "18",
+     1
+    ],
+    "values.b": [
+     "48",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Blend: band x"
+   }
+  },
+  "50": {
+   "inputs": {
+    "expression": "a - b // 2",
+    "values.a": [
+     "19",
+     1
+    ],
+    "values.b": [
+     "48",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Blend: band y"
+   }
+  },
+  "51": {
+   "inputs": {
+    "value": 0,
+    "width": [
+     "14",
+     1
+    ],
+    "height": [
+     "15",
+     1
+    ]
+   },
+   "class_type": "SolidMask",
+   "_meta": {
+    "title": "Blend: empty mask"
+   }
+  },
+  "52": {
+   "inputs": {
+    "value": 1,
+    "width": [
+     "48",
+     1
+    ],
+    "height": [
+     "15",
+     1
+    ]
+   },
+   "class_type": "SolidMask",
+   "_meta": {
+    "title": "Blend: vertical band"
+   }
+  },
+  "53": {
+   "inputs": {
+    "value": 1,
+    "width": [
+     "14",
+     1
+    ],
+    "height": [
+     "48",
+     1
+    ]
+   },
+   "class_type": "SolidMask",
+   "_meta": {
+    "title": "Blend: horizontal band"
+   }
+  },
+  "54": {
+   "inputs": {
+    "destination": [
+     "51",
+     0
+    ],
+    "source": [
+     "52",
+     0
+    ],
+    "x": [
+     "49",
+     1
+    ],
+    "y": 0,
+    "operation": "or"
+   },
+   "class_type": "MaskComposite",
+   "_meta": {
+    "title": "Blend: + vertical"
+   }
+  },
+  "55": {
+   "inputs": {
+    "destination": [
+     "54",
+     0
+    ],
+    "source": [
+     "53",
+     0
+    ],
+    "x": 0,
+    "y": [
+     "50",
+     1
+    ],
+    "operation": "or"
+   },
+   "class_type": "MaskComposite",
+   "_meta": {
+    "title": "Blend: cross mask"
+   }
+  },
+  "56": {
+   "inputs": {
+    "mask": [
+     "55",
+     0
+    ]
+   },
+   "class_type": "MaskToImage",
+   "_meta": {
+    "title": "Blend: mask to image"
+   }
+  },
+  "57": {
+   "inputs": {
+    "image": [
+     "56",
+     0
+    ],
+    "upscale_method": "bilinear",
+    "width": 64,
+    "height": 64,
+    "crop": "disabled"
+   },
+   "class_type": "ImageScale",
+   "_meta": {
+    "title": "Blend: shrink mask"
+   }
+  },
+  "58": {
+   "inputs": {
+    "image": [
+     "57",
+     0
+    ],
+    "blur_radius": 8,
+    "sigma": 4
+   },
+   "class_type": "ImageBlur",
+   "_meta": {
+    "title": "Blend: feather"
+   }
+  },
+  "59": {
+   "inputs": {
+    "image": [
+     "58",
+     0
+    ],
+    "upscale_method": "bilinear",
+    "width": [
+     "14",
+     1
+    ],
+    "height": [
+     "15",
+     1
+    ],
+    "crop": "disabled"
+   },
+   "class_type": "ImageScale",
+   "_meta": {
+    "title": "Blend: mask full size"
+   }
+  },
+  "60": {
+   "inputs": {
+    "image": [
+     "59",
+     0
+    ],
+    "channel": "red"
+   },
+   "class_type": "ImageToMask",
+   "_meta": {
+    "title": "Blend: soft cross"
+   }
+  },
+  "61": {
+   "inputs": {
+    "destination": [
+     "26",
+     0
+    ],
+    "source": [
+     "12",
+     0
+    ],
+    "x": 0,
+    "y": 0,
+    "resize_source": false,
+    "mask": [
+     "60",
+     0
+    ]
+   },
+   "class_type": "ImageCompositeMasked",
+   "_meta": {
+    "title": "Blend: original over the cross"
+   }
+  },
+  "62": {
+   "inputs": {
+    "switch": true,
+    "on_false": [
+     "61",
+     0
+    ],
+    "on_true": [
+     "47",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "Seam method (repaint / blend)"
+   }
+  },
+  "63": {
    "inputs": {
     "expression": "a - b",
     "values.a": [
@@ -820,7 +1161,7 @@
     "title": "Seam: shift back: rest of width"
    }
   },
-  "46": {
+  "64": {
    "inputs": {
     "expression": "a - b",
     "values.a": [
@@ -837,10 +1178,10 @@
     "title": "Seam: shift back: rest of height"
    }
   },
-  "47": {
+  "65": {
    "inputs": {
     "image": [
-     "44",
+     "62",
      0
     ],
     "width": [
@@ -859,14 +1200,14 @@
     "title": "Seam: shift back: top left"
    }
   },
-  "48": {
+  "66": {
    "inputs": {
     "image": [
-     "44",
+     "62",
      0
     ],
     "width": [
-     "45",
+     "63",
      1
     ],
     "height": [
@@ -884,10 +1225,10 @@
     "title": "Seam: shift back: top right"
    }
   },
-  "49": {
+  "67": {
    "inputs": {
     "image": [
-     "44",
+     "62",
      0
     ],
     "width": [
@@ -895,7 +1236,7 @@
      1
     ],
     "height": [
-     "46",
+     "64",
      1
     ],
     "x": 0,
@@ -909,18 +1250,18 @@
     "title": "Seam: shift back: bottom left"
    }
   },
-  "50": {
+  "68": {
    "inputs": {
     "image": [
-     "44",
+     "62",
      0
     ],
     "width": [
-     "45",
+     "63",
      1
     ],
     "height": [
-     "46",
+     "64",
      1
     ],
     "x": [
@@ -937,10 +1278,10 @@
     "title": "Seam: shift back: bottom right"
    }
   },
-  "51": {
+  "69": {
    "inputs": {
     "image1": [
-     "50",
+     "68",
      0
     ],
     "direction": "right",
@@ -948,7 +1289,7 @@
     "spacing_width": 0,
     "spacing_color": "black",
     "image2": [
-     "49",
+     "67",
      0
     ]
    },
@@ -957,10 +1298,10 @@
     "title": "Seam: shift back: top row"
    }
   },
-  "52": {
+  "70": {
    "inputs": {
     "image1": [
-     "48",
+     "66",
      0
     ],
     "direction": "right",
@@ -968,7 +1309,7 @@
     "spacing_width": 0,
     "spacing_color": "black",
     "image2": [
-     "47",
+     "65",
      0
     ]
    },
@@ -977,10 +1318,10 @@
     "title": "Seam: shift back: bottom row"
    }
   },
-  "53": {
+  "71": {
    "inputs": {
     "image1": [
-     "51",
+     "69",
      0
     ],
     "direction": "down",
@@ -988,7 +1329,7 @@
     "spacing_width": 0,
     "spacing_color": "black",
     "image2": [
-     "52",
+     "70",
      0
     ]
    },
@@ -997,11 +1338,11 @@
     "title": "Seam: shift back: shifted"
    }
   },
-  "54": {
+  "72": {
    "inputs": {
     "filename_prefix": "concept-app/texture_seamless",
     "images": [
-     "53",
+     "71",
      0
     ]
    },

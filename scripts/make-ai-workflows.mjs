@@ -1,4 +1,4 @@
-﻿// make-ai-workflows.mjs - writes the AI Workflows presets (workflows/ai/wf-*.json,
+// make-ai-workflows.mjs - writes the AI Workflows presets (workflows/ai/wf-*.json,
 // kind "workflow", from the Comfy UI Ideas doc). The JSON files are what the app
 // and the tests read; this script is how they are made, so change the graphs here
 // and re-run it (hand edits to wf-*.json are overwritten), then
@@ -22,12 +22,20 @@ const math = (n, expr, vals, title) => n('ComfyMathExpression', { expression: ex
 const INT = 1; // ComfyMathExpression outputs: FLOAT, INT, BOOL
 
 /**
- * Seamless: shift by half (the old edges meet in the middle as a cross), repaint a
- * soft band over that cross (Z-Image + Fun ControlNet in inpaint mode, so the model
- * sees the picture around it), shift back. Only the cross changes; the borders of
- * the result wrap because they were neighbouring pixels in the source.
+ * Seamless: shift by half (the old edges meet in the middle as a cross), fix the
+ * cross, shift back. Only the cross changes; the borders of the result wrap
+ * because they were neighbouring pixels in the source. Two ways to fix the cross
+ * (o.mode 'repaint' | 'blend' | 'both' = a lazy switch, only the chosen one runs):
+ *   repaint  Z-Image + Fun ControlNet in inpaint mode repaints a band over the
+ *            cross (the model sees the picture around it). Best for shapes and
+ *            structure (bricks, planks, tiles).
+ *   blend    the classic offset blend: the unshifted picture (whole in the middle)
+ *            is faded in over the cross with a wide soft mask. No model, instant.
+ *            Best for noise-like textures (grunge, concrete, dirt): tested, the
+ *            repaint smoothed their grain into flat grey bands.
  */
 function seamFix(n, img, o) {
+  const mode = o.mode || 'repaint';
   const size = n('GetImageSize', { image: img }, 'Seam: image size');
   const w = math(n, 'a', { a: L(size, 0) }, 'Seam: width');
   const h = math(n, 'a', { a: L(size, 1) }, 'Seam: height');
@@ -45,27 +53,53 @@ function seamFix(n, img, o) {
     return { out: st(st(D, 'right', C, 'top row'), 'down', st(B, 'right', A, 'bottom row'), 'shifted'), rx, ry };
   };
   const s1 = sh(img, hw, hh, 'Seam: shift half');
-  // the cross where the old edges meet: x = width - half, y = height - half
-  const band = math(n, 'max(32, min(a, b) // 12 // 16 * 16)', { a: L(w, INT), b: L(h, INT) }, 'Seam: band width');
-  const bx = math(n, 'a - b // 2', { a: L(s1.rx, INT), b: L(band, INT) }, 'Seam: band x');
-  const by = math(n, 'a - b // 2', { a: L(s1.ry, INT), b: L(band, INT) }, 'Seam: band y');
-  const base = n('SolidMask', { value: 0, width: L(w, INT), height: L(h, INT) }, 'Seam: empty mask');
-  const vb = n('SolidMask', { value: 1, width: L(band, INT), height: L(h, INT) }, 'Seam: vertical band');
-  const hb = n('SolidMask', { value: 1, width: L(w, INT), height: L(band, INT) }, 'Seam: horizontal band');
-  const m1 = n('MaskComposite', { destination: L(base), source: L(vb), x: L(bx, INT), y: 0, operation: 'or' }, 'Seam: + vertical');
-  const m2 = n('MaskComposite', { destination: L(m1), source: L(hb), x: 0, y: L(by, INT), operation: 'or' }, 'Seam: cross mask');
+  // a cross mask over where the old edges meet: x = width - half, y = height - half
+  const cross = (expr, tag) => {
+    const band = math(n, expr, { a: L(w, INT), b: L(h, INT) }, `${tag}: band width`);
+    const bx = math(n, 'a - b // 2', { a: L(s1.rx, INT), b: L(band, INT) }, `${tag}: band x`);
+    const by = math(n, 'a - b // 2', { a: L(s1.ry, INT), b: L(band, INT) }, `${tag}: band y`);
+    const base = n('SolidMask', { value: 0, width: L(w, INT), height: L(h, INT) }, `${tag}: empty mask`);
+    const vb = n('SolidMask', { value: 1, width: L(band, INT), height: L(h, INT) }, `${tag}: vertical band`);
+    const hb = n('SolidMask', { value: 1, width: L(w, INT), height: L(band, INT) }, `${tag}: horizontal band`);
+    const m1 = n('MaskComposite', { destination: L(base), source: L(vb), x: L(bx, INT), y: 0, operation: 'or' }, `${tag}: + vertical`);
+    return n('MaskComposite', { destination: L(m1), source: L(hb), x: 0, y: L(by, INT), operation: 'or' }, `${tag}: cross mask`);
+  };
+  let repaint = null, blend = null, ks = null, patch = null, inp = null;
+  if (mode !== 'blend') ({ comp: repaint, ks, patch, inp } = repaintCross());
+  if (mode !== 'repaint') blend = blendCross();
+  const fixed = mode === 'both'
+    ? n('ComfySwitchNode', { switch: true, on_false: L(blend), on_true: L(repaint) }, 'Seam method (repaint / blend)')
+    : (repaint || blend);
+  // shift back, so the picture sits where it was (by the rest: half + rest = full width)
+  const s2 = sh(L(fixed), s1.rx, s1.ry, 'Seam: shift back');
+  return { out: s2.out, sampler: ks, patch, inp, method: mode === 'both' ? fixed : null };
+
+  function blendCross() {
+    // wide cross (a third of the short side), feathered: blurred small, scaled back up
+    const m = cross('max(64, min(a, b) // 3)', 'Blend');
+    const small = n('ImageScale', { image: L(n('MaskToImage', { mask: L(m) }, 'Blend: mask to image')), upscale_method: 'bilinear', width: 64, height: 64, crop: 'disabled' }, 'Blend: shrink mask');
+    const blurred = n('ImageBlur', { image: L(small), blur_radius: 8, sigma: 4 }, 'Blend: feather');
+    const big = n('ImageScale', { image: L(blurred), upscale_method: 'bilinear', width: L(w, INT), height: L(h, INT), crop: 'disabled' }, 'Blend: mask full size');
+    const soft = n('ImageToMask', { image: L(big), channel: 'red' }, 'Blend: soft cross');
+    return n('ImageCompositeMasked', { destination: L(s1.out), source: img, x: 0, y: 0, resize_source: false, mask: L(soft) }, 'Blend: original over the cross');
+  }
+
+  function repaintCross() {
+  const m2 = cross('max(32, min(a, b) // 12 // 16 * 16)', 'Seam');
   const soft = n('ImageToMask', { image: L(n('ImageBlur', { image: L(n('MaskToImage', { mask: L(m2) }, 'Seam: mask to image')), blur_radius: 31, sigma: 10 }, 'Seam: soften edge')), channel: 'red' }, 'Seam: soft mask');
   const enc = n('VAEEncode', { pixels: L(s1.out), vae: o.vae }, 'Seam: encode');
   const masked = n('SetLatentNoiseMask', { samples: L(enc), mask: L(m2) }, 'Seam: repaint only the cross');
   // Z-Image Fun ControlNet in inpaint mode: the model sees the picture around the cross.
   const patch = n('ModelPatchLoader', { name: o.patch }, 'Seam: load ControlNet (inpaint)');
-  const inp = n('ZImageFunControlnet', { model: o.model, model_patch: L(patch), vae: o.vae, strength: 1, inpaint_image: L(s1.out), mask: L(m2), start_percent: 0, end_percent: 1 }, 'Seam: ControlNet inpaint');
+  // the inpaint guide gets the cross blanked to mid grey (what the inpaint mode is trained on)
+  const grey = n('MaskToImage', { mask: L(n('SolidMask', { value: 0.5, width: L(w, INT), height: L(h, INT) }, 'Seam: mid grey')) }, 'Seam: grey image');
+  const blanked = n('ImageCompositeMasked', { destination: L(s1.out), source: L(grey), x: 0, y: 0, resize_source: false, mask: L(m2) }, 'Seam: cross blanked');
+  const inp = n('ZImageFunControlnet', { model: o.model, model_patch: L(patch), vae: o.vae, strength: 1, inpaint_image: L(blanked), mask: L(m2), start_percent: 0, end_percent: 1 }, 'Seam: ControlNet inpaint');
   const ks = n('KSampler', { seed: 0, steps: o.steps, cfg: o.cfg ?? 1, sampler_name: o.sampler || 'res_multistep', scheduler: o.scheduler || 'simple', denoise: o.denoise, model: L(inp), positive: o.positive, negative: o.negative, latent_image: L(masked) }, 'Seam fix sampler');
   const dec = n('VAEDecode', { samples: L(ks), vae: o.vae }, 'Seam: decode');
   const comp = n('ImageCompositeMasked', { destination: L(s1.out), source: L(dec), x: 0, y: 0, resize_source: false, mask: L(soft) }, 'Seam: blend repaint in');
-  // shift back, so the picture sits where it was (by the rest: half + rest = full width)
-  const s2 = sh(L(comp), s1.rx, s1.ry, 'Seam: shift back');
-  return { out: s2.out, sampler: ks, patch, inp };
+  return { comp, ks, patch, inp };
+  }
 }
 
 /** Z-Image Turbo model / text encoder / vae nodes. */
@@ -133,17 +167,18 @@ const files = {};
   const w16 = math(n, 'a // 16 * 16', { a: L(sz, 0) }, 'Width, multiple of 16');
   const h16 = math(n, 'a // 16 * 16', { a: L(sz, 1) }, 'Height, multiple of 16');
   const snap = n('ImageScale', { image: L(fit), upscale_method: 'lanczos', width: L(w16, INT), height: L(h16, INT), crop: 'center' }, 'Snap to multiple of 16');
-  const s = seamFix(n, L(snap), { model: L(z.ms), positive: L(z.pos), negative: L(z.neg), vae: L(z.vae), steps: 8, denoise: 0.8, patch: LITE });
+  const s = seamFix(n, L(snap), { mode: 'both', model: L(z.ms), positive: L(z.pos), negative: L(z.neg), vae: L(z.vae), steps: 8, denoise: 1, patch: LITE });
   n('SaveImage', { filename_prefix: 'concept-app/texture_seamless', images: L(s.out) }, 'Save Image');
   files['wf-make-seamless'] = { preset: {
     kind: 'workflow', group: 'Textures', label: 'Make Seamless', menuPath: 'Textures/Make Seamless', menuOrder: 3,
     source: 'Comfy UI Ideas doc, Texture Cleanup and Prep: seamless tiling (half offset + seam inpaint, authored)', output: 'image',
-    description: 'Makes a texture tile: shifts it by half so the edges meet in the middle, repaints that cross with Z-Image Turbo, and shifts it back. The rest of the picture is untouched.',
+    description: 'Makes a texture tile: shifts it by half so the edges meet in the middle, fixes that cross (AI repaint with Z-Image Turbo, or a soft blend), and shifts it back. The rest of the picture is untouched.',
     promptDefault: 'seamless continuous texture, same material, same pattern and scale, flat lighting',
     params: {
       size: { node: fit, input: 'longer_edge', type: 'enum', options: [1024, 2048], default: 1024, label: 'Working size', control: 'seg', labels: { 1024: '1K', 2048: '2K' }, info: 'Size of the long side while the seam is repainted, and of the result. 2K keeps more detail but takes about four times as long.' },
-      blend: { node: s.sampler, input: 'denoise', type: 'number', min: 0.5, max: 1, step: 0.05, default: 0.8, label: 'Seam repaint', control: 'slider', info: 'How much the seam cross is repainted. 0.8 blends the join while keeping the texture there. Lower keeps more of the original but can leave a faint line; 1 repaints the cross completely (good for big shapes like bricks, can come out flatter on fine noisy textures).' },
-      steps: { node: s.sampler, input: 'steps', type: 'int', min: 4, max: 12, default: 8, label: 'Steps', control: 'stepper', info: 'Refinement passes for the seam. Z-Image Turbo is made for about 8.' },
+      method: { node: s.method, input: 'switch', type: 'enum', options: [false, true], default: true, label: 'Seam fix', control: 'seg', labels: { false: 'Blend', true: 'AI repaint' }, span2: true, info: 'How the seam cross is fixed. AI repaint redraws it with Z-Image so shapes carry on across the seam: best for bricks, planks, tiles, anything with structure. Blend fades the original over the seam with a soft mask: instant, no AI, best for noise-like surfaces (concrete, dirt, grunge), where a repaint can come out flat.' },
+      blend: { node: s.sampler, input: 'denoise', type: 'number', min: 0.5, max: 1, step: 0.05, default: 1, label: 'Repaint strength', control: 'slider', when: { param: 'method', is: true }, info: 'How much of the seam cross is redrawn. 1 redraws it completely so shapes join up cleanly; lower keeps more of the original there but can leave a faint line.' },
+      steps: { node: s.sampler, input: 'steps', type: 'int', min: 4, max: 12, default: 8, label: 'Steps', control: 'stepper', when: { param: 'method', is: true }, info: 'Refinement passes for the seam repaint. Z-Image Turbo is made for about 8.' },
     },
     maxBatch: 4, vram: { estMB: 15800, basis: 'Z-Image Turbo bf16 + 2 GB lite ControlNet patch (inpaint) at the working size' }, files: [{ folder: 'model_patches', file: LITE }],
     info: { image: 'The texture to make tileable. Square power-of-two textures work best; other shapes are kept.', prompt: 'Optional: what the material is ("mossy cobblestones"). Helps the repainted seam match. Leave empty for a neutral instruction.' },
@@ -157,22 +192,21 @@ const files = {};
   const lat = n('EmptySD3LatentImage', { width: 1024, height: 1024, batch_size: 1 }, 'EmptySD3LatentImage');
   const ks = n('KSampler', { seed: 0, steps: 8, cfg: 1, sampler_name: 'res_multistep', scheduler: 'simple', denoise: 1, model: L(z.ms), positive: L(z.pos), negative: L(z.neg), latent_image: L(lat) }, 'KSampler');
   const dec = n('VAEDecode', { samples: L(ks), vae: L(z.vae) }, 'VAE Decode');
-  const s = seamFix(n, L(dec), { model: L(z.ms), positive: L(z.pos), negative: L(z.neg), vae: L(z.vae), steps: 8, denoise: 0.8, patch: LITE });
+  const s = seamFix(n, L(dec), { mode: 'blend' });
   const yuv = n('ImageRGBToYUV', { image: L(s.out) }, 'Grayscale (luma)');
   const con = n('AdjustContrast', { images: L(yuv, 0), factor: 1.4 }, 'Push contrast');
   n('SaveImage', { filename_prefix: 'concept-app/grunge_map', images: L(con) }, 'Save Image');
   files['wf-grunge-map'] = { preset: {
     kind: 'workflow', group: 'Textures', label: 'Grunge Map', menuPath: 'Textures/Grunge Map', menuOrder: 4,
     source: 'Comfy UI Ideas doc, VFX Sprites and Grunge Maps: grunge, scratch and stain maps (authored)', output: 'image',
-    description: 'Seamless grayscale mask (grunge, scratches, stains, noise) to drive roughness or dirt blends in Unreal. Z-Image Turbo, then the seam fix, grayscale and a contrast push.',
+    description: 'Seamless grayscale mask (grunge, scratches, stains, noise) to drive roughness or dirt blends in Unreal. Z-Image Turbo, then an offset blend makes it tile, then grayscale and a contrast push.',
     promptFormat: { template: '{text}, dense high-contrast grunge pattern filling the entire frame edge to edge, black and white, seamless tileable texture, top-down flat scan, even lighting, no objects' },
     size: { base: [1024, 1024], min: 512, max: 2048, multiple: 16 },
     params: {
       contrast: { node: con, input: 'factor', type: 'number', min: 1, max: 2, step: 0.1, default: 1.4, label: 'Contrast', control: 'slider', format: 'x', info: 'How hard the grays are pushed toward black and white. Higher gives a cleaner mask for blends; lower keeps soft in-between values.' },
-      blend: { node: s.sampler, input: 'denoise', type: 'number', min: 0.5, max: 1, step: 0.05, default: 0.8, label: 'Seam repaint', control: 'slider', info: 'How much the seam cross is repainted when the map is made tileable. 0.8 blends the join while keeping the grain; 1 repaints it completely and can come out flatter.' },
-      steps: { node: ks, input: 'steps', also: [{ node: s.sampler, input: 'steps' }], type: 'int', min: 4, max: 12, default: 8, label: 'Steps', control: 'stepper', info: 'Refinement passes. Z-Image Turbo is made for about 8.' },
+      steps: { node: ks, input: 'steps', type: 'int', min: 4, max: 12, default: 8, label: 'Steps', control: 'stepper', info: 'Refinement passes. Z-Image Turbo is made for about 8.' },
     },
-    maxBatch: 8, vram: { estMB: 15800, basis: 'Z-Image Turbo bf16 at 1 MP + 2 GB lite ControlNet patch for the seam pass' }, files: [{ folder: 'model_patches', file: LITE }],
+    maxBatch: 8, vram: { estMB: 13800, basis: 'Z-Image Turbo bf16 at 1 MP (the seam blend needs no model)' },
     info: { prompt: 'What kind of grunge: "concrete stains", "fine scratches", "rust patches", "dust and dirt". The words for a flat, tileable black-and-white mask are added for you.' },
   }, workflow: g };
 }
