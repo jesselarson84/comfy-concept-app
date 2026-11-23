@@ -121,12 +121,12 @@ test('resume: back from the background reconnects the websocket at once (no back
 
 // ---- item 5: memory items in the queued graph ---------------------------------------
 const lastGraph = (cls) => Object.values(s.mock.history).map((h) => h.prompt[2]).findLast((w) => Object.values(w).some((n) => n.class_type === cls));
-test('menu switch "Text encoder on CPU" puts CLIPLoader on the CPU; an OOM makes the next run of that preset decode in tiles', async () => {
-  await page.click('details.menu > summary');
-  await page.waitForFunction(() => document.querySelector('#mem-te-cpu'));
-  await page.check('#mem-te-cpu');
-  await page.waitForFunction(async () => (await (await fetch('/api/memory/settings')).json()).textEncoderCpu === true);
-  await page.click('details.menu > summary');
+// Batch 5: the menu switch is gone, but a "Text encoder on CPU" value saved on the server is still honoured.
+test('saved "Text encoder on CPU" puts CLIPLoader on the CPU; an OOM makes the next run of that preset decode in tiles', async () => {
+  await app(() => fetch('/api/memory/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ textEncoderCpu: true }) }));
+  await page.reload();
+  await page.waitForFunction(() => window.conceptApp?.current);
+  await page.waitForTimeout(300);
   await pick('ai:klein-4b-t2i');
   await setBatch(1);
   await page.click('#btn-generate'); await idle();
@@ -141,8 +141,9 @@ test('menu switch "Text encoder on CPU" puts CLIPLoader on the CPU; an OOM makes
   assert.ok(t, 'tiled decode'); assert.equal(t.inputs.tile_size, 512);
   assert.ok(!Object.values(g).some((n) => n.class_type === 'VAEDecode'));
   await app(() => localStorage.removeItem('conceptOom.v1'));
-  await page.click('details.menu > summary'); await page.uncheck('#mem-te-cpu'); await page.click('details.menu > summary');
-  await page.waitForFunction(async () => (await (await fetch('/api/memory/settings')).json()).textEncoderCpu === false);
+  await app(() => fetch('/api/memory/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ textEncoderCpu: false }) }));
+  await page.reload();
+  await page.waitForFunction(() => window.conceptApp?.current);
 });
 
 // ---- item 6: Klein 4B inpaint mask editor ---------------------------------------------
@@ -250,7 +251,8 @@ test('Settings: open row is Aspect | Batch, then Seed full row; everything else 
   assert.equal((await page.textContent('#settings > summary')).trim(), 'Settings');
   const quick = await page.$$eval('.quick > .ctl:not([hidden])', (els) => els.map((e) => [e.id, Math.round(e.getBoundingClientRect().width)]));
   assert.deepEqual(quick.map((x) => x[0]), ['aspect-field', 'batch-field', 'seed-field']);
-  assert.ok(quick[2][1] > quick[0][1] * 1.8, 'Seed spans the full row');
+  // batch 5: Aspect (+ orientation + resolution) is the full row; Batch and Seed share the next one
+  assert.ok(quick[0][1] > quick[2][1] * 1.3 && quick[2][1] > quick[1][1], 'Aspect full row, Seed wider than Batch');
   await shot('settings-collapsed');
   await page.click('#settings > summary');
   await page.waitForFunction(() => localStorage.getItem('conceptSettingsOpen') === '1');
@@ -577,7 +579,7 @@ test('History selection matches the Google Photos layout: X · count · share ·
   await longPress(tile(ids[0]));
   await page.waitForSelector('.history.selecting');
   const bar = await page.$$eval('.history-top.sel-bar > *', (els) => els.map((e) => e.dataset.act || e.className));
-  assert.deepEqual(bar.filter((x) => x !== 'spacer'), ['cancel-sel', 'sel-count', 'share', 'add', 'delete', 'more']);
+  assert.deepEqual(bar.filter((x) => x !== 'spacer'), ['cancel-sel', 'sel-count', 'favorite', 'share', 'add', 'delete', 'more']); // batch 5: + favourite star
   // circles: top-left on every tile; selected = white fill, not blue
   const geo = await page.$eval(tile(ids[1]), (t) => { const a = t.getBoundingClientRect(), c = t.querySelector('.sel-check').getBoundingClientRect(); return { dx: c.left - a.left, dy: c.top - a.top, w: c.width, br: getComputedStyle(t.querySelector('.sel-check')).borderRadius, shown: getComputedStyle(t.querySelector('.sel-check')).display }; });
   assert.ok(geo.dx < 12 && geo.dy < 12 && geo.w >= 20 && geo.shown === 'flex' && geo.br === '50%', JSON.stringify(geo));
@@ -618,6 +620,9 @@ test('Favorites is the first tile in the Folders grid, backed by the star; ⋮ i
   await page.click('.sel-menu [data-act="remove-fav"]');
   await page.waitForFunction((x) => !document.querySelector(`.history .thumb[data-id="${x}"]`), ids[0]);
   assert.equal((await (await fetch(s.base + '/api/folders')).json()).favorites.count, favCount - 1);
+  // batch 5: History hides the workflow dropdown, so leave it before the next test picks a preset
+  await app(() => { const hv = window.conceptApp.historyView; hv.endSelect(); hv.close(); });
+  await page.waitForFunction(() => !document.body.classList.contains('history-on'));
 });
 
 test('Qwen Edit 2509: three picture slots, 2 and 3 optional; slot 1 alone gives a graph without image2/image3; two refs wire image2', async () => {

@@ -36,15 +36,11 @@ test('menu has no GPU & memory section or profile setting (always Auto); an old 
   const s = await startStack({ data: { 'memory-profile.json': { profile: 'large' } } });
   const p = await open(s);
   try {
-    await p.click('details.menu > summary');
     await p.waitForTimeout(300);
     assert.equal(await p.locator('.memory, .memory-select, #memory, #memory-mount').count(), 0);
-    assert.doesNotMatch(await p.textContent('.menu-pop'), /GPU & memory|Profile|Auto|Under 12 GB|16 GB\+|Refresh/);
-    // batch 3: two plain switches (CPU text encoder, Ollama CPU mode); still no GPU/memory readout or profile
-    assert.deepEqual(await p.$$eval('.menu-pop > *', (els) => els.map((e) => e.id || e.className)), ['btn-import', 'field builder-model', 'menu-switches'], 'batch 4: ComfyUI canvas moved to the top bar toggle');
-    assert.deepEqual(await p.$$eval('.menu-switches input', (els) => els.map((e) => e.id)), ['mem-te-cpu', 'mem-ollama-cpu']);
-    assert.equal(await p.locator('.builder-model small, #builder-model-note').count(), 0, 'builder model is a plain picker');
-    await p.screenshot({ path: path.join(SHOTS, 'memory-menu.png') });
+    // batch 5: the ⋮ menu (Import, builder model, CPU switches) is gone entirely
+    assert.equal(await p.locator('details.menu, .menu-pop, #mem-te-cpu, #mem-ollama-cpu, #builder-model, #btn-import').count(), 0);
+    assert.doesNotMatch(await p.textContent('.topbar'), /GPU & memory|Profile|Under 12 GB|16 GB\+|Refresh/);
     const m = await (await fetch(s.base + '/api/memory')).json();
     assert.deepEqual([m.profile.id, m.profile.source], ['small', 'auto'], '2080 Ti -> small, the stale "large" is ignored');
   } finally { await p.close(); await s.close(); }

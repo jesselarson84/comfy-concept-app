@@ -80,7 +80,8 @@ export class WorkflowPicker {
       els.push(h('div.grp', { dataset: { section: sec.key } }, h(`i.i.${sec.icon}`), sec.label, h('span.cnt', {}, String(count))));
       for (const sub of subs) {
         els.push(h('div.sub', { dataset: { sub: sub.name }, role: 'presentation' }, sub.name));
-        for (const w of sub.rows) els.push(this.#row(w));
+        // Batch 5: models inside a sub section are indented one more step.
+        for (const w of sub.rows) { const r = this.#row(w); r.classList.add('in-sub'); els.push(r); }
       }
       for (const w of rows) els.push(this.#row(w));
     }

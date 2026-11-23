@@ -96,7 +96,7 @@ Tick these off on the **phone** and on the **tablet**:
 3. **Share a screenshot**, using the screenshot preview's Share button: same result.
 4. **Share 3 images at once**: a message says only the first is used, and the first is in the slot.
 5. **Camera capture**: on *FLUX.2 Klein 4B Image Edit*, tap **Camera** in the slot. The camera app opens; take a photo and accept it, and it uploads into the slot. Also test **Pick**: the picker offers Photos/Files plus Camera.
-6. **Import workflow** (menu): the file picker lets you choose a `.json` from Downloads.
+6. *(Import workflow was removed with the ⋮ menu in batch 5.)*
 7. **Save to gallery**: in the viewer, tap Save. A "Saved to Pictures/Comfy UI" message appears and the image is in the gallery. On an Android 8/9 device, the first Save asks for storage permission.
 8. **Share out**: in the viewer, tap Share. The share sheet opens, and sending to e.g. Messages or Drive delivers the real image.
 9. **Keep awake during a batch**: set the screen timeout to 30 s, then start a batch of 10. The screen stays on until the batch finishes, then times out normally.

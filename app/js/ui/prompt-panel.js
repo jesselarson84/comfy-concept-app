@@ -10,7 +10,8 @@
 // lib/presets.js). Lyrics (manifest "open") stay a visible text box.
 import { h, $ } from './dom.js';
 import { randomSeed } from '../lib/seed.js';
-import { parseAspect, aspectKey, sizeFor } from '../lib/aspect.js';
+import { parseAspect, aspectKey, sizeFor, RATIOS } from '../lib/aspect.js';
+import { resolutionApplies, renderSize, finalSize, normRes } from '../lib/resolution.js';
 import { controlFor, formatParam, paramRange, paramActive } from '../lib/presets.js';
 import { infoFor } from '../lib/setting-info.js';
 import { infoButton } from './info-tip.js';
@@ -25,13 +26,14 @@ export class PromptPanel {
     this.el = {
       prompt: $('#prompt'), negToggle: $('#neg-toggle'), negRow: $('#neg-row'), negative: $('#negative'),
       msg: $('#preset-msg'), strengthField: $('#strength-field'), strength: $('#strength'), strengthOut: $('#strength-out'),
-      aspectField: $('#aspect-field'), aspectSize: $('#aspect-size'), ratio: $('#aspect-ratio'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
+      aspectField: $('#aspect-field'), aspectSize: $('#aspect-size'), ratio: $('#aspect-ratio'), orientSeg: $('#orient-seg'), resSelect: $('#res-select'), res: $('#aspect-res'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
       seedField: $('#seed-field'), seedLock: $('#seed-lock'), seed: $('#seed'), seedDice: $('#seed-dice'),
       params: $('#params'), paramsOpen: $('#params-open'), settings: $('#settings'), batchField: $('#batch-field'),
     };
-    this.state = { prompt: '', negative: '', negOn: false, batch: 4, aspect: '1:1', seedMode: 'random', seed: 0, strength: null, steps: {}, expose: {}, params: {}, ...this.#load() };
+    this.state = { prompt: '', negative: '', negOn: false, batch: 4, aspect: '1:1', res: '1k', seedMode: 'random', seed: 0, strength: null, steps: {}, expose: {}, params: {}, ...this.#load() };
     // Saved state from before the ratio chips: square/portrait/landscape -> chips.
     this.state.aspect = aspectKey(parseAspect(this.state.aspect));
+    this.state.res = normRes(this.state.res);
     this.state.params ||= {};
     this.#wire();
     this.#paint();
@@ -48,11 +50,14 @@ export class PromptPanel {
     e.strength.addEventListener('input', () => { s.strength = Number(e.strength.value); e.strengthOut.textContent = s.strength.toFixed(2); this.save(); });
     // Ratio dropdown (1:1 / 4:3 / 3:2 / 16:9); the orientation toggle beside it is separate.
     e.ratio.addEventListener('change', () => { const a = parseAspect(s.aspect); this.setAspect(aspectKey({ ...a, ratio: e.ratio.value })); });
+    // Orientation only swaps the ratio's numbers (16:9 <-> 9:16); it never picks
+    // another ratio. On 1:1 there is nothing to swap, so the buttons are hidden.
     document.querySelectorAll('[data-orient]').forEach((b) => b.addEventListener('click', () => {
       const a = parseAspect(s.aspect);
-      // Flipping orientation on 1:1 picks the most common non-square ratio.
-      this.setAspect(aspectKey({ ratio: a.ratio === '1:1' ? '3:2' : a.ratio, orient: b.dataset.orient }));
+      if (a.ratio === '1:1') return;
+      this.setAspect(aspectKey({ ratio: a.ratio, orient: b.dataset.orient }));
     }));
+    e.res.addEventListener('change', () => { s.res = normRes(e.res.value); this.#paintAspect(); this.save(); });
     const setBatch = (n) => { s.batch = Math.max(1, Math.min(this.maxBatch(), n || 1)); e.batch.value = s.batch; this.save(); };
     this.setBatch = setBatch;
     e.batch.addEventListener('change', () => setBatch(Number(e.batch.value)));
@@ -86,12 +91,32 @@ export class PromptPanel {
   }
 
   #paintAspect() {
-    const a = parseAspect(this.state.aspect);
-    this.el.ratio.value = a.ratio;
+    const a = parseAspect(this.state.aspect), e = this.el;
+    e.ratio.value = a.ratio;
+    // The dropdown shows the ratio the way it will come out: 9:16 in portrait.
+    for (const o of e.ratio.options) {
+      const [x, y] = RATIOS[o.value] || [1, 1];
+      o.textContent = a.orient === 'portrait' && x !== y ? `${Math.min(x, y)}:${Math.max(x, y)}` : `${Math.max(x, y)}:${Math.min(x, y)}`;
+    }
+    e.orientSeg.hidden = a.ratio === '1:1';
     document.querySelectorAll('[data-orient]').forEach((b) => { const on = a.ratio !== '1:1' && b.dataset.orient === a.orient; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+    const res = this.usesResolution();
+    e.resSelect.hidden = !res;
+    e.res.value = this.state.res;
+    const sz = this.renderSize();
+    const shown = res ? finalSize(this.state.aspect, this.state.res, this.wf?.ai?.size?.multiple || 16) : sz;
+    e.aspectSize.textContent = `${shown.width} × ${shown.height}`;
+  }
+
+  /** The 1K / 2K / 4K picker is shown (text-to-image presets with a size block). */
+  usesResolution() { return resolutionApplies(this.wf); }
+
+  /** The size the sampler renders at (before a 4K upscale). */
+  renderSize() {
+    const m = this.wf?.ai?.size?.multiple || 16;
+    if (this.usesResolution()) return this.clampSize(renderSize(this.state.aspect, this.state.res, m));
     const [bw, bh] = this.baseSize();
-    const sz = this.clampSize(sizeFor(this.state.aspect, bw, bh, this.wf?.ai?.size?.multiple || 16));
-    this.el.aspectSize.textContent = `${sz.width} × ${sz.height}`;
+    return this.clampSize(sizeFor(this.state.aspect, bw, bh, m));
   }
 
   /** Keep a size inside the preset's allowed range (AI presets only). */
@@ -321,7 +346,7 @@ export class PromptPanel {
     const s = this.state, c = this.wf?.controls;
     return {
       prompt: s.prompt, negative: c?.negative.length && s.negOn ? s.negative : (c?.negative.length ? '' : undefined),
-      batch: Math.min(s.batch, this.maxBatch()), aspect: s.aspect, seedMode: s.seedMode, seed: s.seed,
+      batch: Math.min(s.batch, this.maxBatch()), aspect: s.aspect, res: this.usesResolution() ? s.res : undefined, seedMode: s.seedMode, seed: s.seed,
       strength: c?.strength.length ? Number(this.el.strength.value) : undefined,
       steps: c?.steps.length && !this.wf?.ai?.params?.steps ? Number(this.state.steps[this.wf.id] ?? c.defaults.steps ?? 4) : undefined,
       expose: s.expose[this.wf?.id] || {},
@@ -336,6 +361,7 @@ export class PromptPanel {
     if (meta.negative) { s.negative = meta.negative; s.negOn = true; }
     if (meta.seed !== undefined && meta.seed !== null) { s.seed = meta.seed; s.seedMode = 'locked'; }
     if (meta.aspect) s.aspect = aspectKey(parseAspect(meta.aspect));
+    if (meta.res) s.res = normRes(meta.res);
     if (meta.strength !== undefined && meta.strength !== null) s.strength = meta.strength;
     if (meta.params && this.wf && meta.workflow === this.wf.id) s.params[this.wf.id] = { ...meta.params };
     this.#paint(); this.save();

@@ -22,19 +22,10 @@
       </button>
       <!-- Node view toggle: ComfyUI's graph in the app (ui/node-view.js); pressed = node view shown -->
       <button id="btn-canvas" class="btn icon toggle-btn" type="button" aria-pressed="false" aria-controls="node-view" aria-label="Node view (ComfyUI canvas)" title="Node view (ComfyUI canvas)"><i class="i i-blocks"></i></button>
-      <button id="btn-history" class="btn icon" type="button" aria-label="History" title="History"><i class="i i-history"></i></button>
-      <details class="menu">
-        <summary class="btn icon" aria-label="More" title="More"><i class="i i-more-vertical"></i></summary>
-        <div class="menu-pop">
-          <button id="btn-import" class="btn"><i class="i i-folder"></i>Import workflow&hellip;</button>
-          <label class="field builder-model"><span class="label">Setup builder model</span><select id="builder-model" aria-label="Setup builder model"></select></label>
-          <div class="menu-switches">
-            <label class="switch"><input type="checkbox" id="mem-te-cpu"> <span>Text encoder on CPU</span></label>
-            <label class="switch"><input type="checkbox" id="mem-ollama-cpu"> <span>Chat on CPU</span></label>
-          </div>
-        </div>
-      </details>
+      <!-- History toggle (batch 5): like the node view, it swaps what is under the top bar -->
+      <button id="btn-history" class="btn icon toggle-btn" type="button" aria-pressed="false" aria-controls="history-host" aria-label="History" title="History"><i class="i i-folder"></i></button>
     </header>
+    <section id="history-host" class="history-host" aria-label="History" hidden></section>
     <div id="picker" class="picker-pop" role="listbox" aria-label="Workflow presets" hidden></div>
     <div id="picker-scrim" class="picker-scrim" hidden></div>
     <div id="banner" class="banner" hidden></div>
@@ -79,10 +70,19 @@
               </select>
               <i class="i i-chevron-down" aria-hidden="true"></i>
             </label>
-            <div class="seg" role="radiogroup" aria-label="Orientation">
+            <div id="orient-seg" class="seg" role="radiogroup" aria-label="Orientation">
               <button type="button" data-orient="portrait" role="radio" aria-label="Portrait"><i class="rect" style="width:10px;height:15px"></i></button>
               <button type="button" data-orient="landscape" role="radio" aria-label="Landscape"><i class="rect" style="width:15px;height:10px"></i></button>
             </div>
+            <!-- Resolution (batch 5): long side 1K / 2K; 4K = 2K render + 2x upscale. Hidden where it does not apply. -->
+            <label id="res-select" class="ratio-select res-select" hidden>
+              <select id="aspect-res" aria-label="Resolution">
+                <option value="1k">1K</option>
+                <option value="2k">2K</option>
+                <option value="4k">4K</option>
+              </select>
+              <i class="i i-chevron-down" aria-hidden="true"></i>
+            </label>
           </div>
         </div>
         <div id="batch-field" class="ctl">
@@ -93,10 +93,10 @@
             <button id="batch-plus" class="btn icon" type="button" aria-label="More"><i class="i i-plus"></i></button>
           </div>
         </div>
-        <div id="seed-field" class="ctl span2" hidden>
+        <div id="seed-field" class="ctl" hidden>
           <span class="label"><span>Seed</span></span>
           <div class="seed full">
-            <label class="switch toggle"><input type="checkbox" id="seed-lock"> <i class="i i-lock"></i><span>Lock</span></label>
+            <label class="switch toggle icon-only" title="Lock seed"><input type="checkbox" id="seed-lock" aria-label="Lock seed"> <i class="i i-lock"></i></label>
             <input id="seed" class="seed-val" type="number" min="0" inputmode="numeric" aria-label="Seed">
             <button id="seed-dice" class="btn icon" type="button" aria-label="New random seed"><i class="i i-shuffle"></i></button>
           </div>
@@ -104,7 +104,7 @@
       </div>
 
       <details id="settings" class="settings" hidden>
-        <summary><i class="i i-sliders-horizontal" aria-hidden="true"></i><span>Settings</span><i class="i i-chevron-down chev" aria-hidden="true"></i></summary>
+        <summary><i class="i i-settings" aria-hidden="true"></i><span>Settings</span><i class="i i-chevron-down chev" aria-hidden="true"></i></summary>
         <div id="params" class="sgrid"></div>
       </details>
     </section>
@@ -122,6 +122,5 @@
       <button id="btn-generate" class="btn primary run" type="button"><i class="i i-play"></i><span id="run-label">Run</span></button>
     </footer>
   </div>
-  <input type="file" id="import-file" accept=".json,application/json" hidden>
 </body>
 </html>
