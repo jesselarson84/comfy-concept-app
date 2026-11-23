@@ -514,9 +514,11 @@ test('3D tiles: lazy stills through ONE offscreen renderer; offscreen tiles are 
 test('3D tiles: the still is cached in IndexedDB (a new page/instance does not re-render)', async () => {
   const r = await page.evaluate(async () => {
     const { ModelThumbs, stats } = await import('/js/ui/model-thumbs.js');
-    const { getThumb } = await import('/js/lib/thumb-cache.js');
-    const file = { filename: 'lazy_00.glb', subfolder: 'concept-app/hist', type: 'output' };
-    const cached = !!(await getThumb('concept-app/hist/lazy_00.glb'));
+    const { getThumb, thumbKey } = await import('/js/lib/thumb-cache.js');
+    // As History lists it: with v (its prompt / entry id), part of the cache key.
+    const h = await (await fetch('/api/history')).json();
+    const file = h.sessions.flatMap((s) => s.entries).flatMap((e) => e.files || []).find((x) => x.filename === 'lazy_00.glb' && x.subfolder === 'concept-app/hist');
+    const cached = !!(await getThumb(thumbKey(file)));
     let calls = 0;
     const mt = new ModelThumbs({ render: async () => { calls++; return null; } });
     const tile = document.createElement('button'); const im = document.createElement('img'); tile.append(im); document.body.append(tile);

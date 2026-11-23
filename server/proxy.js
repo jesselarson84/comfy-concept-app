@@ -71,6 +71,10 @@ export function createComfyProxy(getTarget, prefix = '/comfy', { label = 'ComfyU
       // A redirect to "/x" from ComfyUI must become "/comfy/x" for the browser.
       if (headers.location && headers.location.startsWith('/')) headers.location = prefix + headers.location;
       if (frameable) allowSameOriginFrame(headers);
+      // ComfyUI's /view sends ETag + Last-Modified but no Cache-Control, so browsers
+      // keep files for a guessed while and a reused file name shows the old picture.
+      // no-cache: always ask again (a cheap 304 when the file is unchanged).
+      if (isViewPath(options.path) && !headers['cache-control']) headers['cache-control'] = 'no-cache';
       if (page && req.method === 'GET' && upRes.statusCode === 200 && /text\/html/i.test(headers['content-type'] || '')) return sendInjected(upRes, res, headers, injectHtml);
       res.writeHead(upRes.statusCode, headers);
       upRes.pipe(res);
@@ -124,6 +128,9 @@ export function createComfyProxy(getTarget, prefix = '/comfy', { label = 'ComfyU
 
 /** "/", "/index.html" (with or without a query): ComfyUI's one HTML page. */
 export function isPagePath(p) { return /^\/(index\.html)?(\?.*)?$/.test(p); }
+
+/** "/view?..." (ComfyUI's file endpoint, also /api/view). */
+export function isViewPath(p) { return /^\/(api\/)?view(\?|$)/.test(p); }
 
 /** X-Frame-Options DENY -> SAMEORIGIN; CSP frame-ancestors -> 'self'. */
 export function allowSameOriginFrame(headers) {

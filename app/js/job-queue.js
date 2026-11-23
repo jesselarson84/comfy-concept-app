@@ -10,7 +10,7 @@
 // re-renders from `queue.items`.
 // -----------------------------------------------------------------------------
 import { addHistory, patchHistory } from './api.js';
-import { splitOutputs } from './lib/outputs.js';
+import { splitOutputs, stampOutputs } from './lib/outputs.js';
 
 // The active run is kept in localStorage (batch 3), so if Android drops the page
 // while the app is in the background, the results are caught up from /history
@@ -71,7 +71,7 @@ export class JobQueue extends EventTarget {
       // A graph may have several Save nodes; the first image is "the" image,
       // the rest are kept in extraImages. Non-image outputs (SaveGLB "3d",
       // SaveAudio "audio", SaveVideo animated images) go to files.
-      const { images: imgs, files } = splitOutputs({ x: e.detail.output || {} });
+      const { images: imgs, files } = stampOutputs(splitOutputs({ x: e.detail.output || {} }), it.promptId);
       for (const img of imgs) {
         if (img.type === 'temp' && it.image && it.image.type !== 'temp') continue;
         if (!it.image) it.image = img;
@@ -106,7 +106,7 @@ export class JobQueue extends EventTarget {
     if (!it.image) {
       // Cached results or missed `executed`: outputs are in /history.
       const h = await this.comfy.history(it.promptId).catch(() => null);
-      const { images: imgs, files } = splitOutputs(h?.outputs);
+      const { images: imgs, files } = stampOutputs(splitOutputs(h?.outputs), it.promptId);
       if (imgs.length) { it.image = imgs[0]; it.extraImages = imgs.slice(1); }
       if (!it.files.length) it.files = files;
     }

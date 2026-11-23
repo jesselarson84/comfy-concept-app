@@ -58,7 +58,7 @@ export function historyOutputs(history) {
     for (const e of s.entries) {
       for (const f of [...(e.images || []), ...(e.files || [])]) {
         if (!f || (f.type || 'output') !== 'output' || !safeFileName(f.filename) || !safeSubfolder(f.subfolder ?? '')) continue;
-        list.push({ filename: f.filename, subfolder: f.subfolder || '', type: 'output', kind: fileKind(f) === 'file' ? 'image' : fileKind(f), mtime: e.updatedAt || e.createdAt || 0 });
+        list.push({ filename: f.filename, subfolder: f.subfolder || '', type: 'output', kind: fileKind(f) === 'file' ? 'image' : fileKind(f), mtime: e.updatedAt || e.createdAt || 0, v: String(e.promptId || e.id || '') });
       }
     }
   }
@@ -162,7 +162,7 @@ export function scanAppFolder(outputDir, outputSubfolder, { max = 5000 } = {}) {
         const f = { filename: d.name, subfolder: rel ? `${outputSubfolder}/${rel}` : outputSubfolder, type: 'output' };
         const k = IMAGE_EXT.test(d.name) ? 'image' : fileKind(f);
         if (k === 'file') continue;
-        out.push({ ...f, kind: k, mtime: st.mtimeMs, size: st.size });
+        out.push({ ...f, kind: k, mtime: st.mtimeMs, size: st.size, v: String(Math.round(st.mtimeMs)) });
       }
     }
   };
