@@ -150,7 +150,7 @@ export class PromptPanel {
       const av = wf.availability;
       if (av?.status === 'unavailable') msgs.push(`Unavailable: ${av.reason}`);
       if (c?.message && !wf.ai) msgs.push(c.message);
-      if (c && !wf.ai && !wf.user) msgs.push(...c.warnings);
+      if (c && !wf.ai && !wf.user && !wf.graph) msgs.push(...c.warnings);
     }
     e.msg.textContent = msgs.join(' ');
     e.msg.hidden = !msgs.length;

@@ -43,6 +43,7 @@ import { lockControls } from './ui/form-lock.js';
 import { ConnectionBanner } from './lib/conn-banner.js';
 import { infoFor } from './lib/setting-info.js';
 import { NodeView } from './ui/node-view.js';
+import { SavePresetSheet } from './ui/save-preset.js';
 import { textEncoderOnCpu, tiledVaeDecode, hasVaeDecode, wantTiledDecode, isOom } from './lib/memory-options.js';
 import { withUpscale, pickUpscaleModel, RESOLUTIONS } from './lib/resolution.js';
 
@@ -74,6 +75,21 @@ const nodeView = new NodeView({
   beforeShow: async () => { if (historyView.on) await leaveHistory(); },
   onChange: () => { picker.close(); paintThumbs(); },
 });
+// Save as preset (node view): the canvas graph into a picker section.
+const savePreset = new SavePresetSheet({
+  getGraph: () => nodeView.currentGraph(),
+  target: () => current,
+  save: async ({ mode, id, name, group, subgroup, workflow }) => {
+    const g = mode === 'update'
+      ? await api.updateGraphPreset(id, { name, group, subgroup, workflow })
+      : await api.saveGraphPreset({ name, group, subgroup, workflow, from: current?.id });
+    // The canvas already shows this graph: no reload there; the form switches to the saved preset.
+    nodeView.loadedId = g.id;
+    await loadWorkflows(g.id, { remember: true });
+    return g;
+  },
+});
+$('#btn-save-graph').addEventListener('click', () => { if (isLocked()) return busy(); savePreset.open(); });
 /** Close History without leaving a stale Back entry, so the node view can take its place. */
 async function leaveHistory() {
   if (historyView.selecting) { historyView.endSelect(); await afterBack(); }
@@ -184,7 +200,9 @@ async function useAsReference(img) {
 const picker = new WorkflowPicker({
   onPick: (id) => (isLocked() ? busy() : selectPreset(id)),
   onRename: async (w, name) => { try { await api.renameUserPreset(w.user.id, name); toast('Renamed'); await loadWorkflows(current?.id, { fresh: false }); } catch (e) { toast(e.message, 6000); } },
-  onDelete: async (w) => { try { await api.deleteUserPreset(w.user.id); toast(`Deleted "${w.label}"`); await loadWorkflows(current?.id === w.id ? undefined : current?.id); } catch (e) { toast(e.message, 6000); } },
+  // Presets saved from the node view: rename and move to another section in one go.
+  onEditGraph: async (w, patch) => { try { const g = await api.updateGraphPreset(w.graph.id, patch); toast(`Saved "${g.name}"`); await loadWorkflows(current?.id, { fresh: false }); } catch (e) { toast(e.message, 6000); } },
+  onDelete: async (w) => { try { await (w.graph ? api.deleteGraphPreset(w.graph.id) : api.deleteUserPreset(w.user.id)); toast(`Deleted "${w.label}"`); await loadWorkflows(current?.id === w.id ? undefined : current?.id); } catch (e) { toast(e.message, 6000); } },
 });
 const usable = isUsable;
 // remember: true only when keepId is a real user choice (just imported / saved).
@@ -517,5 +535,5 @@ async function start() {
 }
 start();
 // For tests and poking around from DevTools.
-window.conceptApp = { maskSlot, modelThumbs, historyView, isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, chat, versions, picker, selectPreset, loadWorkflows,
+window.conceptApp = { savePreset, maskSlot, modelThumbs, historyView, isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, chat, versions, picker, selectPreset, loadWorkflows,
   lock, resume, connBanner, nodeView, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };

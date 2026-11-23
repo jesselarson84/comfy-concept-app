@@ -122,6 +122,15 @@ export class NodeView {
     } catch (e) { toast('Could not open the preset graph: ' + e.message, 6000); }
   }
 
+  /** The graph on the canvas right now, API format (what "Queue" would send). */
+  async currentGraph() {
+    const app = await this.#comfyApp();
+    if (!app || typeof app.graphToPrompt !== 'function') throw new Error('ComfyUI canvas is not ready');
+    const { output } = await app.graphToPrompt();
+    // Copy into this page (the iframe's objects stay there).
+    return JSON.parse(JSON.stringify(output || {}));
+  }
+
   /** ComfyUI's app object inside the iframe, once its frontend has started and restored its tabs (up to ~20 s). */
   async #comfyApp() {
     for (let i = 0; i < 80; i++) {

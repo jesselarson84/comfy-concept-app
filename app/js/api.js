@@ -19,6 +19,10 @@ export const setBuilderModel = (model) => req('PUT', '/api/builder/config', { mo
 export const saveUserPreset = (body) => req('POST', '/api/user-presets', body);
 export const renameUserPreset = (id, name) => req('PATCH', `/api/user-presets/${encodeURIComponent(id)}`, { name });
 export const deleteUserPreset = (id) => req('DELETE', `/api/user-presets/${encodeURIComponent(id)}`);
+// Save as preset (node view): graphs saved into a picker section.
+export const saveGraphPreset = (body) => req('POST', '/api/graph-presets', body);
+export const updateGraphPreset = (id, patch) => req('PATCH', `/api/graph-presets/${encodeURIComponent(id)}`, patch);
+export const deleteGraphPreset = (id) => req('DELETE', `/api/graph-presets/${encodeURIComponent(id)}`);
 export function importWorkflow(file) {
   const fd = new FormData();
   fd.append('file', file, file.name);

@@ -100,7 +100,7 @@ export class WorkflowPicker {
       onclick: (e) => { if (e.target.closest('.edit')) return; if (off) { toast(reason || 'Unavailable', 6000); return; } this.close(); this.onPick(w.id); },
       onkeydown: (e) => { if (e.key === 'Enter' && !off) { this.close(); this.onPick(w.id); } },
     }, h('span.nm', {}, rowName(w)), this.current === w.id ? h('i.i.i-check') : null,
-    w.user ? h('button.edit.btn.text', { type: 'button', 'aria-label': `Rename or delete ${w.label}`, onclick: () => { this.editing = w.id; this.render(); } }, h('i.i.i-settings')) : null);
+    w.user || w.graph ? h('button.edit.btn.text', { type: 'button', 'aria-label': `${w.graph ? 'Rename, move' : 'Rename'} or delete ${w.label}`, onclick: () => { this.editing = w.id; this.render(); } }, h('i.i.i-settings')) : null);
     row.classList.toggle('on', this.current === w.id);
     row.classList.toggle('dis', off);
     return row;
@@ -108,16 +108,32 @@ export class WorkflowPicker {
 
   #editRow(w) {
     const input = h('input.input', { type: 'text', value: w.label, maxlength: 60, 'aria-label': 'Preset name' });
-    const save = async () => { const n = input.value.trim(); if (!n) return toast('Name cannot be empty'); await this.onRename(w, n); this.editing = null; if (!this.pop.hidden) this.render(); };
+    // Presets saved from the node view can also move to another section / sub section.
+    let place = null;
+    if (w.graph) {
+      const opts = SECTIONS.flatMap((s) => (SUBGROUPS[s.key]?.length ? SUBGROUPS[s.key].map((sub) => [`${s.key}|${sub}`, `${s.label} › ${sub}`]) : [[`${s.key}|`, s.label]]));
+      place = h('select.input.place', { 'aria-label': 'Section' }, ...opts.map(([v, t]) => h('option', { value: v }, t)));
+      place.value = `${sectionOf(w)}|${w.subgroup || ''}`;
+      if (!place.value) place.selectedIndex = opts.findIndex(([v]) => v.startsWith(sectionOf(w) + '|'));
+    }
+    const save = async () => {
+      const n = input.value.trim(); if (!n) return toast('Name cannot be empty');
+      if (w.graph) { const [group, sub] = place.value.split('|'); await this.onEditGraph?.(w, { name: n, group, subgroup: sub || null }); }
+      else await this.onRename(w, n);
+      this.editing = null; if (!this.pop.hidden) this.render();
+    };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { this.editing = null; this.render(); } });
-    setTimeout(() => input.focus(), 0);
+    // Graph presets: no keyboard on open (found on the phone: it covered the
+    // "Move to" row); just bring both rows into view. Builder setups: rename only.
+    setTimeout(() => { if (w.graph) this.pop.querySelector('.ent-edit-wrap')?.scrollIntoView({ block: 'nearest' }); else input.focus(); }, 0);
     let confirmDel = false;
     const del = h('button.btn.text.danger-text', { type: 'button', onclick: async () => {
       if (!confirmDel) { confirmDel = true; del.textContent = 'Tap again to delete'; return; }
       await this.onDelete(w); this.editing = null; if (!this.pop.hidden) this.render();
     } }, h('i.i.i-trash-2'), 'Delete');
-    return h('div.ent.editing', { dataset: { preset: w.id } }, input,
+    const row = h('div.ent.editing', { dataset: { preset: w.id } }, input,
       h('button.btn.text', { type: 'button', onclick: save }, h('i.i.i-check'), 'Save'), del,
       h('button.btn.text', { type: 'button', 'aria-label': 'Cancel', onclick: () => { this.editing = null; this.render(); } }, h('i.i.i-x')));
+    return place ? h('div.ent-edit-wrap', { dataset: { preset: w.id } }, row, h('div.ent.editing.place-row', {}, h('span.muted', {}, 'Move to'), place)) : row;
   }
 }

@@ -20,6 +20,8 @@
       <button id="preset-btn" class="btn picker" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Workflow preset">
         <i class="i i-workflow"></i><span class="crumb" id="preset-crumb"></span><span class="name" id="preset-name">Loading&hellip;</span><i class="i i-chevron-down"></i>
       </button>
+      <!-- Save as preset (node view only): the canvas graph into a picker section (ui/save-preset.js) -->
+      <button id="btn-save-graph" class="btn save-graph" type="button" aria-label="Save as preset" title="Save as preset"><i class="i i-save"></i><span>Save preset</span></button>
       <!-- Node view toggle: ComfyUI's graph in the app (ui/node-view.js); pressed = node view shown -->
       <button id="btn-canvas" class="btn icon toggle-btn" type="button" aria-pressed="false" aria-controls="node-view" aria-label="Node view (ComfyUI canvas)" title="Node view (ComfyUI canvas)"><i class="i i-blocks"></i></button>
       <!-- History toggle (batch 5): like the node view, it swaps what is under the top bar -->
