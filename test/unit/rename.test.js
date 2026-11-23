@@ -1,4 +1,4 @@
-﻿// Batch 1 follow-up names: "Comfy UI" save folder, "ComfyUI canvas" menu item,
+// Batch 1 follow-up names: "Comfy UI" save folder, "ComfyUI canvas" menu item,
 // no "App presets" section, ratio dropdown in the page.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -36,7 +36,7 @@ test('picker has no App presets section; aspect is a dropdown next to the orient
   assert.doesNotMatch(html, /data-ratio=/);
   assert.match(html, /data-orient="portrait"[\s\S]*data-orient="landscape"/);
   assert.match(html, /id="aspect-size"/);
-  assert.match(read('app/sw.js'), /const VERSION = 'shell-v21';/); // /download/ (APK) bypasses the service worker
+  assert.match(read('app/sw.js'), /const VERSION = 'shell-v22';/); // batch 7: Import sheet + recorder
   assert.match(read('app/sw.js'), /'\/js\/lib\/resolution\.js'/);
   assert.match(read('app/sw.js'), /'\/js\/lib\/preset-choice\.js'/);
   assert.match(read('app/sw.js'), /'\/js\/lib\/legacy-presets\.js'/);

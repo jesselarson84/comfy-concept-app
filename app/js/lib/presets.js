@@ -112,7 +112,7 @@ export function validatePreset(id, file) {
   return {
     ok: true, id,
     manifest: {
-      kind, promptDefault: m.promptDefault || '',
+      kind, promptDefault: m.promptDefault || '', assistant: typeof m.assistant === 'string' ? m.assistant : '',
       group: m.group, label: m.label.trim(), menuPath: m.menuPath || `${m.group}/${m.label}`, source: String(m.source || ''),
       ...menuParts(m.group, m.menuPath, m.label.trim()), menuOrder: Number.isFinite(m.menuOrder) ? m.menuOrder : 999,
       output: m.output, description: String(m.description || ''), params, size: m.size || null,

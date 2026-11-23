@@ -41,8 +41,8 @@ test('picker: Models tab by default with the model sections; Workflows tab lists
   assert.equal(await tab(), 'workflow');
   assert.deepEqual(await sections(), ['Textures', 'Concept', 'VFX']);
   const rows = await page.$$eval('#picker .ent .nm', (n) => n.map((x) => x.textContent));
-  assert.deepEqual(rows, ['Upscale Texture', 'Remove Lighting', 'Make Seamless', 'Grunge Map', 'Concept Looks (Edges)', 'Concept Looks (Depth Pass)', 'Flipbook Sheet']);
-  assert.equal(await page.$eval('#picker .picker-tab[data-tab="workflow"] .cnt', (c) => c.textContent), '7');
+  assert.deepEqual(rows, ['Photo to Texture', 'Upscale Texture', 'Remove Lighting', 'Make Seamless', 'Grunge Map', 'PBR Maps', 'PBR Maps (CHORD)', 'Depth + Normal', 'Concept Looks (Edges)', 'Concept Looks (Depth)', 'Flipbook Sheet']);
+  assert.equal(await page.$eval('#picker .picker-tab[data-tab="workflow"] .cnt', (c) => c.textContent), '11');
   await shot('workflows');
   // tabs stay put while the list scrolls
   assert.equal(await page.$eval('#picker .picker-tabs', (t) => getComputedStyle(t).position), 'sticky');

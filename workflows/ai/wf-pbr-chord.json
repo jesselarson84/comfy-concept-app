@@ -1,0 +1,651 @@
+{
+ "preset": {
+  "kind": "workflow",
+  "group": "Textures",
+  "label": "PBR Maps (CHORD)",
+  "menuPath": "Textures/PBR Maps (CHORD)",
+  "menuOrder": 6,
+  "source": "Ubisoft La Forge CHORD (ComfyUI-Chord nodes, chord_v1.safetensors). Research-only license.",
+  "output": "image",
+  "description": "AI material estimation with Ubisoft's CHORD: base colour (lighting removed), normal, height, roughness and metalness from one texture, plus AO and an Unreal ORM map. Best quality, but the license is research-only: personal work, not client or broadcast work.",
+  "params": {
+   "green": {
+    "node": "10",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Normal for",
+    "control": "seg",
+    "labels": {
+     "false": "OpenGL",
+     "true": "Unreal (DirectX)"
+    },
+    "info": "Which way the normal map's green channel points. Unreal uses DirectX; Blender, Substance, Unity and glTF use OpenGL."
+   }
+  },
+  "maxBatch": 4,
+  "vram": {
+   "estMB": 7000,
+   "basis": "CHORD (Stable Diffusion 2.1 based) at 1024 x 1024"
+  },
+  "info": {
+   "image": "A texture or photo of a surface, front-on. CHORD works at 1024 x 1024 and resizes back to the picture's size."
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "image": "example.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Texture / photo #image"
+   }
+  },
+  "2": {
+   "inputs": {
+    "ckpt_name": "chord_v1.safetensors"
+   },
+   "class_type": "ChordLoadModel",
+   "_meta": {
+    "title": "CHORD: load model"
+   }
+  },
+  "3": {
+   "inputs": {
+    "chord_model": [
+     "2",
+     0
+    ],
+    "image": [
+     "1",
+     0
+    ]
+   },
+   "class_type": "ChordMaterialEstimation",
+   "_meta": {
+    "title": "CHORD: material estimation"
+   }
+  },
+  "4": {
+   "inputs": {
+    "normal": [
+     "3",
+     1
+    ]
+   },
+   "class_type": "ChordNormalToHeight",
+   "_meta": {
+    "title": "CHORD: normal to height"
+   }
+  },
+  "5": {
+   "inputs": {
+    "image": [
+     "1",
+     0
+    ]
+   },
+   "class_type": "GetImageSize",
+   "_meta": {
+    "title": "Size"
+   }
+  },
+  "6": {
+   "inputs": {
+    "expression": "a",
+    "values.a": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Size: width"
+   }
+  },
+  "7": {
+   "inputs": {
+    "expression": "a",
+    "values.a": [
+     "5",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Size: height"
+   }
+  },
+  "8": {
+   "inputs": {
+    "image": [
+     "3",
+     1
+    ]
+   },
+   "class_type": "SplitImageChannels",
+   "_meta": {
+    "title": "Normal: channels"
+   }
+  },
+  "9": {
+   "inputs": {
+    "image": [
+     "8",
+     1
+    ]
+   },
+   "class_type": "ImageInvert",
+   "_meta": {
+    "title": "Normal: green flipped"
+   }
+  },
+  "10": {
+   "inputs": {
+    "switch": true,
+    "on_false": [
+     "8",
+     1
+    ],
+    "on_true": [
+     "9",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "Normal convention (DirectX / OpenGL)"
+   }
+  },
+  "11": {
+   "inputs": {
+    "width": [
+     "6",
+     1
+    ],
+    "height": [
+     "7",
+     1
+    ],
+    "batch_size": 1,
+    "color": 16711680
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "Normal map: red: colour"
+   }
+  },
+  "12": {
+   "inputs": {
+    "image1": [
+     "8",
+     0
+    ],
+    "image2": [
+     "11",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "multiply"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Normal map: red"
+   }
+  },
+  "13": {
+   "inputs": {
+    "width": [
+     "6",
+     1
+    ],
+    "height": [
+     "7",
+     1
+    ],
+    "batch_size": 1,
+    "color": 65280
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "Normal map: green: colour"
+   }
+  },
+  "14": {
+   "inputs": {
+    "image1": [
+     "10",
+     0
+    ],
+    "image2": [
+     "13",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "multiply"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Normal map: green"
+   }
+  },
+  "15": {
+   "inputs": {
+    "image1": [
+     "12",
+     0
+    ],
+    "image2": [
+     "14",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "screen"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Normal map: R+G"
+   }
+  },
+  "16": {
+   "inputs": {
+    "width": [
+     "6",
+     1
+    ],
+    "height": [
+     "7",
+     1
+    ],
+    "batch_size": 1,
+    "color": 255
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "Normal map: blue: colour"
+   }
+  },
+  "17": {
+   "inputs": {
+    "image1": [
+     "8",
+     2
+    ],
+    "image2": [
+     "16",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "multiply"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Normal map: blue"
+   }
+  },
+  "18": {
+   "inputs": {
+    "image1": [
+     "15",
+     0
+    ],
+    "image2": [
+     "17",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "screen"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Normal map: R+G+B"
+   }
+  },
+  "19": {
+   "inputs": {
+    "image": [
+     "4",
+     0
+    ],
+    "blur_radius": 8,
+    "sigma": 4
+   },
+   "class_type": "ImageBlur",
+   "_meta": {
+    "title": "AO: local average"
+   }
+  },
+  "20": {
+   "inputs": {
+    "image": [
+     "19",
+     0
+    ]
+   },
+   "class_type": "ImageInvert",
+   "_meta": {
+    "title": "AO: cavity: invert"
+   }
+  },
+  "21": {
+   "inputs": {
+    "image1": [
+     "4",
+     0
+    ],
+    "image2": [
+     "20",
+     0
+    ],
+    "blend_factor": 0.5,
+    "blend_mode": "normal"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "AO: cavity"
+   }
+  },
+  "22": {
+   "inputs": {
+    "images": [
+     "21",
+     0
+    ],
+    "factor": 2
+   },
+   "class_type": "AdjustContrast",
+   "_meta": {
+    "title": "AO: deepen"
+   }
+  },
+  "23": {
+   "inputs": {
+    "images": [
+     "22",
+     0
+    ],
+    "factor": 2
+   },
+   "class_type": "AdjustBrightness",
+   "_meta": {
+    "title": "AO: flat = white"
+   }
+  },
+  "24": {
+   "inputs": {
+    "width": [
+     "6",
+     1
+    ],
+    "height": [
+     "7",
+     1
+    ],
+    "batch_size": 1,
+    "color": 16777215
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "AO: white"
+   }
+  },
+  "25": {
+   "inputs": {
+    "image1": [
+     "24",
+     0
+    ],
+    "image2": [
+     "23",
+     0
+    ],
+    "blend_factor": 0.8,
+    "blend_mode": "normal"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "AO: strength"
+   }
+  },
+  "26": {
+   "inputs": {
+    "width": [
+     "6",
+     1
+    ],
+    "height": [
+     "7",
+     1
+    ],
+    "batch_size": 1,
+    "color": 16711680
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): red: colour"
+   }
+  },
+  "27": {
+   "inputs": {
+    "image1": [
+     "25",
+     0
+    ],
+    "image2": [
+     "26",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "multiply"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): red"
+   }
+  },
+  "28": {
+   "inputs": {
+    "width": [
+     "6",
+     1
+    ],
+    "height": [
+     "7",
+     1
+    ],
+    "batch_size": 1,
+    "color": 65280
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): green: colour"
+   }
+  },
+  "29": {
+   "inputs": {
+    "image1": [
+     "3",
+     2
+    ],
+    "image2": [
+     "28",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "multiply"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): green"
+   }
+  },
+  "30": {
+   "inputs": {
+    "image1": [
+     "27",
+     0
+    ],
+    "image2": [
+     "29",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "screen"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): R+G"
+   }
+  },
+  "31": {
+   "inputs": {
+    "width": [
+     "6",
+     1
+    ],
+    "height": [
+     "7",
+     1
+    ],
+    "batch_size": 1,
+    "color": 255
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): blue: colour"
+   }
+  },
+  "32": {
+   "inputs": {
+    "image1": [
+     "3",
+     3
+    ],
+    "image2": [
+     "31",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "multiply"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): blue"
+   }
+  },
+  "33": {
+   "inputs": {
+    "image1": [
+     "30",
+     0
+    ],
+    "image2": [
+     "32",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "screen"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): R+G+B"
+   }
+  },
+  "34": {
+   "inputs": {
+    "filename_prefix": "concept-app/chord_basecolor",
+    "images": [
+     "3",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save base colour"
+   }
+  },
+  "35": {
+   "inputs": {
+    "filename_prefix": "concept-app/chord_normal",
+    "images": [
+     "18",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save normal"
+   }
+  },
+  "36": {
+   "inputs": {
+    "filename_prefix": "concept-app/chord_height",
+    "images": [
+     "4",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save height"
+   }
+  },
+  "37": {
+   "inputs": {
+    "filename_prefix": "concept-app/chord_roughness",
+    "images": [
+     "3",
+     2
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save roughness"
+   }
+  },
+  "38": {
+   "inputs": {
+    "filename_prefix": "concept-app/chord_metalness",
+    "images": [
+     "3",
+     3
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save metalness"
+   }
+  },
+  "39": {
+   "inputs": {
+    "filename_prefix": "concept-app/chord_ao",
+    "images": [
+     "25",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save AO"
+   }
+  },
+  "40": {
+   "inputs": {
+    "filename_prefix": "concept-app/chord_orm",
+    "images": [
+     "33",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save ORM"
+   }
+  }
+ }
+}

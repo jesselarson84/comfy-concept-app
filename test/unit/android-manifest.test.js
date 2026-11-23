@@ -21,6 +21,9 @@ export const ALLOWED = [
   'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
   'android.permission.POST_NOTIFICATIONS',
   'android.permission.VIBRATE',
+  // batch 7: recording a voice line (granted to the server's page only, MainActivity.onPermissionRequest)
+  'android.permission.RECORD_AUDIO',
+  'android.permission.MODIFY_AUDIO_SETTINGS',
 ];
 
 export function permissions(xml) {
@@ -40,7 +43,7 @@ function check(xml, label) {
   assert.match(svc, /android:exported="false"/, `${label}: RunService is not exported`);
 }
 
-test('source AndroidManifest: only INTERNET, storage (<= API 28), FOREGROUND_SERVICE + DATA_SYNC, POST_NOTIFICATIONS, VIBRATE', () => {
+test('source AndroidManifest: only INTERNET, storage (<= API 28), FOREGROUND_SERVICE + DATA_SYNC, POST_NOTIFICATIONS, VIBRATE, RECORD_AUDIO + MODIFY_AUDIO_SETTINGS', () => {
   check(fs.readFileSync(SRC, 'utf8'), 'source');
 });
 

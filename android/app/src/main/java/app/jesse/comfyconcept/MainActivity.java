@@ -69,6 +69,7 @@ public class MainActivity extends Activity {
     private static final int REQ_FILE_CHOOSER = 1;
     private static final int REQ_STORAGE = 2;
     private static final int REQ_NOTIFICATIONS = 3;
+    private static final int REQ_MICROPHONE = 4;
     private static final int BG_COLOR = 0xFF171718; // = @color/app_bg = top bar / action bar colour in app/styles.css
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -86,6 +87,7 @@ public class MainActivity extends Activity {
     private Uri cameraUri;
 
     private Runnable pendingStorageAction;
+    private android.webkit.PermissionRequest pendingMicRequest; // the page's microphone ask, waiting for RECORD_AUDIO
     private Intent pendingIntent;          // an intent waiting for the first-run address dialog
     private AlertDialog addressDialog;
     private String lastFailedUrl;
@@ -465,6 +467,33 @@ public class MainActivity extends Activity {
                 return false;
             }
         }
+
+        /**
+         * Batch 7: the page asks for the microphone (recording a voice line). Granted
+         * only for the server's own page and only the microphone; Android's
+         * RECORD_AUDIO is asked first when the app does not have it yet.
+         */
+        @Override
+        public void onPermissionRequest(final android.webkit.PermissionRequest request) {
+            boolean mic = false;
+            for (String r : request.getResources()) if (android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) mic = true;
+            if (!mic || !ServerConfig.isServerUrl(request.getOrigin().toString(), server)) {
+                request.deny();
+                return;
+            }
+            final String[] grant = {android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE};
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                request.grant(grant);
+                return;
+            }
+            pendingMicRequest = request;
+            requestPermissions(new String[] {Manifest.permission.RECORD_AUDIO}, REQ_MICROPHONE);
+        }
+
+        @Override
+        public void onPermissionRequestCanceled(android.webkit.PermissionRequest request) {
+            if (pendingMicRequest == request) pendingMicRequest = null;
+        }
     }
 
     // ---------------------------------------------------------------- error screen
@@ -586,24 +615,68 @@ public class MainActivity extends Activity {
 
     private void launchFileChooser(WebChromeClient.FileChooserParams params) {
         String[] accept = params.getAcceptTypes();
-        boolean imagesOnly = acceptsOnlyImages(accept);
+        boolean any = accept == null || accept.length == 0 || allEmpty(accept);
+        boolean imagesOnly = acceptsOnly(accept, "image/");
+        boolean videosOnly = acceptsOnly(accept, "video/");
+        // Batch 7: the Import button asks for "image/*,video/*" (a photo or a video).
+        boolean media = !imagesOnly && !videosOnly && acceptsOnlyMedia(accept);
         boolean multiple = params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE;
-        Intent camera = imagesOnly || accept == null || accept.length == 0 || allEmpty(accept) ? cameraIntent() : null;
+        Intent photo = imagesOnly || media || any ? captureIntent(MediaStore.ACTION_IMAGE_CAPTURE, ".jpg") : null;
+        // one capture at a time (one output file): video when the page asks for video only
+        Intent capture = videosOnly ? captureIntent(MediaStore.ACTION_VIDEO_CAPTURE, ".mp4") : photo;
 
-        // <input capture>: straight to the camera (the web app's "Camera" button).
-        if (params.isCaptureEnabled() && camera != null) {
-            startActivityForResult(camera, REQ_FILE_CHOOSER);
+        // <input capture>: straight to the camera (the web app's "Camera" / "Record video" buttons).
+        if (params.isCaptureEnabled() && capture != null) {
+            startActivityForResult(capture, REQ_FILE_CHOOSER);
             return;
         }
         Intent pick = new Intent(Intent.ACTION_GET_CONTENT);
         pick.addCategory(Intent.CATEGORY_OPENABLE);
         // Non-image types (the .json workflow import) use */*: many providers
         // report .json files as octet-stream, which a strict filter would hide.
-        pick.setType(imagesOnly ? "image/*" : "*/*");
+        if (imagesOnly) pick.setType("image/*");
+        else if (videosOnly) pick.setType("video/*");
+        else if (media) {
+            pick.setType("*/*");
+            pick.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {"image/*", "video/*"});
+        } else pick.setType("*/*");
         if (multiple) pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
         Intent chooser = Intent.createChooser(pick, getString(R.string.file_chooser_title));
-        if (camera != null) chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] {camera});
+        if (capture != null) chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] {capture});
         startActivityForResult(chooser, REQ_FILE_CHOOSER);
+    }
+
+    /** Every accept entry starts with prefix ("image/", "video/"); image extensions count as image/. */
+    private static boolean acceptsOnly(String[] accept, String prefix) {
+        if ("image/".equals(prefix)) return acceptsOnlyImages(accept);
+        if (accept == null) return false;
+        boolean any = false;
+        for (String raw : accept) {
+            if (raw == null) continue;
+            for (String part : raw.split(",")) {
+                String a = part.trim().toLowerCase(Locale.ROOT);
+                if (a.isEmpty()) continue;
+                any = true;
+                if (!a.startsWith(prefix)) return false;
+            }
+        }
+        return any;
+    }
+
+    /** Only image/* and video/* entries (the Import button). */
+    private static boolean acceptsOnlyMedia(String[] accept) {
+        if (accept == null) return false;
+        boolean any = false;
+        for (String raw : accept) {
+            if (raw == null) continue;
+            for (String part : raw.split(",")) {
+                String a = part.trim().toLowerCase(Locale.ROOT);
+                if (a.isEmpty()) continue;
+                any = true;
+                if (!a.startsWith("image/") && !a.startsWith("video/")) return false;
+            }
+        }
+        return any;
     }
 
     private static boolean allEmpty(String[] accept) {
@@ -628,9 +701,9 @@ public class MainActivity extends Activity {
         return any;
     }
 
-    /** ACTION_IMAGE_CAPTURE writing into cache/camera/ through CacheFileProvider, or null if no camera app. */
-    private Intent cameraIntent() {
-        Intent i = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+    /** ACTION_IMAGE_CAPTURE / ACTION_VIDEO_CAPTURE writing into cache/camera/ through CacheFileProvider, or null if no camera app. */
+    private Intent captureIntent(String action, String ext) {
+        Intent i = new Intent(action);
         List<ResolveInfo> handlers = getPackageManager().queryIntentActivities(i, PackageManager.MATCH_DEFAULT_ONLY);
         if (handlers == null || handlers.isEmpty()) return null;
         File dir = CacheFileProvider.dir(this, CacheFileProvider.DIR_CAMERA);
@@ -639,7 +712,7 @@ public class MainActivity extends Activity {
             long cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000;
             for (File f : old) if (f.lastModified() < cutoff) f.delete();
         }
-        cameraFile = new File(dir, "capture_" + System.currentTimeMillis() + ".jpg");
+        cameraFile = new File(dir, "capture_" + System.currentTimeMillis() + ext);
         cameraUri = CacheFileProvider.uriFor(CacheFileProvider.DIR_CAMERA, cameraFile.getName());
         int flags = Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION;
         i.putExtra(MediaStore.EXTRA_OUTPUT, cameraUri);
@@ -932,6 +1005,14 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == REQ_NOTIFICATIONS) return; // denied = the run goes on without a notification
+        if (requestCode == REQ_MICROPHONE) {
+            android.webkit.PermissionRequest r = pendingMicRequest;
+            pendingMicRequest = null;
+            if (r == null) return;
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) r.grant(new String[] {android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+            else r.deny();
+            return;
+        }
         if (requestCode != REQ_STORAGE) {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
             return;

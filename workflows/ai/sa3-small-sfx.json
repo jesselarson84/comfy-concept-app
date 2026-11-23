@@ -1,0 +1,175 @@
+{
+ "preset": {
+  "kind": "model",
+  "group": "Audio",
+  "label": "Stable Audio 3 SFX",
+  "menuPath": "Audio/Stable Audio 3 SFX",
+  "menuOrder": 3,
+  "source": "Stability AI Stable Audio 3 Small SFX (Comfy-Org/stable-audio-3 repackage), graph as ComfyUI's Stable Audio 3 template; settings from the upstream small-sfx example (8 steps, cfg 1). Stability AI Community License.",
+  "output": "audio",
+  "description": "Sound effects and short ambiences from a description (Stable Audio 3 Small SFX): impacts, whooshes, doors, machines, room tone. Up to 2 minutes. Weaker on music and very specific sounds.",
+  "params": {
+   "seconds": {
+    "node": "5",
+    "input": "seconds",
+    "type": "number",
+    "min": 1,
+    "max": 120,
+    "step": 0.5,
+    "default": 6,
+    "label": "Length",
+    "control": "slider",
+    "format": "s",
+    "info": "Length of the sound in seconds (up to 2 minutes). Short one-shots: 1-5 s; ambiences: 20 s or more."
+   },
+   "steps": {
+    "node": "6",
+    "input": "steps",
+    "type": "int",
+    "min": 4,
+    "max": 16,
+    "default": 8,
+    "label": "Steps",
+    "control": "stepper",
+    "info": "Refinement passes. The model is made for about 8."
+   }
+  },
+  "maxBatch": 8,
+  "vram": {
+   "estMB": 6000,
+   "basis": "0.6B model (2.3 GB fp32) + T5Gemma encoder (1.2 GB)"
+  },
+  "files": [
+   {
+    "folder": "checkpoints",
+    "file": "stable_audio_3_small_sfx.safetensors"
+   },
+   {
+    "folder": "text_encoders",
+    "file": "t5gemma_b_b_ul2.safetensors"
+   }
+  ],
+  "info": {
+   "prompt": "Describe the sound and where it happens: \"heavy metal door slam in a concrete hallway\", \"distant thunder rumble, light rain\", \"sci-fi UI beep, short\". Raise Batch for variations to pick from."
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "ckpt_name": "stable_audio_3_small_sfx.safetensors"
+   },
+   "class_type": "CheckpointLoaderSimple",
+   "_meta": {
+    "title": "Load Checkpoint"
+   }
+  },
+  "2": {
+   "inputs": {
+    "clip_name": "t5gemma_b_b_ul2.safetensors",
+    "type": "stable_audio",
+    "device": "default"
+   },
+   "class_type": "CLIPLoader",
+   "_meta": {
+    "title": "Load text encoder (T5Gemma)"
+   }
+  },
+  "3": {
+   "inputs": {
+    "text": "",
+    "clip": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Sound #prompt"
+   }
+  },
+  "4": {
+   "inputs": {
+    "text": "",
+    "clip": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Negative"
+   }
+  },
+  "5": {
+   "inputs": {
+    "seconds": 6,
+    "batch_size": 1
+   },
+   "class_type": "EmptyLatentAudio",
+   "_meta": {
+    "title": "Length"
+   }
+  },
+  "6": {
+   "inputs": {
+    "seed": 0,
+    "steps": 8,
+    "cfg": 1,
+    "sampler_name": "lcm",
+    "scheduler": "simple",
+    "denoise": 1,
+    "model": [
+     "1",
+     0
+    ],
+    "positive": [
+     "3",
+     0
+    ],
+    "negative": [
+     "4",
+     0
+    ],
+    "latent_image": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "KSampler",
+   "_meta": {
+    "title": "KSampler"
+   }
+  },
+  "7": {
+   "inputs": {
+    "samples": [
+     "6",
+     0
+    ],
+    "vae": [
+     "1",
+     2
+    ]
+   },
+   "class_type": "VAEDecodeAudio",
+   "_meta": {
+    "title": "VAE Decode Audio"
+   }
+  },
+  "8": {
+   "inputs": {
+    "filename_prefix": "concept-app/sfx",
+    "format": "mp3",
+    "format.quality": "V0",
+    "audio": [
+     "7",
+     0
+    ]
+   },
+   "class_type": "SaveAudioAdvanced",
+   "_meta": {
+    "title": "Save Audio"
+   }
+  }
+ }
+}

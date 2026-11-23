@@ -226,8 +226,30 @@ The picker has a **Models | Workflows** tab for each kind. It opens on the tab o
 | Textures › Remove Lighting | Removes baked-in shadows and highlights so a photo texture works as albedo. Uses the Qwen Image Edit 2511 graph with a built-in instruction. | as Qwen Edit 2511 |
 | Textures › Make Seamless | Shifts the image by half so the old edges meet as a cross in the middle, fixes the cross, then shifts back. Only the cross changes. **AI repaint** (default): Z-Image Turbo plus the Fun ControlNet in inpaint mode redraws the cross, so shapes like bricks join up. **Blend**: the original is faded over the cross with a wide soft mask. It is instant, uses no AI, and suits noise-like surfaces. | Z-Image Turbo, lite ControlNet |
 | Textures › Grunge Map | Z-Image Turbo makes the pattern. An offset blend makes it tile; in testing, an AI repaint flattened the grain into grey bands. Then grayscale (luma) and a contrast push. | Z-Image Turbo |
-| Concept › Concept Looks (Edges / Depth Pass) | Keeps the camera and layout of a Cinema 4D greybox, Redshift frame or depth pass, and takes the look from the prompt (Z-Image Turbo + Fun ControlNet). | Z-Image Turbo, full or lite ControlNet |
+| Textures › Photo to Texture | A phone photo of a surface in, a tiling texture out. Your notes (e.g. "flatten the dented panel underneath, keep the chipped paint and every chip") go into Qwen Image Edit 2511 together with lighting removal. Then it can be made seamless (AI repaint or blend), and is upscaled with a model to 1K / 2K / 4K. The prompt assistant writes keep / remove notes for this preset (manifest `assistant`). | Qwen Edit 2511, Z-Image Turbo, lite ControlNet, an upscale model |
+| Textures › PBR Maps | Normal, height, roughness, AO and an Unreal ORM map (R AO, G roughness, B metal) from one texture. Classic image math with core nodes only, like Materialize or CrazyBump: height from the picture's own detail, normals from wrap-around slopes (so tiling stays tiling). Options: DirectX or OpenGL green; "raised parts are lighter / darker" (light grout needs darker). Instant, local, fine for client work. | nothing |
+| Textures › PBR Maps (CHORD) | Ubisoft's CHORD: base colour, normal, height, roughness, metalness, plus AO and ORM. **Research-only license.** Install ComfyUI-Chord through ComfyUI Manager and put `chord_v1.safetensors` (Hugging Face, Ubisoft/ubisoft-laforge-chord, accept the terms) in `models/checkpoints`; until then the preset shows *missing node*. | ComfyUI-Chord |
+| Textures › Depth + Normal | Depth and scene normals from a photo or concept art (MoGe-2, core nodes). It shows the shape of a scene, not the fine detail of a flat texture (use PBR Maps for that). | MoGe-2 (installed) |
+| Concept › Concept Looks (Edges / Depth) | Keeps the camera and layout of a Cinema 4D greybox, Redshift frame or depth pass, and takes the look from the prompt (Z-Image Turbo + Fun ControlNet). | Z-Image Turbo, full or lite ControlNet |
 | VFX › Flipbook Sheet | Wan 2.2 5B clip on black. Evenly spaced frames are tiled into a 4×4 / 6×6 / 8×8 sheet for particle materials. | Wan 2.2 5B |
+
+Concept Looks (Depth) can take a depth pass as it is, or estimate the depth from a normal render with MoGe ("Depth from").
+
+Batch 7 also adds two **model** presets under Models › Audio:
+
+- **Stable Audio 3 SFX:** sound effects and ambiences up to 2 minutes. It needs `stable_audio_3_small_sfx.safetensors` in `models/checkpoints` and `t5gemma_b_b_ul2.safetensors` in `models/text_encoders` (Comfy-Org/stable-audio-3; Stability AI Community License).
+- **Chatterbox Voice Swap:** record a line with the performance you want, then swap only the voice to match a short target clip. It uses ChatterboxVC, zero-shot, already installed. Only use voices you have permission to use.
+
+### Import (batch 7)
+
+The top bar's **Import** button can:
+- take a photo or record a video (through the system camera app);
+- record audio in the app (the microphone; recorded dry, with no echo cancellation, noise suppression or auto gain);
+- pick a photo, video or audio file from the device.
+
+The file is uploaded to ComfyUI's input folder. **What next?** then lists only the presets that take that kind of file, and the one you pick gets the file in its slot. Audio slots also have their own **Record** button.
+
+The Android app needs **versionCode 3** for live video and the microphone: video uses `ACTION_VIDEO_CAPTURE` (still no CAMERA permission), and `RECORD_AUDIO` is granted to the server's page only. The APK can be installed from `/download/comfy-ui.apk` on the server: copy the build to `app/download/` (git-ignored). The service worker leaves `/download/` alone.
 
 ControlNet files go in `models/model_patches`, from alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1:
 - `…-2.1-2602-8steps.safetensors`: full, 6.7 GB.

@@ -1,0 +1,1786 @@
+{
+ "preset": {
+  "kind": "workflow",
+  "group": "Textures",
+  "label": "PBR Maps",
+  "menuPath": "Textures/PBR Maps",
+  "menuOrder": 5,
+  "source": "Comfy UI Ideas doc, PBR textures: single-image material extraction. Classic image-based method (like Materialize / CrazyBump), core nodes only.",
+  "output": "image",
+  "description": "Normal, height, roughness and AO maps from one texture or albedo, plus an ORM map packed for Unreal (R = AO, G = roughness, B = metal). Worked out from the picture itself, no AI: instant, local, fine for client work. Normal and height are solid; roughness and AO are a starting point to refine.",
+  "params": {
+   "size": {
+    "node": "2",
+    "input": "longer_edge",
+    "type": "enum",
+    "options": [
+     1024,
+     2048,
+     4096
+    ],
+    "default": 2048,
+    "label": "Map size",
+    "control": "seg",
+    "labels": {
+     "1024": "1K",
+     "2048": "2K",
+     "4096": "4K"
+    },
+    "info": "Size of the long side of every map (the base colour is resized to match)."
+   },
+   "normal": {
+    "node": "63",
+    "input": "factor",
+    "also": [
+     {
+      "node": "65",
+      "input": "factor"
+     }
+    ],
+    "type": "number",
+    "min": 1,
+    "max": 2,
+    "step": 0.1,
+    "default": 2,
+    "label": "Normal strength",
+    "control": "slider",
+    "info": "How deep the surface detail looks in the normal map. Lower for subtle surfaces (painted plaster), higher for strong relief (brick, bark)."
+   },
+   "depth": {
+    "node": "12",
+    "input": "factor",
+    "type": "number",
+    "min": 1,
+    "max": 2,
+    "step": 0.1,
+    "default": 2,
+    "label": "Height contrast",
+    "control": "slider",
+    "info": "How far apart the high and low points of the height map are. Also drives the normal map and AO."
+   },
+   "invert": {
+    "node": "11",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": false,
+    "label": "Raised parts are",
+    "control": "seg",
+    "labels": {
+     "false": "Lighter",
+     "true": "Darker"
+    },
+    "info": "Which parts of the picture stick out. Most surfaces: lighter (dark crevices and cracks sit lower). Light mortar or grout between darker bricks or tiles: darker."
+   },
+   "roughness": {
+    "node": "79",
+    "input": "factor",
+    "type": "number",
+    "min": 0.4,
+    "max": 1.6,
+    "step": 0.05,
+    "default": 1,
+    "label": "Roughness",
+    "control": "slider",
+    "info": "Overall roughness: lower is shinier, higher is duller. The pattern comes from the picture (darker crevices rougher)."
+   },
+   "green": {
+    "node": "67",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Normal for",
+    "control": "seg",
+    "labels": {
+     "false": "OpenGL",
+     "true": "Unreal (DirectX)"
+    },
+    "info": "Which way the normal map's green channel points. Unreal uses DirectX; Blender, Substance, Unity and glTF use OpenGL."
+   }
+  },
+  "maxBatch": 4,
+  "vram": {
+   "estMB": 600,
+   "basis": "image math only, no model"
+  },
+  "info": {
+   "image": "A flat, evenly lit texture or albedo (front-on). Run Remove Lighting or Photo to Texture first if it has shadows: baked lighting would turn into fake bumps."
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "image": "example.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Texture / albedo #image"
+   }
+  },
+  "2": {
+   "inputs": {
+    "images": [
+     "1",
+     0
+    ],
+    "longer_edge": 2048
+   },
+   "class_type": "ResizeImagesByLongerEdge",
+   "_meta": {
+    "title": "Working size"
+   }
+  },
+  "3": {
+   "inputs": {
+    "image": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "GetImageSize",
+   "_meta": {
+    "title": "Size"
+   }
+  },
+  "4": {
+   "inputs": {
+    "expression": "a",
+    "values.a": [
+     "3",
+     0
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Size: width"
+   }
+  },
+  "5": {
+   "inputs": {
+    "expression": "a",
+    "values.a": [
+     "3",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Size: height"
+   }
+  },
+  "6": {
+   "inputs": {
+    "image": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "ImageRGBToYUV",
+   "_meta": {
+    "title": "Brightness (luma)"
+   }
+  },
+  "7": {
+   "inputs": {
+    "image": [
+     "6",
+     0
+    ],
+    "blur_radius": 31,
+    "sigma": 10
+   },
+   "class_type": "ImageBlur",
+   "_meta": {
+    "title": "Height: wide average"
+   }
+  },
+  "8": {
+   "inputs": {
+    "image": [
+     "7",
+     0
+    ]
+   },
+   "class_type": "ImageInvert",
+   "_meta": {
+    "title": "Height: detail: invert"
+   }
+  },
+  "9": {
+   "inputs": {
+    "image1": [
+     "6",
+     0
+    ],
+    "image2": [
+     "8",
+     0
+    ],
+    "blend_factor": 0.5,
+    "blend_mode": "normal"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Height: detail"
+   }
+  },
+  "10": {
+   "inputs": {
+    "image": [
+     "9",
+     0
+    ]
+   },
+   "class_type": "ImageInvert",
+   "_meta": {
+    "title": "Height: dark is high"
+   }
+  },
+  "11": {
+   "inputs": {
+    "switch": false,
+    "on_false": [
+     "9",
+     0
+    ],
+    "on_true": [
+     "10",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "Height from (light / dark is high)"
+   }
+  },
+  "12": {
+   "inputs": {
+    "images": [
+     "11",
+     0
+    ],
+    "factor": 2
+   },
+   "class_type": "AdjustContrast",
+   "_meta": {
+    "title": "Height: depth"
+   }
+  },
+  "13": {
+   "inputs": {
+    "image": [
+     "12",
+     0
+    ],
+    "blur_radius": 1,
+    "sigma": 0.6
+   },
+   "class_type": "ImageBlur",
+   "_meta": {
+    "title": "Height"
+   }
+  },
+  "14": {
+   "inputs": {
+    "expression": "(-2) % a",
+    "values.a": [
+     "4",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal x-2: x shift"
+   }
+  },
+  "15": {
+   "inputs": {
+    "expression": "(0) % a",
+    "values.a": [
+     "5",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal x-2: y shift"
+   }
+  },
+  "16": {
+   "inputs": {
+    "expression": "a - b",
+    "values.a": [
+     "4",
+     1
+    ],
+    "values.b": [
+     "14",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal x-2: rest x"
+   }
+  },
+  "17": {
+   "inputs": {
+    "expression": "a - b",
+    "values.a": [
+     "5",
+     1
+    ],
+    "values.b": [
+     "15",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal x-2: rest y"
+   }
+  },
+  "18": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "14",
+     1
+    ],
+    "height": [
+     "15",
+     1
+    ],
+    "x": 0,
+    "y": 0
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal x-2: A"
+   }
+  },
+  "19": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "16",
+     1
+    ],
+    "height": [
+     "15",
+     1
+    ],
+    "x": [
+     "14",
+     1
+    ],
+    "y": 0
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal x-2: B"
+   }
+  },
+  "20": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "14",
+     1
+    ],
+    "height": [
+     "17",
+     1
+    ],
+    "x": 0,
+    "y": [
+     "15",
+     1
+    ]
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal x-2: C"
+   }
+  },
+  "21": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "16",
+     1
+    ],
+    "height": [
+     "17",
+     1
+    ],
+    "x": [
+     "14",
+     1
+    ],
+    "y": [
+     "15",
+     1
+    ]
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal x-2: D"
+   }
+  },
+  "22": {
+   "inputs": {
+    "image1": [
+     "21",
+     0
+    ],
+    "direction": "right",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "20",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Normal x-2: top"
+   }
+  },
+  "23": {
+   "inputs": {
+    "image1": [
+     "19",
+     0
+    ],
+    "direction": "right",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "18",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Normal x-2: bottom"
+   }
+  },
+  "24": {
+   "inputs": {
+    "image1": [
+     "22",
+     0
+    ],
+    "direction": "down",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "23",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Normal x-2: shifted"
+   }
+  },
+  "25": {
+   "inputs": {
+    "expression": "(2) % a",
+    "values.a": [
+     "4",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal x+2: x shift"
+   }
+  },
+  "26": {
+   "inputs": {
+    "expression": "(0) % a",
+    "values.a": [
+     "5",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal x+2: y shift"
+   }
+  },
+  "27": {
+   "inputs": {
+    "expression": "a - b",
+    "values.a": [
+     "4",
+     1
+    ],
+    "values.b": [
+     "25",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal x+2: rest x"
+   }
+  },
+  "28": {
+   "inputs": {
+    "expression": "a - b",
+    "values.a": [
+     "5",
+     1
+    ],
+    "values.b": [
+     "26",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal x+2: rest y"
+   }
+  },
+  "29": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "25",
+     1
+    ],
+    "height": [
+     "26",
+     1
+    ],
+    "x": 0,
+    "y": 0
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal x+2: A"
+   }
+  },
+  "30": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "27",
+     1
+    ],
+    "height": [
+     "26",
+     1
+    ],
+    "x": [
+     "25",
+     1
+    ],
+    "y": 0
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal x+2: B"
+   }
+  },
+  "31": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "25",
+     1
+    ],
+    "height": [
+     "28",
+     1
+    ],
+    "x": 0,
+    "y": [
+     "26",
+     1
+    ]
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal x+2: C"
+   }
+  },
+  "32": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "27",
+     1
+    ],
+    "height": [
+     "28",
+     1
+    ],
+    "x": [
+     "25",
+     1
+    ],
+    "y": [
+     "26",
+     1
+    ]
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal x+2: D"
+   }
+  },
+  "33": {
+   "inputs": {
+    "image1": [
+     "32",
+     0
+    ],
+    "direction": "right",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "31",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Normal x+2: top"
+   }
+  },
+  "34": {
+   "inputs": {
+    "image1": [
+     "30",
+     0
+    ],
+    "direction": "right",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "29",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Normal x+2: bottom"
+   }
+  },
+  "35": {
+   "inputs": {
+    "image1": [
+     "33",
+     0
+    ],
+    "direction": "down",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "34",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Normal x+2: shifted"
+   }
+  },
+  "36": {
+   "inputs": {
+    "image": [
+     "35",
+     0
+    ]
+   },
+   "class_type": "ImageInvert",
+   "_meta": {
+    "title": "Normal: slope x: invert"
+   }
+  },
+  "37": {
+   "inputs": {
+    "image1": [
+     "24",
+     0
+    ],
+    "image2": [
+     "36",
+     0
+    ],
+    "blend_factor": 0.5,
+    "blend_mode": "normal"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Normal: slope x"
+   }
+  },
+  "38": {
+   "inputs": {
+    "expression": "(0) % a",
+    "values.a": [
+     "4",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal y-2: x shift"
+   }
+  },
+  "39": {
+   "inputs": {
+    "expression": "(-2) % a",
+    "values.a": [
+     "5",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal y-2: y shift"
+   }
+  },
+  "40": {
+   "inputs": {
+    "expression": "a - b",
+    "values.a": [
+     "4",
+     1
+    ],
+    "values.b": [
+     "38",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal y-2: rest x"
+   }
+  },
+  "41": {
+   "inputs": {
+    "expression": "a - b",
+    "values.a": [
+     "5",
+     1
+    ],
+    "values.b": [
+     "39",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal y-2: rest y"
+   }
+  },
+  "42": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "38",
+     1
+    ],
+    "height": [
+     "39",
+     1
+    ],
+    "x": 0,
+    "y": 0
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal y-2: A"
+   }
+  },
+  "43": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "40",
+     1
+    ],
+    "height": [
+     "39",
+     1
+    ],
+    "x": [
+     "38",
+     1
+    ],
+    "y": 0
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal y-2: B"
+   }
+  },
+  "44": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "38",
+     1
+    ],
+    "height": [
+     "41",
+     1
+    ],
+    "x": 0,
+    "y": [
+     "39",
+     1
+    ]
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal y-2: C"
+   }
+  },
+  "45": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "40",
+     1
+    ],
+    "height": [
+     "41",
+     1
+    ],
+    "x": [
+     "38",
+     1
+    ],
+    "y": [
+     "39",
+     1
+    ]
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal y-2: D"
+   }
+  },
+  "46": {
+   "inputs": {
+    "image1": [
+     "45",
+     0
+    ],
+    "direction": "right",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "44",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Normal y-2: top"
+   }
+  },
+  "47": {
+   "inputs": {
+    "image1": [
+     "43",
+     0
+    ],
+    "direction": "right",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "42",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Normal y-2: bottom"
+   }
+  },
+  "48": {
+   "inputs": {
+    "image1": [
+     "46",
+     0
+    ],
+    "direction": "down",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "47",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Normal y-2: shifted"
+   }
+  },
+  "49": {
+   "inputs": {
+    "expression": "(0) % a",
+    "values.a": [
+     "4",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal y+2: x shift"
+   }
+  },
+  "50": {
+   "inputs": {
+    "expression": "(2) % a",
+    "values.a": [
+     "5",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal y+2: y shift"
+   }
+  },
+  "51": {
+   "inputs": {
+    "expression": "a - b",
+    "values.a": [
+     "4",
+     1
+    ],
+    "values.b": [
+     "49",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal y+2: rest x"
+   }
+  },
+  "52": {
+   "inputs": {
+    "expression": "a - b",
+    "values.a": [
+     "5",
+     1
+    ],
+    "values.b": [
+     "50",
+     1
+    ]
+   },
+   "class_type": "ComfyMathExpression",
+   "_meta": {
+    "title": "Normal y+2: rest y"
+   }
+  },
+  "53": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "49",
+     1
+    ],
+    "height": [
+     "50",
+     1
+    ],
+    "x": 0,
+    "y": 0
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal y+2: A"
+   }
+  },
+  "54": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "51",
+     1
+    ],
+    "height": [
+     "50",
+     1
+    ],
+    "x": [
+     "49",
+     1
+    ],
+    "y": 0
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal y+2: B"
+   }
+  },
+  "55": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "49",
+     1
+    ],
+    "height": [
+     "52",
+     1
+    ],
+    "x": 0,
+    "y": [
+     "50",
+     1
+    ]
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal y+2: C"
+   }
+  },
+  "56": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "width": [
+     "51",
+     1
+    ],
+    "height": [
+     "52",
+     1
+    ],
+    "x": [
+     "49",
+     1
+    ],
+    "y": [
+     "50",
+     1
+    ]
+   },
+   "class_type": "ImageCrop",
+   "_meta": {
+    "title": "Normal y+2: D"
+   }
+  },
+  "57": {
+   "inputs": {
+    "image1": [
+     "56",
+     0
+    ],
+    "direction": "right",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "55",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Normal y+2: top"
+   }
+  },
+  "58": {
+   "inputs": {
+    "image1": [
+     "54",
+     0
+    ],
+    "direction": "right",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "53",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Normal y+2: bottom"
+   }
+  },
+  "59": {
+   "inputs": {
+    "image1": [
+     "57",
+     0
+    ],
+    "direction": "down",
+    "match_image_size": false,
+    "spacing_width": 0,
+    "spacing_color": "black",
+    "image2": [
+     "58",
+     0
+    ]
+   },
+   "class_type": "ImageStitch",
+   "_meta": {
+    "title": "Normal y+2: shifted"
+   }
+  },
+  "60": {
+   "inputs": {
+    "image": [
+     "59",
+     0
+    ]
+   },
+   "class_type": "ImageInvert",
+   "_meta": {
+    "title": "Normal: slope y: invert"
+   }
+  },
+  "61": {
+   "inputs": {
+    "image1": [
+     "48",
+     0
+    ],
+    "image2": [
+     "60",
+     0
+    ],
+    "blend_factor": 0.5,
+    "blend_mode": "normal"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Normal: slope y"
+   }
+  },
+  "62": {
+   "inputs": {
+    "images": [
+     "37",
+     0
+    ],
+    "factor": 2
+   },
+   "class_type": "AdjustContrast",
+   "_meta": {
+    "title": "Normal x: x2"
+   }
+  },
+  "63": {
+   "inputs": {
+    "images": [
+     "62",
+     0
+    ],
+    "factor": 2
+   },
+   "class_type": "AdjustContrast",
+   "_meta": {
+    "title": "Normal x: strength"
+   }
+  },
+  "64": {
+   "inputs": {
+    "images": [
+     "61",
+     0
+    ],
+    "factor": 2
+   },
+   "class_type": "AdjustContrast",
+   "_meta": {
+    "title": "Normal y: x2"
+   }
+  },
+  "65": {
+   "inputs": {
+    "images": [
+     "64",
+     0
+    ],
+    "factor": 2
+   },
+   "class_type": "AdjustContrast",
+   "_meta": {
+    "title": "Normal y: strength"
+   }
+  },
+  "66": {
+   "inputs": {
+    "image": [
+     "65",
+     0
+    ]
+   },
+   "class_type": "ImageInvert",
+   "_meta": {
+    "title": "Normal y: OpenGL flip"
+   }
+  },
+  "67": {
+   "inputs": {
+    "switch": true,
+    "on_false": [
+     "66",
+     0
+    ],
+    "on_true": [
+     "65",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "Normal convention (DirectX / OpenGL)"
+   }
+  },
+  "68": {
+   "inputs": {
+    "width": [
+     "4",
+     1
+    ],
+    "height": [
+     "5",
+     1
+    ],
+    "batch_size": 1,
+    "color": 16777215
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "Normal: blue = up"
+   }
+  },
+  "69": {
+   "inputs": {
+    "width": [
+     "4",
+     1
+    ],
+    "height": [
+     "5",
+     1
+    ],
+    "batch_size": 1,
+    "color": 16711680
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "Normal map: red: colour"
+   }
+  },
+  "70": {
+   "inputs": {
+    "image1": [
+     "63",
+     0
+    ],
+    "image2": [
+     "69",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "multiply"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Normal map: red"
+   }
+  },
+  "71": {
+   "inputs": {
+    "width": [
+     "4",
+     1
+    ],
+    "height": [
+     "5",
+     1
+    ],
+    "batch_size": 1,
+    "color": 65280
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "Normal map: green: colour"
+   }
+  },
+  "72": {
+   "inputs": {
+    "image1": [
+     "67",
+     0
+    ],
+    "image2": [
+     "71",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "multiply"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Normal map: green"
+   }
+  },
+  "73": {
+   "inputs": {
+    "image1": [
+     "70",
+     0
+    ],
+    "image2": [
+     "72",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "screen"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Normal map: R+G"
+   }
+  },
+  "74": {
+   "inputs": {
+    "width": [
+     "4",
+     1
+    ],
+    "height": [
+     "5",
+     1
+    ],
+    "batch_size": 1,
+    "color": 255
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "Normal map: blue: colour"
+   }
+  },
+  "75": {
+   "inputs": {
+    "image1": [
+     "68",
+     0
+    ],
+    "image2": [
+     "74",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "multiply"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Normal map: blue"
+   }
+  },
+  "76": {
+   "inputs": {
+    "image1": [
+     "73",
+     0
+    ],
+    "image2": [
+     "75",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "screen"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "Normal map: R+G+B"
+   }
+  },
+  "77": {
+   "inputs": {
+    "image": [
+     "11",
+     0
+    ]
+   },
+   "class_type": "ImageInvert",
+   "_meta": {
+    "title": "Roughness: dark = rough"
+   }
+  },
+  "78": {
+   "inputs": {
+    "images": [
+     "77",
+     0
+    ],
+    "factor": 1.4
+   },
+   "class_type": "AdjustContrast",
+   "_meta": {
+    "title": "Roughness: spread"
+   }
+  },
+  "79": {
+   "inputs": {
+    "images": [
+     "78",
+     0
+    ],
+    "factor": 1
+   },
+   "class_type": "AdjustBrightness",
+   "_meta": {
+    "title": "Roughness level"
+   }
+  },
+  "80": {
+   "inputs": {
+    "image": [
+     "13",
+     0
+    ],
+    "blur_radius": 8,
+    "sigma": 4
+   },
+   "class_type": "ImageBlur",
+   "_meta": {
+    "title": "AO: local average"
+   }
+  },
+  "81": {
+   "inputs": {
+    "image": [
+     "80",
+     0
+    ]
+   },
+   "class_type": "ImageInvert",
+   "_meta": {
+    "title": "AO: cavity: invert"
+   }
+  },
+  "82": {
+   "inputs": {
+    "image1": [
+     "13",
+     0
+    ],
+    "image2": [
+     "81",
+     0
+    ],
+    "blend_factor": 0.5,
+    "blend_mode": "normal"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "AO: cavity"
+   }
+  },
+  "83": {
+   "inputs": {
+    "images": [
+     "82",
+     0
+    ],
+    "factor": 2
+   },
+   "class_type": "AdjustContrast",
+   "_meta": {
+    "title": "AO: deepen"
+   }
+  },
+  "84": {
+   "inputs": {
+    "images": [
+     "83",
+     0
+    ],
+    "factor": 2
+   },
+   "class_type": "AdjustBrightness",
+   "_meta": {
+    "title": "AO: flat = white"
+   }
+  },
+  "85": {
+   "inputs": {
+    "width": [
+     "4",
+     1
+    ],
+    "height": [
+     "5",
+     1
+    ],
+    "batch_size": 1,
+    "color": 16777215
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "AO: white"
+   }
+  },
+  "86": {
+   "inputs": {
+    "image1": [
+     "85",
+     0
+    ],
+    "image2": [
+     "84",
+     0
+    ],
+    "blend_factor": 0.8,
+    "blend_mode": "normal"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "AO: strength"
+   }
+  },
+  "87": {
+   "inputs": {
+    "width": [
+     "4",
+     1
+    ],
+    "height": [
+     "5",
+     1
+    ],
+    "batch_size": 1,
+    "color": 16711680
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): red: colour"
+   }
+  },
+  "88": {
+   "inputs": {
+    "image1": [
+     "86",
+     0
+    ],
+    "image2": [
+     "87",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "multiply"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): red"
+   }
+  },
+  "89": {
+   "inputs": {
+    "width": [
+     "4",
+     1
+    ],
+    "height": [
+     "5",
+     1
+    ],
+    "batch_size": 1,
+    "color": 65280
+   },
+   "class_type": "EmptyImage",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): green: colour"
+   }
+  },
+  "90": {
+   "inputs": {
+    "image1": [
+     "79",
+     0
+    ],
+    "image2": [
+     "89",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "multiply"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): green"
+   }
+  },
+  "91": {
+   "inputs": {
+    "image1": [
+     "88",
+     0
+    ],
+    "image2": [
+     "90",
+     0
+    ],
+    "blend_factor": 1,
+    "blend_mode": "screen"
+   },
+   "class_type": "ImageBlend",
+   "_meta": {
+    "title": "ORM (AO, roughness, metal): R+G"
+   }
+  },
+  "92": {
+   "inputs": {
+    "filename_prefix": "concept-app/pbr_basecolor",
+    "images": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save base colour"
+   }
+  },
+  "93": {
+   "inputs": {
+    "filename_prefix": "concept-app/pbr_normal",
+    "images": [
+     "76",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save normal"
+   }
+  },
+  "94": {
+   "inputs": {
+    "filename_prefix": "concept-app/pbr_height",
+    "images": [
+     "13",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save height"
+   }
+  },
+  "95": {
+   "inputs": {
+    "filename_prefix": "concept-app/pbr_roughness",
+    "images": [
+     "79",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save roughness"
+   }
+  },
+  "96": {
+   "inputs": {
+    "filename_prefix": "concept-app/pbr_ao",
+    "images": [
+     "86",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save AO"
+   }
+  },
+  "97": {
+   "inputs": {
+    "filename_prefix": "concept-app/pbr_orm",
+    "images": [
+     "91",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save ORM"
+   }
+  }
+ }
+}
