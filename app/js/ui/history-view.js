@@ -40,7 +40,7 @@ export class HistoryView {
     this.title = h('h2', {}, 'History');
     this.favBtn = h('button.btn', { type: 'button', onclick: () => this.setView(null, !this.favOnly) }, '★ Favorites');
     // Inside a folder or Favorites: back to all of History (Back does the same).
-    this.backBtn = h('button.icon-btn.hist-back', { type: 'button', hidden: true, 'aria-label': 'All history', title: 'All history', dataset: { act: 'all-history' }, onclick: () => this.setView(null, false) }, h('i.i.i-chevron-left'));
+    this.backBtn = h('button.btn.icon.hist-back', { type: 'button', hidden: true, 'aria-label': 'All history', title: 'All history', dataset: { act: 'all-history' }, onclick: () => this.setView(null, false) }, h('i.i.i-chevron-left'));
     this.foldersBtn = h('button.btn.icon', { type: 'button', 'aria-label': 'Folders', dataset: { act: 'folders' }, onclick: () => this.openFolders() }, h('i.i.i-folder'));
     // No close button: the History toggle in the top bar (or Back) closes it.
     this.normalBar = h('div.history-top', {}, this.backBtn, this.title, h('span.spacer'), this.foldersBtn, this.favBtn);
