@@ -28,7 +28,7 @@ Settings live in `config.json`. Put your own overrides in `config.local.json`, w
 
 **ComfyUI's output folder** (needed to delete results from History and for the "From Comfy UI" grid). ComfyUI has no API for deleting output files, so the app deletes them from disk and has to know where that folder is. It looks in this order:
 
-1. `comfyOutputDir` in `config.local.json` (or `COMFY_OUTPUT_DIR`). Setting it is the most reliable. On the owner's PC (Comfy Desktop) it is `C:\Users\<you>\AppData\Local\Comfy-Desktop\ComfyUI-Shared\output`, so `config.local.json` would contain `{ "comfyOutputDir": "C:\\Users\\<you>\\AppData\\Local\\Comfy-Desktop\\ComfyUI-Shared\\output" }` (backslashes doubled in JSON). The path is not in the code.
+1. `comfyOutputDir` in `config.local.json` (or `COMFY_OUTPUT_DIR`). Setting it is the most reliable. On the owner's PC (Comfy Desktop) it is `C:\Users\<you>\AppData\Local\Comfy-Desktop\ComfyUI-Shared\output`, so `config.local.json` would contain `{ "comfyOutputDir": "C:\\Users\\the owner\\AppData\\Local\\Comfy-Desktop\\ComfyUI-Shared\\output" }` (backslashes doubled in JSON). The path is not in the code.
 2. ComfyUI's own command line, from `GET /system_stats` (8 s timeout): `--output-directory X`, `--output-directory=X`, or `--base-directory X` plus `\output` (what Comfy Desktop passes).
 3. The last folder found by step 2, kept in `data/comfy-output-dir.json`, used while that folder still exists.
 

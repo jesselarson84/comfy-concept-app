@@ -10,7 +10,7 @@ import { HistoryStore } from '../../server/history.js';
 import { createPcSync, describeGraph, modelKey } from '../../server/pc-sync.js';
 import { createScheduler } from '../../server/scheduler.js';
 import { deleteAppFile } from '../../server/outputs.js';
-import { statsOf, swatchOf, modelColor, TYPE_COLORS, GROUP_COLORS } from '../../app/js/lib/history-filter.js';
+import { statsOf, modelColor, TYPE_COLORS, GROUP_COLORS } from '../../app/js/lib/history-filter.js';
 import { nextClockTime } from '../../app/js/ui/batch-sheet.js';
 
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
@@ -54,12 +54,12 @@ test('stats colours: tag kinds, model colour slots by first use (not rank), real
   ]);
   assert.equal(s.models[0].id, 'ai:new'); assert.equal(s.models[0].slot, 1, 'used second -> slot 1 even though it ranks first');
   assert.equal(s.models[1].slot, 0);
-  assert.deepEqual(Object.fromEntries(s.tags.map((t) => [t.tag, t.group])), { black: 'colors', 'light-blue': 'colors', serious: 'mood', product: 'genre' });
-  assert.equal(swatchOf('black'), '#111111'); assert.equal(swatchOf('light-blue'), swatchOf('blue')); assert.equal(swatchOf('studio'), null);
+  // batch 13: old plain color tags are ignored (no Colors section, not searched)
+  assert.deepEqual(Object.fromEntries(s.tags.map((t) => [t.tag, t.group])), { serious: 'mood', product: 'genre' });
   assert.notEqual(modelColor(0), modelColor(1));
   assert.ok(TYPE_COLORS.image && TYPE_COLORS['3d'] && GROUP_COLORS.mood);
   const hv = read('app/js/ui/history-view.js');
-  assert.match(hv, /'By type'/); assert.match(hv, /'Colours'/); assert.match(hv, /typeBar\('\.mini'\)/);
+  assert.match(hv, /'By type'/); assert.doesNotMatch(hv, /'Colou?rs'/); assert.match(hv, /typeBar\('\.mini'\)/);
 });
 
 test('Details (option A): prompt card with Copy + Reuse, fact tiles, Saved to card, tags with kind dots, no Colours section', () => {
@@ -229,7 +229,7 @@ test('scheduler: waits while the PC is busy (game / other ComfyUI jobs), skips a
   r.s.add([r.job('bad', { randomSeed: true }), r.job('good')]);
   r.s.start(null);
   await r.s.tick();
-  assert.equal(r.c.env.queued, undefined); assert.match(r.s.view().waitReason, /GPU is busy/);
+  assert.equal(r.c.env.queued, undefined); assert.match(r.s.view().waitReason, /using the GPU/);
   r.env.util = 5; r.c.env.running = [[1, 'desk', GRAPH, {}, []]];
   await r.s.tick(); assert.equal(r.c.env.queued, undefined); assert.match(r.s.view().waitReason, /ComfyUI is busy/);
   r.c.env.running = [];

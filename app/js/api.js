@@ -61,6 +61,7 @@ export const getSchedule = () => req('GET', '/api/schedule');
 export const addToSchedule = (jobs) => req('POST', '/api/schedule/jobs', { jobs });
 export const removeScheduled = (id) => req('DELETE', `/api/schedule/jobs/${encodeURIComponent(id)}`);
 export const orderSchedule = (ids) => req('POST', '/api/schedule/order', { ids });
+export const replaceScheduled = (ids, jobs) => req('POST', '/api/schedule/replace', { ids, jobs }); // batch 13: Edit
 export const startSchedule = (at = null) => req('POST', '/api/schedule/start', { at });
 export const stopSchedule = () => req('POST', '/api/schedule/stop', {});
 export const clearSchedule = () => req('POST', '/api/schedule/clear', {});

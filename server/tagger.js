@@ -1,5 +1,6 @@
 // tagger.js - batch 9: History tags written in the background by a vision model
-// (gemma3:4b in Ollama): genre, mood, palette, colours, setting, lighting, medium.
+// (gemma3:4b in Ollama): genre, mood, palette, setting, lighting, medium.
+// Batch 13: no plain color tags any more (the user does not search by color).
 // -----------------------------------------------------------------------------
 // The owner games on this PC with ComfyUI open, so tagging must never cause frame
 // stutter. The rules, checked every `intervalMs` (20 s) BETWEEN items:
@@ -22,8 +23,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const TAG_GROUPS = ['genre', 'mood', 'palette', 'colors', 'setting', 'lighting', 'medium'];
-const LIMITS = { genre: 3, mood: 3, palette: 2, colors: 5, setting: 2, lighting: 2, medium: 1 };
+export const TAG_GROUPS = ['genre', 'mood', 'palette', 'setting', 'lighting', 'medium'];
+const LIMITS = { genre: 3, mood: 3, palette: 2, setting: 2, lighting: 2, medium: 1 };
 const MAX_FAILS = 3;
 
 export const TAG_PROMPT = [
@@ -31,8 +32,7 @@ export const TAG_PROMPT = [
   'Answer with JSON only. Every tag is lower case, one or two words joined by a hyphen.',
   'genre: 1-3 (e.g. sci-fi, fantasy, sports, architecture, portrait, product, nature, abstract).',
   'mood: 1-3 (e.g. epic, calm, moody, playful, dramatic, eerie).',
-  'palette: 1-2 colour schemes (e.g. cool-blues, warm-earth-tones, neon, monochrome, pastel, high-contrast).',
-  'colors: 2-5 plain colour names that dominate (e.g. blue, orange, teal, black, gold).',
+  'palette: 1-2 color schemes (e.g. cool-blues, warm-earth-tones, neon, monochrome, pastel, high-contrast).',
   'setting: 1-2 (e.g. interior, city-street, stadium, forest, space, studio).',
   'lighting: 1-2 (e.g. neon-lit, golden-hour, studio, overcast, night, dramatic).',
   'medium: exactly 1 of photograph, 3d-render, digital-paint, illustration, cartoon, pixel-art, sketch, mixed-media.',

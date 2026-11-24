@@ -75,7 +75,7 @@ export class ProjectSheet {
     if (live.length) rows.push(h('div.pj-sec', {}, 'Recent'));
     for (const p of live) {
       const on = !this.move && current === p.id;
-      rows.push(this.#row({ name: p.name, sub: [p.group.join(' › ') || d.root, `${p.count} ${p.count === 1 ? 'output' : 'outputs'}`, ago(p.lastAt || p.lastUsedAt)].filter(Boolean).join(' · '),
+      rows.push(this.#row({ icon: 'i-clipboard-list', name: p.name, sub: [p.group.join(' › ') || d.root, `${p.count} ${p.count === 1 ? 'output' : 'outputs'}`, ago(p.lastAt || p.lastUsedAt)].filter(Boolean).join(' · '),
         on, act: 'project', data: { project: p.id }, end: on ? h('i.i.i-check') : null, click: () => this.finish(p.id) }));
     }
     const noOn = !this.move && !current;
@@ -97,7 +97,7 @@ export class ProjectSheet {
     const crumb = (label, to, last) => h(`button.df-crumb${last ? '.on' : ''}`, { type: 'button', onclick: () => !last && this.showBrowse(to) }, label);
     const crumbs = h('div.df-crumbs', {}, crumb(r.root, '', !parts.length), ...parts.flatMap((p, i) => [h('span.df-sep', {}, '›'), crumb(p, parts.slice(0, i + 1).join('/'), i === parts.length - 1)]));
     const rows = r.folders.map((f) => {
-      if (f.project) return this.#row({ name: f.name, sub: 'Project', act: 'project', data: { project: f.project, folder: f.name }, end: h('span.pj-tag', {}, '✓ project'), click: () => this.finish(f.project) });
+      if (f.project) return this.#row({ icon: 'i-clipboard-list', name: f.name, sub: 'Project', act: 'project', data: { project: f.project, folder: f.name }, end: h('span.pj-tag', {}, '✓ project'), click: () => this.finish(f.project) });
       const use = h('span.btn.primary.pj-use', { role: 'button', dataset: { act: 'use' }, onclick: async (e) => {
         e.stopPropagation();
         try { const p = await api.markProject(f.path); toast(`"${p.name}" is a project now`); this.finish(p.id); } catch (err) { toast(err.message, 6000); }
@@ -155,7 +155,7 @@ export class ProjectChip {
     this.isLocked = isLocked;
     this.crumb = h('span.crumb'); this.name = h('span.name', {}, 'No project');
     this.btn = h('button.btn.picker.project-chip', { type: 'button', 'aria-label': 'Project', dataset: { act: 'project' }, onclick: () => this.open() },
-      h('i.i.i-folder'), this.crumb, this.name, h('i.i.i-chevron-down'));
+      h('i.i.i-clipboard-list'), this.crumb, this.name, h('i.i.i-chevron-down')); // batch 13: clipboard, so it is not mixed up with Files' folder
     this.where = h('div.project-where.muted');
     host.replaceChildren(this.btn, this.where);
     host.hidden = false;

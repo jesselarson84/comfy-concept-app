@@ -56,8 +56,8 @@ import { HistoryStore } from './history.js';
 import { ChatStore } from './chats.js';
 import { createOllama } from './ollama.js';
 import { ActionStore } from './actions.js';
-import { createHardware, runNvidiaUtil } from './hardware.js';
-import { createTagger, readGpuUtil } from './tagger.js';
+import { createHardware, readGpuBusy } from './hardware.js';
+import { createTagger } from './tagger.js';
 import { createMemory } from './memory.js';
 import { handleShare } from './share.js';
 import { readBody, parseMultipart } from './multipart.js';
@@ -114,7 +114,7 @@ export function createApp(cfg, opts = {}) {
   const memory = createMemory({ cfg, hardware, ollama, getComfyUrl: () => cfg.comfyUrl, ...(env ? { env } : {}) });
   const comfyInfo = createComfyInfo({ getComfyUrl: () => cfg.comfyUrl });
   // Batch 9: History tags in the background, only while the GPU is quiet (no game, no ComfyUI job).
-  const tagger = createTagger({ history, dataDir: cfg.dataDir, getComfyUrl: () => cfg.comfyUrl, getOllamaUrl: () => cfg.ollamaUrl, gpuUtil: opts.gpuUtil || (() => readGpuUtil(runNvidiaUtil)), log, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}), ...(opts.tagger || {}) });
+  const tagger = createTagger({ history, dataDir: cfg.dataDir, getComfyUrl: () => cfg.comfyUrl, getOllamaUrl: () => cfg.ollamaUrl, gpuUtil: opts.gpuUtil || (() => readGpuBusy()), log, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}), ...(opts.tagger || {}) });
   const presets = new PresetStore(path.join(cfg.workflowsDir, 'ai'));
   const userPresets = new UserPresetStore(cfg.dataDir);
   const graphPresets = new GraphPresetStore(cfg.dataDir); // saved from the node view (Save as preset)
@@ -125,7 +125,7 @@ export function createApp(cfg, opts = {}) {
   const outputDirOf = () => comfyOutputDir(cfg, { cache: outDirCache, log, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
 
   // Batch 12: desktop ComfyUI jobs into History (+ their workflows), and batches run by the PC.
-  const scheduler = createScheduler({ dataDir: cfg.dataDir, history, getComfyUrl: () => cfg.comfyUrl, gpuUtil: opts.gpuUtil || (() => readGpuUtil(runNvidiaUtil)), beforeQueue: async (id) => memory.beforeQueue(id, await memoryFor(id)), log, onFinished: () => filer.kick(), ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}), ...(opts.scheduler || {}) });
+  const scheduler = createScheduler({ dataDir: cfg.dataDir, history, getComfyUrl: () => cfg.comfyUrl, gpuUtil: opts.gpuUtil || (() => readGpuBusy()), beforeQueue: async (id) => memory.beforeQueue(id, await memoryFor(id)), log, onFinished: () => filer.kick(), ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}), ...(opts.scheduler || {}) });
   const pcSync = createPcSync({ history, dataDir: cfg.dataDir, getComfyUrl: () => cfg.comfyUrl, outputDirOf, log, isScheduled: (id) => scheduler.has(id), onRecorded: () => filer.kick(), ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}), ...(opts.pcSync || {}) });
 
   // Everything the preset picker shows: AI Workflow presets (live
@@ -395,6 +395,7 @@ export function createApp(cfg, opts = {}) {
         if (p === '/api/schedule/jobs' && req.method === 'POST') return json(res, 201, scheduler.add(body.jobs));
         const dm = /^\/api\/schedule\/jobs\/([\w-]+)$/.exec(p);
         if (dm && req.method === 'DELETE') return json(res, 200, scheduler.remove(dm[1]));
+        if (p === '/api/schedule/replace' && req.method === 'POST') return json(res, 200, scheduler.replace(body.ids, body.jobs)); // batch 13: Edit
         if (p === '/api/schedule/order' && req.method === 'POST') return json(res, 200, scheduler.order(body.ids));
         if (p === '/api/schedule/start' && req.method === 'POST') return json(res, 200, scheduler.start(body.at ?? null));
         if (p === '/api/schedule/stop' && req.method === 'POST') return json(res, 200, scheduler.stop());
