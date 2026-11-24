@@ -18,7 +18,7 @@ test('tags from the model are cleaned: lower case, hyphenated, no repeats, cappe
   assert.deepEqual(t.genre, ['sci-fi', 'product', 'x']);
   assert.deepEqual(t.mood, ['epic']);
   assert.deepEqual(t.palette, ['cool-blues']);
-  assert.deepEqual(t.colors, ['blue', 'orange', 'teal', 'red', 'gold']);
+  assert.equal(t.colors, undefined, 'batch 13: no plain color tags');
   assert.deepEqual(t.medium, ['3d-render']);
   assert.deepEqual(Object.keys(t), TAG_GROUPS);
   assert.equal(normalizeTags('not json'), null);
@@ -76,7 +76,7 @@ test('tagger: waits for 3 quiet minutes, then tags ONE item per check with the v
   s = await r.tagger.tick();
   assert.deepEqual([s.tagged, s.total, s.status], [2, 2, 'done']);
   const e = r.history.data.entries[1];
-  assert.deepEqual(e.tags.colors, ['blue', 'pink']);
+  assert.equal(e.tags.colors, undefined, 'batch 13: no plain color tags');
   assert.equal(e.tags.model, 'gemma3:4b');
 });
 
@@ -148,14 +148,14 @@ test('API: /api/tagger status + switch, still upload, History says which entries
     const p = entries.find((e) => e.id === pic.id), g = entries.find((e) => e.id === glb.id);
     assert.equal(g.preview, true);
     assert.deepEqual(p.tags.medium, ['3d-render'], 'mock vision answer, cleaned');
-    assert.deepEqual(p.tags.colors, ['blue', 'orange']);
+    assert.equal(p.tags.colors, undefined, 'batch 13: no plain color tags');
     assert.ok(g.tags, 'the 3D model was tagged from its still');
     st = await (await fetch(s.base + '/api/tagger', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: false }) })).json();
     assert.equal(st.status, 'off');
   } finally { await s.close(); }
 });
 
-test('History filters: type, model, date range, tags and every search word (prompt, model name, tags, colours)', () => {
+test('History filters: type, model, date range, tags and every search word (prompt, model name, tags; batch 13: not colors)', () => {
   const now = new Date(2026, 10, 23, 15, 0);
   const at = (d, h = 12) => new Date(2026, 10, d, h).getTime();
   const E = [
@@ -167,7 +167,8 @@ test('History filters: type, model, date range, tags and every search word (prom
   const labelOf = (id) => ({ 'ai:klein-4b-t2i': 'FLUX.2 Klein 4B', 'ai:z-image-turbo': 'Z-Image Turbo' })[id] || id;
   const ids = (f) => E.filter((e) => matches(e, f, { labelOf, now })).map((e) => e.id);
   assert.deepEqual(E.map(entryType), ['image', 'image', '3d', 'audio']);
-  assert.deepEqual(ids({ q: 'neon blue' }), ['1'], 'tags + colours');
+  assert.deepEqual(ids({ q: 'neon sci-fi' }), ['1'], 'tags');
+  assert.deepEqual(ids({ q: 'blue' }), [], 'batch 13: color tags are not searched');
   assert.deepEqual(ids({ q: 'klein' }), ['1'], 'model name');
   assert.deepEqual(ids({ q: 'red' }), ['2']);
   assert.deepEqual(ids({ types: new Set(['3d', 'audio']) }), ['3', '4']);
@@ -184,14 +185,14 @@ test('History filters: type, model, date range, tags and every search word (prom
   const st = statsOf(E, { now, labelOf });
   assert.deepEqual([st.total, st.today, st.month, st.byType.image, st.byType['3d']], [4, 1, 4, 2, 1]);
   assert.equal(st.models[0].n, 1);
-  assert.ok(st.tags.find((t) => t.tag === 'blue'));
-  assert.deepEqual(entryTags(E[0]), ['sci-fi', 'neon', 'blue', 'neon-lit']);
+  assert.ok(!st.tags.find((t) => t.tag === 'blue'), 'batch 13: color tags are left out');
+  assert.deepEqual(entryTags(E[0]), ['sci-fi', 'neon', 'neon-lit']);
   assert.match(timeLabel(at(23, 15)), /^3:00\sPM$/);
 });
 
 test('History UI wiring: search + chips + stats strip + tagging switch; viewer tags; module cached', () => {
   const hv = read('app/js/ui/history-view.js'), viewer = read('app/js/ui/viewer.js'), main = read('app/js/main.js');
-  assert.match(hv, /placeholder: 'Search prompts, tags, colours'/);
+  assert.match(hv, /placeholder: 'Search prompts and tags'/);
   assert.doesNotMatch(hv, /thumb-time/, 'batch 10: no times on the tiles (the date is in the viewer)');
   assert.match(hv, /localStorage\.setItem\('historyStatsOpen'/);
   assert.match(hv, /setTagger\(e\.target\.checked\)/);

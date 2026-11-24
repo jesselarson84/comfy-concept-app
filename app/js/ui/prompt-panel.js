@@ -408,6 +408,11 @@ export class PromptPanel {
 
   setPrompt(text) { this.state.prompt = text; this.#paint(); this.save(); }
 
+  /** Batch 13 (Edit a batch job): how many runs, and a copy of / back to the whole form state. */
+  setBatch(n) { this.state.batch = Math.max(1, Math.min(this.maxBatch(), Number(n) || 1)); this.#paint(); this.save(); if (this.wf) this.setWorkflow(this.wf); }
+  snapshot() { return JSON.parse(JSON.stringify(this.state)); }
+  restore(state) { if (!state) return; this.state = JSON.parse(JSON.stringify(state)); this.#paint(); this.save(); if (this.wf) this.setWorkflow(this.wf); }
+
   /** Chat / Versions: set the negative text (shown only if the preset has one). */
   setNegative(text) { this.state.negative = text ?? ''; this.#paint(); this.save(); }
 

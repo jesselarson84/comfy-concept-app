@@ -23,11 +23,11 @@
       <!-- Save as preset (node view only): the canvas graph into a picker section (ui/save-preset.js) -->
       <button id="btn-save-graph" class="btn save-graph" type="button" aria-label="Save as preset" title="Save as preset"><i class="i i-save"></i><span>Save preset</span></button>
       <!-- Node view toggle: ComfyUI's graph in the app (ui/node-view.js); pressed = node view shown -->
-      <button id="btn-canvas" class="btn icon toggle-btn" type="button" aria-pressed="false" aria-controls="node-view" aria-label="Node view (ComfyUI canvas)" title="Node view (ComfyUI canvas)"><i class="i i-blocks"></i></button>
-      <!-- History toggle (batch 5): like the node view, it swaps what is under the top bar -->
-      <button id="btn-history" class="btn icon toggle-btn" type="button" aria-pressed="false" aria-controls="history-host" aria-label="History" title="History"><i class="i i-folder"></i></button>
+      <button id="btn-canvas" class="btn icon toggle-btn" type="button" aria-pressed="false" aria-controls="node-view" aria-label="Node view (ComfyUI canvas)" title="Node view (ComfyUI canvas)"><i class="i i-nodes"></i></button>
+      <!-- Files toggle (batch 5 History; batch 13 renamed it Files): like the node view, it swaps what is under the top bar -->
+      <button id="btn-history" class="btn icon toggle-btn" type="button" aria-pressed="false" aria-controls="history-host" aria-label="Files" title="Files"><i class="i i-folder"></i></button>
     </header>
-    <section id="history-host" class="history-host" aria-label="History" hidden></section>
+    <section id="history-host" class="history-host" aria-label="Files" hidden></section>
     <div id="picker" class="picker-pop" role="listbox" aria-label="Workflow presets" hidden></div>
     <div id="picker-scrim" class="picker-scrim" hidden></div>
     <div id="banner" class="banner" hidden></div>
@@ -37,6 +37,8 @@
     <section id="panel" class="panel">
       <!-- Batch 12: "PC is running ..." with Open here (ui/pc-card.js) -->
       <div id="pc-card" class="pc-card" hidden></div>
+      <!-- Batch 13: "Editing batch job 2 · Cancel" while a batch job is loaded into the form -->
+      <div id="edit-bar" class="edit-bar" hidden></div>
       <!-- Batch 11: the project new outputs are filed into on Drive (ui/projects.js) -->
       <div id="project-row" class="project-row" hidden></div>
       <div id="preset-msg" class="msg" hidden></div>
@@ -124,10 +126,15 @@
 
     <footer class="actionbar">
       <button id="btn-cancel" class="btn danger" hidden>Cancel queue</button>
-      <!-- Batch 12: Save to batch (the PC runs the batch later, ui/batch-sheet.js) and the batch itself -->
-      <button id="btn-batch" class="btn icon batch-btn" type="button" aria-label="Batch" title="Batch"><i class="i i-list"></i><span id="batch-count" class="batch-count"></span></button>
-      <button id="btn-batch-add" class="btn batch-add" type="button"><i class="i i-plus"></i><span>Save to batch</span></button>
       <button id="btn-generate" class="btn primary run" type="button"><i class="i i-play"></i><span id="run-label">Run</span></button>
+      <!-- Batch 13: one group on the right: + saves the form to the batch, the stack opens it (count always shown) -->
+      <span class="batch-grp">
+        <button id="btn-batch-add" class="btn icon batch-add" type="button" aria-label="Save to batch" title="Save to batch"><i class="i i-plus"></i></button>
+        <button id="btn-batch" class="btn batch-btn" type="button" aria-label="Batch" title="Batch"><i class="i i-layers"></i><span id="batch-count" class="batch-count">0</span></button>
+      </span>
+      <!-- Batch 13: editing a batch job swaps Run + the batch group for these -->
+      <button id="btn-edit-cancel" class="btn edit-cancel" type="button" hidden>Cancel</button>
+      <button id="btn-edit-update" class="btn edit-update" type="button" hidden><i class="i i-check"></i><span id="edit-update-label">Update job</span></button>
     </footer>
   </div>
 </body>

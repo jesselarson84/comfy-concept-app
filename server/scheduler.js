@@ -56,6 +56,24 @@ export function createScheduler({ dataDir, history, getComfyUrl, gpuUtil = async
     return view();
   }
 
+  /**
+   * Batch 13: Edit - the waiting jobs `ids` (one row of the sheet) are replaced
+   * by `jobs` (built from the form), in the same place in the line.
+   */
+  function replace(ids, jobs) {
+    const want = new Set(Array.isArray(ids) ? ids : []);
+    const old = data.jobs.filter((j) => want.has(j.id));
+    if (!old.length) throw err(404, 'Not found');
+    if (old.some((j) => j.status !== 'waiting')) throw err(409, 'That job already started');
+    const at = data.jobs.indexOf(old[0]);
+    const before = data.jobs.length;
+    add(jobs); // validates and appends
+    const fresh = data.jobs.splice(before);
+    data.jobs = data.jobs.filter((j) => !want.has(j.id));
+    data.jobs.splice(Math.min(at, data.jobs.length), 0, ...fresh);
+    save(); return view();
+  }
+
   function remove(id) {
     const j = data.jobs.find((x) => x.id === id);
     if (!j) throw err(404, 'Not found');
@@ -94,7 +112,7 @@ export function createScheduler({ dataDir, history, getComfyUrl, gpuUtil = async
       if ((q.queue_running || []).length || (q.queue_pending || []).length) { waitReason = 'ComfyUI is busy'; return false; }
     } catch { waitReason = 'ComfyUI is not reachable'; return false; }
     const util = await gpuUtil().catch(() => null);
-    if (util !== null && util > busyPercent) { waitReason = `the GPU is busy (${util} %)`; return false; }
+    if (util !== null && util > busyPercent) { waitReason = `another program is using the GPU (${util} %)`; return false; }
     waitReason = '';
     return true;
   }
@@ -165,7 +183,7 @@ export function createScheduler({ dataDir, history, getComfyUrl, gpuUtil = async
   function kick() { if (timer) setTimeout(() => tick().catch(() => {}), 50); }
 
   return {
-    view, add, remove, order, start, stop, clearFinished, tick, kick,
+    view, add, replace, remove, order, start, stop, clearFinished, tick, kick,
     /** Prompt ids the scheduler queued (they are not "desktop" jobs). */
     has: (promptId) => data.jobs.some((j) => j.promptId === promptId),
     start_() { if (!timer) { timer = setInterval(() => tick().catch(() => {}), 10000); kick(); } },

@@ -225,7 +225,7 @@ async function openPcJob(promptId, { follow = true } = {}) {
 const pcCard = new PcCard($('#pc-card'), { onOpen: (promptId) => openPcJob(promptId), onProgress: (promptId, f) => queue.progressOf(promptId, f) });
 // A followed PC job sends its progress only to the desktop page: look in /history every few seconds.
 setInterval(() => { if (queue.following && !document.hidden) queue.resync().then(paintThumbs); }, 5000);
-const batchSheet = new BatchSheet({ button: $('#btn-batch'), badge: $('#batch-count') });
+const batchSheet = new BatchSheet({ button: $('#btn-batch'), badge: $('#batch-count'), onEdit: (row) => startEdit(row) });
 
 // ---- Save to Drive (server copies the file into a folder of Q:\My Drive) ----
 // Batch 8: asks where every time (ui/drive-folder.js), starting in the folder
@@ -373,6 +373,10 @@ function selectPreset(id, { remember = true } = {}) {
   fileInputs.render((m?.inputs || []).map((f) => ({ ...f, info: infoFor(f.kind, { manifest: m }) })));
   paintMask();
   $('#btn-generate').classList.toggle('is-unavailable', current?.availability?.status === 'unavailable');
+  // Batch 13: the + in the prompt box only when this preset takes a picture, video or audio.
+  const kinds = new Set([...(current?.ok && current.controls?.images?.length ? ['image'] : []), ...(m?.inputs || []).map((f) => f.kind)].filter((k) => ['image', 'video', 'audio'].includes(k)));
+  importSheet.setKinds(kinds);
+  $('#btn-attach').hidden = !kinds.size;
 }
 
 // ---- GPU sharing with Ollama ---------------------------------------------------
@@ -400,12 +404,83 @@ async function generate() {
  * scheduler (server/scheduler.js) and run later, one after another.
  */
 async function saveToBatch() {
+  const jobs = await batchJobs();
+  if (jobs) await batchSheet.add(jobs);
+}
+
+/** The form as batch jobs (one row in the batch sheet), or null after saying what is missing. */
+async function batchJobs() {
   const r = await buildRun();
-  if (!r?.jobs) return;
+  if (!r?.jobs) return null;
   const label = current.short || current.label;
   const seeds = (current.controls?.seed || []).map((t) => ({ node: String(t.node), input: String(t.input) }));
   const group = 'g' + Math.random().toString(36).slice(2, 10); // one row in the batch sheet for this Save
-  await batchSheet.add(withMemoryOptions(r.workflowId, r.jobs).map((j) => ({ graph: j.workflow, meta: j.meta, seeds, randomSeed: r.seedMode !== 'locked', label, group })));
+  return withMemoryOptions(r.workflowId, r.jobs).map((j) => ({ graph: j.workflow, meta: j.meta, seeds, randomSeed: r.seedMode !== 'locked', label, group }));
+}
+
+// ---- Batch 13: Edit a job that is in the batch ----------------------------------
+// ⋮ Edit in the batch sheet loads the row into the form (like Reuse); an orange
+// bar on top says what is being edited, and the bottom bar swaps Run + the batch
+// group for Cancel and "Update job N". Update replaces the row in place;
+// Cancel puts the form back the way it was. Running / finished jobs can't be edited.
+let editing = null; // { ids, index, label, prev: { preset, panel, refs, mask } }
+function startEdit(row) {
+  if (isLocked()) return busy();
+  if (editing) endEdit(true);
+  const j = row.jobs[0], meta = j.meta || {};
+  editing = { ids: row.ids, index: row.index, label: row.label, prev: { preset: current?.id, panel: panel.snapshot(), refs: { ...refs.values }, mask: maskSlot.value } };
+  const wid = resolvePresetId(meta.workflow);
+  if (wid && wid !== current?.id && workflows.some((w) => w.id === wid)) selectPreset(wid, { remember: false });
+  if (meta.reference && typeof meta.reference === 'object') {
+    const slots = current?.ok ? current.controls?.images || [] : [];
+    const refMap = slots.length ? remapReference(meta.reference, slots) : {};
+    for (const [node, ref] of Object.entries(refMap)) refs.set(node, ref);
+  }
+  if (typeof meta.mask === 'string' && current?.ai?.mask) { maskSlot.value = meta.mask; paintMask(); }
+  panel.reuse(meta);
+  panel.setSeed(j.randomSeed ? undefined : meta.seed);
+  panel.setBatch(row.jobs.length);
+  paintEdit();
+  window.scrollTo?.({ top: 0 });
+  $('#panel')?.scrollTo?.({ top: 0 });
+}
+function paintEdit() {
+  const bar = $('#edit-bar');
+  $('.actionbar').classList.toggle('editing', !!editing);
+  $('#btn-edit-cancel').hidden = $('#btn-edit-update').hidden = !editing;
+  bar.hidden = !editing;
+  if (!editing) { bar.replaceChildren(); return; }
+  $('#edit-update-label').textContent = `Update job ${editing.index + 1}`;
+  bar.replaceChildren(h('i.i.i-pencil'), h('span', {}, 'Editing ', h('b', {}, `batch job ${editing.index + 1}`), ` · ${editing.label}`), h('span.spacer'),
+    h('button.link', { type: 'button', onclick: () => endEdit(true) }, 'Cancel'));
+}
+/** restore = true: put the form back the way it was before Edit. */
+function endEdit(restore) {
+  const e = editing; editing = null;
+  if (e && restore) {
+    if (e.prev.preset && e.prev.preset !== current?.id && workflows.some((w) => w.id === e.prev.preset)) selectPreset(e.prev.preset, { remember: false });
+    panel.restore(e.prev.panel);
+    for (const [node, ref] of Object.entries(e.prev.refs)) if (ref) refs.set(node, ref);
+    maskSlot.value = e.prev.mask ?? null; paintMask();
+  }
+  paintEdit();
+}
+async function updateEdited() {
+  if (!editing) return;
+  const jobs = await batchJobs();
+  if (!jobs) return;
+  const n = editing.index + 1;
+  try {
+    await batchSheet.replace(editing.ids, jobs);
+    toast(`Job ${n} updated`);
+  } catch (e) {
+    if (!/already started|not found/i.test(e.message)) return toast(e.message, 6000);
+    // it started (or finished) while being edited: keep the change as a new job instead
+    if (!(await batchSheet.add(jobs))) return;
+    toast(`Job ${n} had already started, so this was saved as a new job`, 6000);
+  }
+  endEdit(true);
+  batchSheet.open();
 }
 
 /** The jobs for the form as it is now ({ workflowId, jobs, seedMode }), or null after saying what is missing. */
@@ -566,6 +641,8 @@ async function runAction(r) {
 }
 $('#btn-generate').addEventListener('click', generate);
 $('#btn-batch-add').addEventListener('click', saveToBatch);
+$('#btn-edit-cancel').addEventListener('click', () => endEdit(true));
+$('#btn-edit-update').addEventListener('click', updateEdited);
 $('#prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) generate(); });
 $('#btn-cancel').addEventListener('click', async () => { lock.cancel(); await queue.cancelAll(); paintThumbs(); toast('Queue cleared'); });
 $('#btn-clear').addEventListener('click', () => queue.clearFinished());

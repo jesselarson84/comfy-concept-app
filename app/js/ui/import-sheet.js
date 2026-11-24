@@ -37,19 +37,25 @@ export class ImportSheet {
     document.body.append(...Object.values(this.inputs));
   }
 
+  /** Batch 13: the kinds the current preset takes ('image' | 'video' | 'audio'); + only lists those. */
+  setKinds(kinds) { this.kinds = new Set(kinds); }
+
   open() {
     if (this.el) return;
+    const k = this.kinds || new Set(['image', 'video', 'audio']);
+    const img = k.has('image'), vid = k.has('video'), aud = k.has('audio');
+    this.inputs.device.accept = [img && 'image/*', vid && 'video/*'].filter(Boolean).join(',') || 'image/*,video/*';
     const row = (act, icon, label, sub, fn) => h('button.sheet-row', { type: 'button', dataset: { act }, onclick: () => { this.close(); fn(); } }, h(`i.i.${icon}`), h('span', {}, label, h('small.muted', {}, sub)));
     this.scrim = h('div.sheet-scrim', { onclick: () => this.close() });
     // Batch 8: opened from the + in the prompt box; Paste and From Comfy UI added.
     this.el = h('div.sheet.import-sheet', { role: 'dialog', 'aria-label': 'Attach' }, h('div.sheet-title', {}, 'Attach'),
-      row('photo', 'i-image-plus', 'Take a photo', 'Camera', () => this.inputs.photo.click()),
-      row('video', 'i-video', 'Record a video', 'Camera', () => this.inputs.video.click()),
-      row('record', 'i-audio-lines', 'Record audio', 'Microphone, e.g. a voice line', () => this.record()),
-      row('device', 'i-folder', 'Photo or video from this device', 'Gallery, files or Google Drive', () => this.inputs.device.click()),
-      row('audio-file', 'i-music', 'Audio file from this device', 'WAV, MP3, M4A … or Google Drive', () => this.inputs.audioFile.click()),
-      row('paste', 'i-images', 'Paste a picture', 'From the clipboard', () => this.paste()),
-      ...(this.fromComfy ? [row('comfy', 'i-blocks', 'From Comfy UI', 'One of your results', () => this.fromComfy())] : []));
+      img ? row('photo', 'i-image-plus', 'Take a photo', 'Camera', () => this.inputs.photo.click()) : null,
+      vid ? row('video', 'i-video', 'Record a video', 'Camera', () => this.inputs.video.click()) : null,
+      aud ? row('record', 'i-audio-lines', 'Record audio', 'Microphone, e.g. a voice line', () => this.record()) : null,
+      img || vid ? row('device', 'i-folder', img && vid ? 'Photo or video from this device' : img ? 'Photo from this device' : 'Video from this device', 'Gallery, files or Google Drive', () => this.inputs.device.click()) : null,
+      aud ? row('audio-file', 'i-music', 'Audio file from this device', 'WAV, MP3, M4A … or Google Drive', () => this.inputs.audioFile.click()) : null,
+      img ? row('paste', 'i-images', 'Paste a picture', 'From the clipboard', () => this.paste()) : null,
+      ...(this.fromComfy && img ? [row('comfy', 'i-images', 'From Files', 'One of your results', () => this.fromComfy())] : []));
     document.body.append(this.scrim, this.el);
   }
 

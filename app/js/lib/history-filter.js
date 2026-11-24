@@ -1,7 +1,8 @@
 // history-filter.js - batch 9: History search, filters and stats (pure, no DOM).
 // Search: every word must appear somewhere in the entry - its prompt, model
-// name, type, or its tags (genre, mood, palette, colours, setting, lighting,
-// medium), so "neon blue" finds a picture tagged neon-lit + blue.
+// name, type, or its tags (genre, mood, palette, setting, lighting, medium),
+// so "neon studio" finds a picture tagged neon + studio. Batch 13: plain color
+// tags (an older tagger wrote them) are ignored everywhere - not searched, not shown.
 // Filters: type (picture / video / 3D / audio), model, date range, tags.
 
 export const TYPES = [
@@ -12,7 +13,7 @@ export const DATES = [
   { key: 'today', label: 'Today' }, { key: 'yesterday', label: 'Yesterday' },
   { key: 'week', label: 'Last 7 days' }, { key: 'month', label: 'This month' },
 ];
-export const TAG_GROUPS = ['genre', 'mood', 'palette', 'colors', 'setting', 'lighting', 'medium'];
+export const TAG_GROUPS = ['genre', 'mood', 'palette', 'setting', 'lighting', 'medium'];
 
 /** image | video | 3d | audio | file for a History entry. */
 export function entryType(e) {
@@ -75,7 +76,7 @@ export function statsOf(entries, { now = new Date(), labelOf = (id) => id } = {}
   const byType = {}, models = new Map(), tags = new Map(), groupOf = new Map(), firstSeen = new Map();
   let todayN = 0, monthN = 0;
   for (const e of entries) {
-    // Batch 12: each tag's kind (genre, mood, colors...) and when each model was first used (its colour).
+    // Batch 12: each tag's kind (genre, mood, ...) and when each model was first used (its color).
     for (const g of TAG_GROUPS) for (const t of e.tags?.[g] || []) if (!groupOf.has(t)) groupOf.set(t, g);
     if (e.workflow) firstSeen.set(e.workflow, Math.min(firstSeen.get(e.workflow) ?? Infinity, e.createdAt || 0));
     const t = entryType(e); byType[t] = (byType[t] || 0) + 1;
@@ -85,7 +86,7 @@ export function statsOf(entries, { now = new Date(), labelOf = (id) => id } = {}
     for (const g of new Set(entryTags(e))) tags.set(g, (tags.get(g) || 0) + 1); // a tag in two groups counts once
   }
   const top = (m, n) => [...m.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]))).slice(0, n);
-  // A model keeps its colour slot: the order models were first used in, not their rank.
+  // A model keeps its color slot: the order models were first used in, not their rank.
   const slot = new Map([...firstSeen.entries()].sort((a, b) => a[1] - b[1] || String(a[0]).localeCompare(String(b[0]))).map(([id], i) => [id, i]));
   return {
     total: entries.length, byType, today: todayN, month: monthN,
@@ -98,25 +99,11 @@ export function statsOf(entries, { now = new Date(), labelOf = (id) => id } = {}
 /** "3:04 PM" */
 export const timeLabel = (ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
-// ---- batch 12: colours (History stats, viewer Details) ------------------------
-// Categorical colours validated on the app's dark surface (colour-blind + contrast checks).
-// Text never takes these colours; they sit on bars, dots and swatches next to it.
+// ---- batch 12: colors (History stats, viewer Details) ------------------------
+// Categorical colors validated on the app's dark surface (color-blind + contrast checks).
+// Text never takes these colors; they sit on bars, dots and swatches next to it.
 export const TYPE_COLORS = { image: '#3987e5', '3d': '#d95926', video: '#199e70', audio: '#c98500' };
 export const MODEL_COLORS = ['#199e70', '#c98500', '#d55181', '#9085e9', '#3987e5', '#d95926'];
 export const GROUP_COLORS = { genre: '#3987e5', mood: '#d55181', palette: '#9085e9', setting: '#199e70', lighting: '#c98500', medium: '#d95926' };
 export const GROUP_LABELS = { genre: 'genre', mood: 'mood', palette: 'palette', setting: 'setting', lighting: 'lighting', medium: 'medium' };
 export const modelColor = (slot) => MODEL_COLORS[(slot || 0) % MODEL_COLORS.length];
-const SWATCH = {
-  black: '#111111', white: '#f4f4f4', grey: '#808080', gray: '#808080', silver: 'linear-gradient(135deg,#eeeeee,#9a9a9a)',
-  red: '#d93a3a', orange: '#e0822a', yellow: '#e8c840', gold: 'linear-gradient(135deg,#f3d36b,#b8892a)', green: '#2e9a4a',
-  teal: '#1f9a8f', cyan: '#2ec4d6', blue: '#2f6fd6', navy: '#1f2f6b', purple: '#7a4fc9', violet: '#8a5fd6', magenta: '#c83a9e',
-  pink: '#e27aa8', brown: '#7a4a2a', beige: '#d9c7a3', cream: '#efe6cf', tan: '#c8a77a', bronze: 'linear-gradient(135deg,#d39a5c,#7a4f24)',
-  copper: '#b8693a', turquoise: '#36c2b4', lime: '#9ad13a', olive: '#7a7a2a', maroon: '#6b1f2a', crimson: '#b8182e', charcoal: '#36393f',
-};
-/** CSS background for a colour tag ("light-blue" -> blue), or null when it is not a colour name. */
-export function swatchOf(tag) {
-  const t = String(tag || '').toLowerCase();
-  if (SWATCH[t]) return SWATCH[t];
-  const last = t.split('-').pop();
-  return SWATCH[last] || null;
-}

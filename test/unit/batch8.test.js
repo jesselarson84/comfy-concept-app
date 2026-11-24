@@ -133,7 +133,7 @@ test('+ in the prompt box: the current preset gets the file when it takes that k
   assert.match(main, /kind === 'image' && current\.controls\?\.images\?\.length\) \{ refs\.set\(refs\.targetNode\(\), ref\)/);
   assert.match(main, /presetChooser\.open\(list, async \(w\) => \{/, 'the user picks the preset');
   assert.match(sheet, /'Paste a picture'/);
-  assert.match(sheet, /'From Comfy UI'/);
+  assert.match(sheet, /'From Files'/); // batch 13: History is called Files
   assert.match(sheet, /'Gallery, files or Google Drive'/);
   assert.match(read('app/js/ui/file-inputs.js'), /'Record video'/);
 });

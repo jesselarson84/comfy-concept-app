@@ -4,20 +4,19 @@
 //   - Multi-select like Google Photos: long-press a tile to start, then tap to
 //     add/remove; round check circles top-left on every tile; each date header
 //     has a select-all circle on its right. The top bar turns into
-//     X · count · share · + (Favorites or a folder) · trash · ⋮ (Select all,
-//     Remove from this folder / from Favorites).
+//     X · count · ★ · move to project · share · trash · ⋮ (Select all,
+//     Remove from Favorites). Batch 13: Folders (labels) are gone - projects
+//     do that job; the old data/folders.json is left on the PC, unused.
 //   - Tiles are grouped by day (Today, Yesterday, Sat, Jun 20).
 //   - Trash deletes the files from the PC after a confirm (server checks every
 //     file is inside ComfyUI's output/concept-app folder).
-//   - Folders screen: cover, name and count; Favorites first. Folders are labels.
 //   - 3D tiles get real preview stills (ui/model-thumbs.js), rendered lazily.
 import { h, toast } from './dom.js';
-import { getHistory, deleteHistory, getFolders, createFolder, addToFolder, removeFromFolder, patchHistory, getTagger, setTagger, uploadPreview } from '../api.js';
-import { TYPES, DATES, entryType, entryTags, matches, isFiltering, statsOf, TYPE_COLORS, GROUP_COLORS, GROUP_LABELS, modelColor, swatchOf } from '../lib/history-filter.js';
+import { getHistory, deleteHistory, patchHistory, getTagger, setTagger, uploadPreview } from '../api.js';
+import { TYPES, DATES, entryType, entryTags, matches, isFiltering, statsOf, TYPE_COLORS, GROUP_COLORS, GROUP_LABELS, modelColor } from '../lib/history-filter.js';
 import { viewUrl } from '../comfy-client.js';
 import { deleteThumb, thumbKey } from '../lib/thumb-cache.js';
 import { fileLabel } from '../lib/outputs.js';
-import { Overlay, overlayTop, afterBack } from './overlay.js';
 import { bridge, has, absoluteUrl } from '../native.js';
 import { loadProjects, projectsCache } from './projects.js';
 
@@ -43,20 +42,18 @@ export class HistoryView {
     this.previewing = new Set(); // entries whose still is being made / sent
     this.host = host || document.body; this.button = button; this.onChange = onChange;
     this.favOnly = false;
-    this.folder = null;          // { id, name } when showing one folder
     this.selected = new Set();   // history entry ids
     this.selecting = false;
     this.entries = new Map();    // id -> entry (current list)
     this.list = h('div.history-list');
-    this.title = h('h2', {}, 'History');
+    this.title = h('h2', {}, 'Files'); // batch 13: History is called Files
     this.favBtn = h('button.btn', { type: 'button', onclick: () => this.setView(null, !this.favOnly) }, '★ Favorites');
-    // Inside a folder or Favorites: back to all of History (Back does the same).
-    this.backBtn = h('button.btn.icon.hist-back', { type: 'button', hidden: true, 'aria-label': 'All history', title: 'All history', dataset: { act: 'all-history' }, onclick: () => this.setView(null, false) }, h('i.i.i-chevron-left'));
-    this.foldersBtn = h('button.btn.icon', { type: 'button', 'aria-label': 'Folders', dataset: { act: 'folders' }, onclick: () => this.openFolders() }, h('i.i.i-folder'));
+    // Inside Favorites: back to all of Files (Back does the same).
+    this.backBtn = h('button.btn.icon.hist-back', { type: 'button', hidden: true, 'aria-label': 'All files', title: 'All files', dataset: { act: 'all-history' }, onclick: () => this.setView(null, false) }, h('i.i.i-chevron-left'));
     // No close button: the History toggle in the top bar (or Back) closes it.
-    this.normalBar = h('div.history-top', {}, this.backBtn, this.title, h('span.spacer'), this.foldersBtn, this.favBtn);
+    this.normalBar = h('div.history-top', {}, this.backBtn, this.title, h('span.spacer'), this.favBtn);
     this.count = h('span.sel-count', {}, '0');
-    // Batch favourite: favourites the whole selection, or unfavourites it when it is all favourites already.
+    // Favorite: favorites the whole selection, or unfavorites it when it is all favorites already.
     this.selFavBtn = h('button.icon-btn.sel-fav', { type: 'button', 'aria-label': 'Favorite', dataset: { act: 'favorite' }, onclick: () => this.favoriteSelected() }, '☆');
     this.selBar = h('div.history-top.sel-bar', { hidden: true },
       h('button.icon-btn', { type: 'button', 'aria-label': 'Cancel selection', dataset: { act: 'cancel-sel' }, onclick: () => this.endSelect() }, '✕'),
@@ -64,11 +61,10 @@ export class HistoryView {
       this.selFavBtn,
       h('button.icon-btn', { type: 'button', 'aria-label': 'Move to project', title: 'Move to project', dataset: { act: 'move' }, onclick: () => this.moveSelected() }, h('i.i.i-folder-input')),
       h('button.icon-btn', { type: 'button', 'aria-label': 'Share', dataset: { act: 'share' }, onclick: () => this.share() }, h('i.i.i-share-2')),
-      h('button.icon-btn', { type: 'button', 'aria-label': 'Add to', dataset: { act: 'add' }, onclick: () => this.openAddTo() }, h('i.i.i-plus')),
       h('button.icon-btn', { type: 'button', 'aria-label': 'Delete', dataset: { act: 'delete' }, onclick: () => this.confirmDelete() }, h('i.i.i-trash-2')),
       h('button.icon-btn', { type: 'button', 'aria-label': 'More', dataset: { act: 'more' }, onclick: (e) => this.openMore(e.currentTarget) }, h('i.i.i-more-vertical')));
     // Batch 9: search + filter chips, and the stats strip (tap to open).
-    this.search = h('input.hsearch', { type: 'search', placeholder: 'Search prompts, tags, colours', 'aria-label': 'Search History', autocomplete: 'off', enterkeyhint: 'search',
+    this.search = h('input.hsearch', { type: 'search', placeholder: 'Search prompts and tags', 'aria-label': 'Search Files', autocomplete: 'off', enterkeyhint: 'search',
       oninput: () => { this.filter.q = this.search.value; this.render(); } });
     this.chips = h('div.hfilters');
     // Batch 11: By project (default) / By date.
@@ -77,14 +73,13 @@ export class HistoryView {
       for (const b of this.groupSeg.children) b.setAttribute('aria-pressed', String(b.dataset.group === key));
       this.render();
     } }, label);
-    this.groupSeg = h('div.hseg', { role: 'group', 'aria-label': 'Group History' }, seg('project', 'By project'), seg('date', 'By date'));
+    this.groupSeg = h('div.hseg', { role: 'group', 'aria-label': 'Group Files' }, seg('project', 'By project'), seg('date', 'By date'));
     this.tools = h('div.history-tools', {}, h('label.hsearch-row', {}, h('i.i.i-search', { 'aria-hidden': 'true' }), this.search), this.groupSeg, this.chips);
     this.statsOpen = localStorage.getItem('historyStatsOpen') === '1';
     this.stats = h('div.hstats', { role: 'button', tabindex: 0, dataset: { act: 'stats' } });
     this.stats.addEventListener('click', (e) => { if (e.target.closest('button, .hswitch')) return; this.statsOpen = !this.statsOpen; localStorage.setItem('historyStatsOpen', this.statsOpen ? '1' : '0'); this.paintStats(); });
     this.root = h('div.history', { hidden: true }, this.normalBar, this.selBar, this.tools, this.stats, this.list);
     this.host.append(this.root);
-    this.folders = new FoldersScreen((f) => (f?.id === 'favorites' ? this.setView(null, true) : this.setView(f, false)));
     // Android back button / gesture: leaves selection first, then closes History.
     window.addEventListener('popstate', () => {
       if (this.root.hidden) return;
@@ -95,17 +90,17 @@ export class HistoryView {
   }
 
   get on() { return !this.root.hidden; }
-  /** Showing one folder or Favorites (not all of History). */
-  get inSub() { return !!(this.folder || this.favOnly); }
+  /** Showing Favorites (not all of Files). */
+  get inSub() { return this.favOnly; }
 
   /**
-   * Switch between all of History, Favorites and one folder. Going from all of
-   * History into a folder / Favorites adds one Back entry ({ historySub }), so
-   * Back (or the arrow) returns to all of History before it closes History.
+   * Switch between all of Files and Favorites. Going into Favorites adds one
+   * Back entry ({ historySub }), so Back (or the arrow) returns to all of Files
+   * before it closes Files. (The first argument was a folder before batch 13.)
    */
-  setView(folder, favOnly, fromPop = false) {
+  setView(_unused, favOnly, fromPop = false) {
     const wasSub = this.inSub;
-    this.folder = folder || null; this.favOnly = !!favOnly && !folder;
+    this.favOnly = !!favOnly;
     this.favBtn.classList.toggle('on', this.favOnly);
     if (this.on && !fromPop) {
       if (this.inSub && !wasSub && !history.state?.historySub) history.pushState({ history: true, historySub: true }, '');
@@ -120,8 +115,8 @@ export class HistoryView {
   async open({ replace = false } = {}) {
     if (this.root.hidden) {
       if (replace) history.replaceState({ history: true }, ''); else history.pushState({ history: true }, '');
-      // Opening History always starts on all of it, not the folder you left it in.
-      this.folder = null; this.favOnly = false; this.favBtn.classList.remove('on');
+      // Opening Files always starts on all of it, not Favorites.
+      this.favOnly = false; this.favBtn.classList.remove('on');
       this.#paintOn(true);
     }
     await this.load();
@@ -132,7 +127,7 @@ export class HistoryView {
     if (this.root.hidden) return;
     this.endSelect(true);
     this.#paintOn(false);
-    // Pops this view's entries in one go (a folder and a selection add one each).
+    // Pops this view's entries in one go (Favorites and a selection add one each).
     if (!fromPop && history.state?.history) history.go(-(1 + (history.state.historySub ? 1 : 0) + (history.state.historySel ? 1 : 0)));
   }
 
@@ -252,22 +247,6 @@ export class HistoryView {
     } catch (e) { if (e.name !== 'AbortError') toast('Share failed: ' + e.message); }
   }
 
-  async openAddTo() {
-    const ids = [...this.selected];
-    if (!ids.length) return;
-    let data;
-    try { data = await getFolders(); } catch (e) { toast(e.message); return; }
-    const sheet = new Sheet();
-    const done = async (fn, label) => { try { await fn(); toast(`Added ${ids.length} to ${label}`); sheet.close(); this.endSelect(); this.load(); } catch (e) { toast(e.message, 6000); } };
-    const name = h('input.sheet-input', { type: 'text', maxlength: 60, 'aria-label': 'New folder' });
-    sheet.open('Add to', [
-      h('button.sheet-row', { type: 'button', dataset: { folder: 'favorites' }, onclick: () => done(() => Promise.all(ids.map((id) => patchHistory(id, { favorite: true }))), 'Favorites') }, h('span', {}, '★'), h('span', {}, 'Favorites')),
-      ...data.folders.map((f) => h('button.sheet-row', { type: 'button', dataset: { folder: f.id }, onclick: () => done(() => addToFolder(f.id, ids), f.name) }, h('i.i.i-folder'), h('span', {}, f.name), h('span.muted', {}, String(f.count)))),
-      h('form.sheet-new', { onsubmit: (e) => { e.preventDefault(); const n = name.value.trim(); if (n) done(async () => { const f = await createFolder(n); await addToFolder(f.id, ids); }, n); } },
-        h('i.i.i-plus'), name, h('button.btn', { type: 'submit', dataset: { act: 'create' } }, 'Create')),
-    ]);
-  }
-
   /** Batch 11: the selection (and what was made from it) to another project; its Drive files move too. */
   async moveSelected() {
     const ids = [...this.selected];
@@ -302,8 +281,7 @@ export class HistoryView {
     this.menu?.remove();
     const item = (act, label, fn) => h('button.sel-menu-item', { type: 'button', dataset: { act }, onclick: async () => { close(); await fn(); } }, label);
     const items = [item('select-all', 'Select all', () => { for (const g of this.list.querySelectorAll('.history-session')) for (const id of JSON.parse(g.dataset.ids || '[]')) this.selected.add(id); this.paintSelection(); })];
-    if (this.folder) items.push(item('remove-folder', `Remove from ${this.folder.name}`, () => this.removeSelected(() => removeFromFolder(this.folder.id, [...this.selected]))));
-    else if (this.favOnly) items.push(item('remove-fav', 'Remove from Favorites', () => this.removeSelected(() => Promise.all([...this.selected].map((id) => patchHistory(id, { favorite: false }))))));
+    if (this.favOnly) items.push(item('remove-fav', 'Remove from Favorites', () => this.removeSelected(() => Promise.all([...this.selected].map((id) => patchHistory(id, { favorite: false }))))));
     const scrim = h('div.sel-menu-scrim', { onclick: () => close() });
     const menu = h('div.sel-menu', { role: 'menu' }, ...items);
     const close = () => { scrim.remove(); menu.remove(); this.menu = null; };
@@ -319,16 +297,14 @@ export class HistoryView {
     await this.load();
   }
 
-  async openFolders() { await this.folders.open(); }
-
   // ---- list ----------------------------------------------------------------
   async load() {
-    this.title.textContent = this.folder ? this.folder.name : this.favOnly ? 'Favorites' : 'History';
+    this.title.textContent = this.favOnly ? 'Favorites' : 'Files';
     this.backBtn.hidden = !this.inSub;
     this.list.replaceChildren(h('p.muted', {}, 'Loading…'));
     let sessions;
     // Batch 11: the projects (names, grouping folders) come along for the project groups.
-    try { [sessions] = await Promise.all([getHistory(this.favOnly, this.folder?.id), loadProjects().catch(() => null)]); } catch (e) { this.list.replaceChildren(h('p.muted', {}, e.message)); return; }
+    try { [sessions] = await Promise.all([getHistory(this.favOnly), loadProjects().catch(() => null)]); } catch (e) { this.list.replaceChildren(h('p.muted', {}, e.message)); return; }
     this.sessions = sessions;
     this.entries = new Map(sessions.flatMap((s) => s.entries.map((e) => [e.id, e])));
     for (const id of [...this.selected]) if (!this.entries.has(id)) this.selected.delete(id);
@@ -338,7 +314,7 @@ export class HistoryView {
   }
 
   // ---- batch 9: search, filters, stats ----------------------------------------
-  /** Everything in the current view (all / Favorites / a folder), newest first. */
+  /** Everything in the current view (all / Favorites), newest first. */
   allEntries() { return this.sessions.flatMap((s) => s.entries).filter((e) => e.images?.length || e.files?.length).sort((a, b) => b.createdAt - a.createdAt); }
 
   /** History searched for one tag (a tag tapped in the viewer or the stats). */
@@ -372,8 +348,8 @@ export class HistoryView {
     this.stats.setAttribute('aria-expanded', String(this.statsOpen));
     this.stats.hidden = !all.length;
     const ch = h('i.i.i-chevron-down.hstats-ch', { 'aria-hidden': 'true' });
-    // Batch 12 (option C): colour only where it means something - the type bar,
-    // the model bars, real colours for colour tags and a dot per kind of tag.
+    // Batch 12 (option C): color only where it means something - the type bar,
+    // the model bars and a dot per kind of tag.
     const types = TYPES.filter((t) => TYPE_COLORS[t.key]);
     const typeBar = (cls) => h(`span.htbar${cls}`, { 'aria-hidden': 'true' }, ...types.filter((t) => s.byType[t.key]).map((t) => h('i', { style: `flex:${s.byType[t.key]};background:${TYPE_COLORS[t.key]}` })));
     if (!this.statsOpen) {
@@ -386,8 +362,7 @@ export class HistoryView {
       h('span.hdot', { dataset: { status: tg.status } }),
       h('span', {}, `${{ off: 'Tagging is off', done: 'All tagged', tagging: 'Tagging…', paused: `Tagging paused: ${tg.reason}`, waiting: 'Tagging waits for a quiet GPU' }[tg.status] || 'Tagging'} · ${tg.tagged} of ${tg.total} tagged`),
       h('label.hswitch', { title: 'Background tagging' }, h('input', { type: 'checkbox', checked: tg.enabled, 'aria-label': 'Background tagging', onchange: async (e) => { try { this.taggerState = await setTagger(e.target.checked); this.paintStats(); } catch (err) { toast(err.message, 6000); } } }), h('span'))) : null;
-    const colours = s.tags.filter((t) => t.group === 'colors').slice(0, 12);
-    const others = s.tags.filter((t) => t.group !== 'colors').slice(0, 16);
+    const others = s.tags.filter((t) => t.group).slice(0, 16); // batch 13: no Colors section
     const groups = [...new Set(others.map((t) => t.group).filter((g) => GROUP_COLORS[g]))];
     const tagBtn = (t, mark) => h('button.htag', { type: 'button', dataset: { tag: t.tag }, onclick: () => this.searchTag(t.tag) }, mark, t.tag, h('em', {}, String(t.n)));
     this.stats.replaceChildren(...[
@@ -396,8 +371,6 @@ export class HistoryView {
       h('div.hlegend', {}, ...types.map((t) => h(`span${s.byType[t.key] ? '' : '.zero'}`, {}, h('i.hsw', { style: `background:${s.byType[t.key] ? TYPE_COLORS[t.key] : 'var(--c-border)'}` }), `${t.label} ${s.byType[t.key] || 0}`))),
       s.models.length ? h('div.hsec', {}, 'Top models') : null,
       ...s.models.map((m) => h('button.hbar', { type: 'button', dataset: { model: m.id }, onclick: () => { this.filter.models = new Set([m.id]); this.render(); } }, h('span', {}, m.label), h('i', {}, h('b', { style: `width:${Math.round((m.n / max) * 100)}%;background:${modelColor(m.slot)}` })), h('span.n', {}, String(m.n)))),
-      colours.length ? h('div.hsec', {}, 'Colours') : null,
-      colours.length ? h('div.htags', {}, ...colours.map((t) => tagBtn(t, swatchOf(t.tag) ? h('i.hswatch', { style: `background:${swatchOf(t.tag)}` }) : null))) : null,
       others.length ? h('div.hsec', {}, 'Tags') : null,
       others.length ? h('div.htags', {}, ...others.map((t) => tagBtn(t, GROUP_COLORS[t.group] ? h('i.hdot2', { style: `background:${GROUP_COLORS[t.group]}` }) : null))) : null,
       groups.length ? h('div.hlegend.hgroups', {}, ...groups.map((g) => h('span', {}, h('i.hdot2', { style: `background:${GROUP_COLORS[g]}` }), GROUP_LABELS[g]))) : null,
@@ -454,7 +427,7 @@ export class HistoryView {
     this.paintChips();
     this.paintStats();
     const all = this.allEntries();
-    if (!all.length) { this.list.replaceChildren(h('p.muted', {}, this.folder ? 'Empty folder.' : this.favOnly ? 'No favorites yet.' : 'Nothing generated yet.')); this.paintSelection(); return; }
+    if (!all.length) { this.list.replaceChildren(h('p.muted', {}, this.favOnly ? 'No favorites yet.' : 'Nothing generated yet.')); this.paintSelection(); return; }
     const filtering = isFiltering(this.filter);
     const shown = filtering ? all.filter((e) => matches(e, this.filter, { labelOf: this.labelOf })) : all;
     const head = filtering ? [h('div.hresults', {}, `${shown.length} ${shown.length === 1 ? 'result' : 'results'}`, h('button.link', { type: 'button', dataset: { act: 'clear-filters' }, onclick: () => this.clearFilters() }, 'Clear'))] : [];
@@ -594,30 +567,7 @@ function sourceImage(e) {
   return { filename: i >= 0 ? ref.slice(i + 1) : ref, subfolder: i >= 0 ? ref.slice(0, i) : '', type: 'input' };
 }
 
-/** Folders screen: Favorites + every folder as a card (cover, name, count). */
-class FoldersScreen {
-  constructor(onPick) {
-    this.onPick = onPick;
-    this.ov = new Overlay('folders', 'Folders');
-    this.grid = h('div.folder-grid');
-    this.ov.root.append(overlayTop('Folders', () => this.ov.close()), this.grid);
-  }
-
-  async open() {
-    this.ov.show();
-    this.grid.replaceChildren(h('p.muted', {}, 'Loading…'));
-    let data;
-    try { data = await getFolders(); } catch (e) { this.grid.replaceChildren(h('p.muted', {}, e.message)); return; }
-    const card = (id, name, count, cover, pick) => h('button.folder-card', { type: 'button', dataset: { folder: id }, onclick: () => { this.ov.close(); afterBack().then(pick); } },
-      h('span.folder-cover', {}, cover && !/\.(glb|gltf|mp3|wav|flac|ogg|mp4|webm|mov|mkv)$/i.test(cover.filename) ? h('img', { src: viewUrl(cover, { thumb: true }), loading: 'lazy', alt: '' }) : h('i.i.i-folder')),
-      h('span.folder-name', {}, name), h('span.folder-count', {}, String(count)));
-    this.grid.replaceChildren(
-      card('favorites', 'Favorites', data.favorites.count, data.favorites.cover, () => this.onPick({ id: 'favorites', name: 'Favorites' })),
-      ...data.folders.map((f) => card(f.id, f.name, f.count, f.cover, () => this.onPick({ id: f.id, name: f.name }))));
-  }
-}
-
-/** Bottom sheet for "Add to". */
+/** Bottom sheet. */
 class Sheet {
   open(title, rows) {
     this.scrim = h('div.sheet-scrim', { onclick: () => this.close() });

@@ -81,6 +81,9 @@ export class ActionMenu {
     this.el.style.top = `${Math.round(r.bottom + 4)}px`;
     this.el.style.right = `${Math.max(8, Math.round(window.innerWidth - r.right))}px`;
     document.body.append(this.scrim, this.el);
+    // Batch 13: no room under the button (a row low in a sheet) -> open above it.
+    const mh = this.el.offsetHeight;
+    if (r.bottom + 4 + mh > window.innerHeight - 8 && r.top - 4 - mh > 8) this.el.style.top = `${Math.round(r.top - 4 - mh)}px`;
     anchor.setAttribute('aria-expanded', 'true');
     this.anchor = anchor;
     document.addEventListener('keydown', this.onKey, true);

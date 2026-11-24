@@ -29,7 +29,7 @@ import { viewUrl } from '../comfy-client.js';
 import { bridge, has, absoluteUrl } from '../native.js';
 import { confirmDialog } from './history-view.js';
 import { projectLabel, projectById } from './projects.js';
-import { GROUP_COLORS, swatchOf } from '../lib/history-filter.js';
+import { GROUP_COLORS } from '../lib/history-filter.js';
 
 /** [muted 'Apps ›', 'Cache'] for a project id, ['Unsorted'] for none. */
 function projectCrumb(id) {
@@ -303,8 +303,8 @@ export class Viewer {
     const it = this.current(); if (!it) return this.closeDetails();
     const m = it.meta || {};
     // Batch 12 (option A): prompt card with Copy + Reuse, small fact tiles, a
-    // "Saved to" card (project + Drive path), tags with a dot per kind (colour
-    // tags show their colour; no separate Colours section).
+    // "Saved to" card (project + Drive path), tags with a dot per kind
+    // (batch 13: no plain color tags).
     const facts = [
       ['Model', this.#model(it)],
       ['Size', m.width && m.height ? `${m.width} × ${m.height}` : ''],
@@ -325,7 +325,7 @@ export class Viewer {
       h('div.vd-path', {}, d.path || ({ waiting: 'Filed on Drive once Drive and ComfyUI are reachable', moving: 'Moving to its new project', gone: "No longer in ComfyUI's output folder" }[d.state] || ''))) : null;
     const tags = [...new Set(it.tags || [])];
     const groupOf = (t) => { for (const [g, list] of Object.entries(it.tagsBy || {})) if (list?.includes(t)) return g; return null; };
-    const mark = (t) => { const g = groupOf(t); if (g === 'colors' && swatchOf(t)) return h('i.hswatch', { style: `background:${swatchOf(t)}` }); return GROUP_COLORS[g] ? h('i.hdot2', { style: `background:${GROUP_COLORS[g]}` }) : null; };
+    const mark = (t) => { const g = groupOf(t); return GROUP_COLORS[g] ? h('i.hdot2', { style: `background:${GROUP_COLORS[g]}` }) : null; };
     // (replaceChildren would print a null as the text "null": drop the empty parts)
     this.detailsBody.replaceChildren(...[
       h('div.vd-card', {},
