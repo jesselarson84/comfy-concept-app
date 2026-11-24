@@ -13,6 +13,10 @@ import { h, toast } from './dom.js';
 import * as api from '../api.js';
 
 let cache = null; // last /api/projects answer
+// Batch 12: the project new outputs go to, picked on THIS device. Every load of the
+// app starts on No project (null); moving things never changes it.
+let current = null;
+export const getCurrentProject = () => (current && projectById(current) ? current : null);
 export async function loadProjects() { cache = await api.getProjects(); return cache; }
 export const projectsCache = () => cache;
 export function projectById(id) { return id ? cache?.projects.find((p) => p.id === id) || null : null; }
@@ -70,11 +74,11 @@ export class ProjectSheet {
     const live = d.projects.filter((p) => !p.missing);
     if (live.length) rows.push(h('div.pj-sec', {}, 'Recent'));
     for (const p of live) {
-      const on = !this.move && d.current === p.id;
+      const on = !this.move && current === p.id;
       rows.push(this.#row({ name: p.name, sub: [p.group.join(' › ') || d.root, `${p.count} ${p.count === 1 ? 'output' : 'outputs'}`, ago(p.lastAt || p.lastUsedAt)].filter(Boolean).join(' · '),
         on, act: 'project', data: { project: p.id }, end: on ? h('i.i.i-check') : null, click: () => this.finish(p.id) }));
     }
-    const noOn = !this.move && !d.current;
+    const noOn = !this.move && !current;
     rows.push(this.#row({ icon: 'i-circle', name: this.move ? 'Unsorted' : 'No project', sub: `Files go to ${d.root}/__Comfy UI`, on: noOn, act: 'no-project', end: noOn ? h('i.i.i-check') : null, click: () => this.finish(null) }));
     rows.push(h('div.pj-sec', {}, 'Find another'));
     rows.push(this.#row({ icon: 'i-plus', name: 'New project…', sub: 'Makes a new folder on Drive', act: 'new-project', end: h('i.i.i-chevron-right'), click: () => this.showNew() }));
@@ -165,7 +169,7 @@ export class ProjectChip {
 
   paint() {
     const d = projectsCache();
-    const p = projectById(d?.current);
+    const p = projectById(getCurrentProject());
     this.crumb.textContent = p?.group.length ? `${p.group.join(' › ')} ›` : '';
     this.name.textContent = p ? p.name : 'No project';
     this.btn.classList.toggle('none', !p);
@@ -177,7 +181,7 @@ export class ProjectChip {
   async open() {
     const id = await this.sheet.pick({ title: 'Project' });
     if (id === undefined) return;
-    try { await api.setCurrentProject(id); } catch (e) { toast(e.message, 6000); }
+    current = id || null;
     await this.refresh();
     toast(id ? `Project: ${projectLabel(id)}` : 'No project: outputs go to Unsorted');
   }

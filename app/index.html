@@ -35,6 +35,8 @@
     <section id="node-view" class="node-view" aria-label="ComfyUI node view" hidden></section>
 
     <section id="panel" class="panel">
+      <!-- Batch 12: "PC is running ..." with Open here (ui/pc-card.js) -->
+      <div id="pc-card" class="pc-card" hidden></div>
       <!-- Batch 11: the project new outputs are filed into on Drive (ui/projects.js) -->
       <div id="project-row" class="project-row" hidden></div>
       <div id="preset-msg" class="msg" hidden></div>
@@ -122,6 +124,9 @@
 
     <footer class="actionbar">
       <button id="btn-cancel" class="btn danger" hidden>Cancel queue</button>
+      <!-- Batch 12: Save to batch (the PC runs the batch later, ui/batch-sheet.js) and the batch itself -->
+      <button id="btn-batch" class="btn icon batch-btn" type="button" aria-label="Batch" title="Batch"><i class="i i-list"></i><span id="batch-count" class="batch-count"></span></button>
+      <button id="btn-batch-add" class="btn batch-add" type="button"><i class="i i-plus"></i><span>Save to batch</span></button>
       <button id="btn-generate" class="btn primary run" type="button"><i class="i i-play"></i><span id="run-label">Run</span></button>
     </footer>
   </div>

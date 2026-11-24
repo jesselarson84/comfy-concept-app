@@ -35,8 +35,12 @@
 //   /api/projects/browse   GET   ?path=Apps  sub folders of ACTIVE (project / grouping folder)
 //   /api/projects          POST  {path}            an existing folder becomes a project
 //   /api/projects/new      POST  {name, parent}    new folder (+ "__comfy outputs") as a project
-//   /api/projects/current  POST  {id|null}         the project new outputs go to
 //   /api/projects/move     POST  {ids, project}    entries (+ what was made from them) to a project
+//   Batch 12 - desktop ComfyUI in the app (server/pc-sync.js) and batches (server/scheduler.js):
+//   /api/pc/now            GET   what the PC is running (the "PC is running" card)
+//   /api/pc/job/:promptId  GET   a job's workflow (API graph + UI workflow) to open on the phone
+//   /api/schedule          GET   the batch; POST /api/schedule/jobs {jobs}, DELETE /api/schedule/jobs/:id,
+//                          POST /api/schedule/order {ids}, /start {at|null}, /stop, /clear
 //   /scripts/* /extensions/* /assets/* -> ComfyUI too (custom-node extensions
 //                   that import from the ComfyUI root instead of /comfy/)
 // Binds 127.0.0.1 only. Remote access = `tailscale serve` in front of it.
@@ -73,6 +77,8 @@ import { FolderStore } from './folders.js';
 import { saveToDrive, listDriveFolders, makeDriveFolder } from './drive.js';
 import { ProjectStore, KIND_DIRS } from './projects.js';
 import { createFiler } from './filer.js';
+import { createPcSync } from './pc-sync.js';
+import { createScheduler } from './scheduler.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
 const COMFY_SNIPPET = '<link rel="stylesheet" href="/comfy-tweaks.css" data-concept-tweaks><script src="/js/comfy-tweaks.js" data-concept-tweaks></script>';
@@ -117,6 +123,10 @@ export function createApp(cfg, opts = {}) {
   // ComfyUI's output folder (delete, "From Comfy UI"): last good value cached in data/.
   const outDirCache = createOutputDirCache(cfg.dataDir);
   const outputDirOf = () => comfyOutputDir(cfg, { cache: outDirCache, log, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
+
+  // Batch 12: desktop ComfyUI jobs into History (+ their workflows), and batches run by the PC.
+  const scheduler = createScheduler({ dataDir: cfg.dataDir, history, getComfyUrl: () => cfg.comfyUrl, gpuUtil: opts.gpuUtil || (() => readGpuUtil(runNvidiaUtil)), beforeQueue: async (id) => memory.beforeQueue(id, await memoryFor(id)), log, onFinished: () => filer.kick(), ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}), ...(opts.scheduler || {}) });
+  const pcSync = createPcSync({ history, dataDir: cfg.dataDir, getComfyUrl: () => cfg.comfyUrl, outputDirOf, log, isScheduled: (id) => scheduler.has(id), onRecorded: () => filer.kick(), ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}), ...(opts.pcSync || {}) });
 
   // Everything the preset picker shows: AI Workflow presets (live
   // availability), saved builder setups (re-validated live) and workflows
@@ -168,10 +178,11 @@ export function createApp(cfg, opts = {}) {
    * ACTIVE/__Comfy UI/<kind>), as paths relative to My Drive, so the old top-level
    * My Drive\Comfy UI folder is no longer made. null when ACTIVE is not inside My Drive.
    */
-  function saveDefaults() {
+  function saveDefaults(projectId = null) {
     if (!projects.available()) return null;
     const root = path.dirname(path.resolve(cfg.driveDir));
-    const base = projects.outputsDir(projects.current) || projects.outputsDir(null);
+    // Batch 12: the project is the device's own pick (sent by the app), not a shared one.
+    const base = (projectId && projects.get(projectId) ? projects.outputsDir(projectId) : null) || projects.outputsDir(null);
     const rel = path.relative(root, base);
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
     const r = rel.split(path.sep).join('/');
@@ -304,7 +315,7 @@ export function createApp(cfg, opts = {}) {
           for (const key of ['images', 'files']) {
             for (const f of e[key] || []) {
               let r;
-              try { r = await deleteAppFile(f, { outputDir, outputSubfolder: cfg.outputSubfolder, unlink: opts.unlink, wait: opts.wait }); } catch (err) { r = { ok: false, reason: err.message }; }
+              try { r = await deleteAppFile(f, { outputDir, outputSubfolder: cfg.outputSubfolder, unlink: opts.unlink, wait: opts.wait, anywhere: e.origin === 'desktop' }); } catch (err) { r = { ok: false, reason: err.message }; }
               if (r.ok) { gone.push(f); continue; }
               left[key].push(f);
               refused.push({ id, file: `${f.subfolder ? f.subfolder + '/' : ''}${f.filename}`, reason: r.reason });
@@ -316,6 +327,7 @@ export function createApp(cfg, opts = {}) {
           else if (left.images.length + left.files.length < (e.images?.length || 0) + (e.files?.length || 0)) trimmed.set(id, left);
         }
       } finally {
+        pcSync.forget(deleted.map((id) => history.get(id)?.promptId)); // never re-recorded from ComfyUI's history
         await history.remove(deleted);
         await tagger.dropPreviews(deleted);
         for (const [id, left] of trimmed) await history.update(id, left);
@@ -354,7 +366,8 @@ export function createApp(cfg, opts = {}) {
       // Batch 11: the project of the picture it was made from (upscale / 3D / Use as
       // reference), else the current project, else Unsorted. Never what the client says.
       const from = history.get(body?.parent?.historyId) || history.get(body?.source);
-      const project = from ? (from.project ?? null) : projects.current;
+      // Batch 12: else the project picked on that device (the app starts every load on No project).
+      const project = from ? (from.project ?? null) : (typeof body?.project === 'string' && projects.get(body.project) ? body.project : null);
       if (project) projects.touch(project);
       const e = await history.add({ ...body, project, source: from && history.get(body?.source) ? body.source : undefined });
       if (e.images.length || e.files.length) filer.kick();
@@ -367,6 +380,27 @@ export function createApp(cfg, opts = {}) {
       const e = await history.update(m[1], body);
       if (e && ('images' in body || 'files' in body)) filer.kick(); // finished: file it on Drive
       return e ? json(res, 200, migrateHistoryEntry(e)) : json(res, 404, { error: 'Not found' });
+    }
+    // ---- Batch 12: desktop ComfyUI + batches ----
+    if (p === '/api/pc/now' && req.method === 'GET') return json(res, 200, await pcSync.now());
+    {
+      const jm = /^\/api\/pc\/job\/([\w-]+)$/.exec(p);
+      if (jm && req.method === 'GET') { const j = await pcSync.job(jm[1]); return j ? json(res, 200, j) : json(res, 404, { error: 'That workflow is no longer available' }); }
+    }
+    if (p.startsWith('/api/schedule')) {
+      let body = {};
+      if (req.method === 'POST') { try { const t = (await readBody(req, 20 * 1024 * 1024)).toString('utf8'); body = t ? JSON.parse(t) : {}; } catch { return json(res, 400, { error: 'Bad JSON' }); } }
+      try {
+        if (p === '/api/schedule' && req.method === 'GET') return json(res, 200, scheduler.view());
+        if (p === '/api/schedule/jobs' && req.method === 'POST') return json(res, 201, scheduler.add(body.jobs));
+        const dm = /^\/api\/schedule\/jobs\/([\w-]+)$/.exec(p);
+        if (dm && req.method === 'DELETE') return json(res, 200, scheduler.remove(dm[1]));
+        if (p === '/api/schedule/order' && req.method === 'POST') return json(res, 200, scheduler.order(body.ids));
+        if (p === '/api/schedule/start' && req.method === 'POST') return json(res, 200, scheduler.start(body.at ?? null));
+        if (p === '/api/schedule/stop' && req.method === 'POST') return json(res, 200, scheduler.stop());
+        if (p === '/api/schedule/clear' && req.method === 'POST') return json(res, 200, scheduler.clearFinished());
+      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      return json(res, 404, { error: 'Unknown API route' });
     }
     // ---- Batch 11: projects ----
     if (p.startsWith('/api/projects')) {
@@ -385,15 +419,14 @@ export function createApp(cfg, opts = {}) {
             lastAt.set(id, Math.max(lastAt.get(id) || 0, e.createdAt || 0));
           }
           return json(res, 200, {
-            available: projects.available(), root: path.basename(projects.root), current: projects.current,
+            available: projects.available(), root: path.basename(projects.root),
             projects: list.map((x) => ({ id: x.id, name: x.name, path: x.rel, group: x.group, missing: x.missing, lastUsedAt: x.lastUsedAt || 0, count: counts.get(x.id) || 0, lastAt: lastAt.get(x.id) || 0 })),
             unsorted: { count: unsorted }, filing: filer.status(),
           });
         }
         if (p === '/api/projects/browse' && req.method === 'GET') return json(res, 200, projects.browse(url.searchParams.get('path') || ''));
-        if (p === '/api/projects' && req.method === 'POST') { const x = await projects.mark(body.path); await projects.setCurrent(x.id); return json(res, 201, x); }
+        if (p === '/api/projects' && req.method === 'POST') return json(res, 201, await projects.mark(body.path));
         if (p === '/api/projects/new' && req.method === 'POST') return json(res, 201, await projects.create(body.parent || '', body.name));
-        if (p === '/api/projects/current' && req.method === 'POST') return json(res, 200, { current: await projects.setCurrent(body.id || null) });
         if (p === '/api/projects/move' && req.method === 'POST') {
           const target = body.project || null;
           if (target && !projects.get(target)) return json(res, 404, { error: 'No such project' });
@@ -450,7 +483,7 @@ export function createApp(cfg, opts = {}) {
     }
     // Batch 8: the "Save to…" folder chooser (any folder in My Drive).
     if (p === '/api/drive/folders' && req.method === 'GET') {
-      try { return json(res, 200, listDriveFolders(cfg.driveDir, url.searchParams.get('path') || '', saveDefaults())); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      try { return json(res, 200, listDriveFolders(cfg.driveDir, url.searchParams.get('path') || '', saveDefaults(url.searchParams.get('project')))); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     if (p === '/api/drive/folders' && req.method === 'POST') {
       let body;
@@ -461,7 +494,7 @@ export function createApp(cfg, opts = {}) {
       let body;
       try { body = JSON.parse((await readBody(req, 64 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
       const historyFiles = new Set(historyOutputs(history).map((f) => `${f.subfolder}/${f.filename}`));
-      try { return json(res, 200, await saveToDrive(body, { driveDir: cfg.driveDir, comfyUrl: cfg.comfyUrl, outputSubfolder: cfg.outputSubfolder, historyFiles, defaults: saveDefaults() })); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      try { return json(res, 200, await saveToDrive(body, { driveDir: cfg.driveDir, comfyUrl: cfg.comfyUrl, outputSubfolder: cfg.outputSubfolder, historyFiles, defaults: saveDefaults(body.project) })); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     if (p === '/api/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
@@ -515,12 +548,16 @@ export function createApp(cfg, opts = {}) {
     workflows.close();
     tagger.stop();
     filer.stop();
+    scheduler.stopTimer();
+    clearInterval(pcTimer);
     for (const r of sseClients) r.end();
     for (const sock of upgraded) sock.destroy();
     server.closeAllConnections?.();
     return close(cb);
   };
-  return { server, workflows, history, folders, chats, memory, hardware, cfg, presets, userPresets, builder, comfyInfo, tagger, projects, filer };
+  let pcTimer = null;
+  const startPc = () => { if (!pcTimer) { pcTimer = setInterval(() => pcSync.tick().catch(() => {}), 15000); pcSync.tick().catch(() => {}); } };
+  return { server, workflows, history, folders, chats, memory, hardware, cfg, presets, userPresets, builder, comfyInfo, tagger, projects, filer, pcSync, scheduler, startPc };
 }
 
 // Run directly: `node server/index.js` / `npm start` / start.bat
@@ -528,9 +565,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const cfg = loadConfig();
   const probe = await probeComfy(cfg);
   if (probe.ok) cfg.comfyUrl = probe.url;
-  const { server, memory, tagger, filer } = createApp(cfg);
+  const { server, memory, tagger, filer, scheduler, startPc } = createApp(cfg);
   tagger.start(); // only in the real server (tests drive tagger.tick() themselves)
   filer.start();  // batch 11: files every output on Drive (tests drive filer.tick())
+  scheduler.start_(); // batch 12: runs saved batches (tests drive scheduler.tick())
+  startPc();          // batch 12: desktop ComfyUI jobs into History (tests drive pcSync.tick())
   server.listen(cfg.port, cfg.host, () => {
     console.log(`Comfy UI app:       http://${cfg.host}:${cfg.port}/`);
     console.log(`ComfyUI target:     ${cfg.comfyUrl}  (${probe.ok ? 'reachable' : 'NOT reachable yet - start Comfy Desktop'})`);

@@ -63,12 +63,11 @@ test('projects: Use marks a folder (hidden marker), grouping folders hold projec
   assert.equal(again.id, cache.id, 'marking twice keeps the same project');
 });
 
-test('projects: New project makes <name>/__comfy outputs in ACTIVE or a grouping folder, and becomes current; taken names are refused', async () => {
+test('projects: New project makes <name>/__comfy outputs in ACTIVE or a grouping folder; taken names are refused', async () => {
   const r = rig();
   const p = await r.projects.create('Apps', 'Habit Tracker');
   assert.ok(fs.statSync(path.join(r.root, 'Apps', 'Habit Tracker', OUTPUTS_DIR)).isDirectory());
   assert.ok(fs.existsSync(path.join(r.root, 'Apps', 'Habit Tracker', MARKER)));
-  assert.equal(r.projects.current, p.id);
   assert.deepEqual(r.projects.list().find((x) => x.id === p.id).group, ['Apps']);
   const top = await r.projects.create('', 'Rocket');
   assert.deepEqual(r.projects.list().find((x) => x.id === top.id).group, []);
@@ -178,7 +177,7 @@ test('filer: only the app\'s own outputs are filed; trash() deletes the filed co
   assert.ok(!fs.existsSync(p));
 });
 
-test('server: project routes, current project for new outputs, inheritance from the source picture, move, delete -> Drive trash', async () => {
+test('server: project routes, the pick on this device for new outputs (batch 12: No project by default), inheritance from the source picture, move, delete -> Drive trash', async () => {
   let fetchImpl;
   const s = await startStack({ projects: true, appOptions: { filer: { fetchImpl: (...a) => fetchImpl(...a) } } });
   fetchImpl = async () => new Response(pngBytes());
@@ -186,25 +185,24 @@ test('server: project routes, current project for new outputs, inheritance from 
   try {
     fs.mkdirSync(path.join(s.projectsDir, 'Apps', 'Cache'), { recursive: true });
     let r = await j('GET', '/api/projects');
-    assert.equal(r.body.available, true); assert.equal(r.body.root, 'ACTIVE'); assert.equal(r.body.current, null);
+    assert.equal(r.body.available, true); assert.equal(r.body.root, 'ACTIVE'); assert.equal(r.body.current, undefined, 'no shared current project');
     r = await j('GET', '/api/projects/browse?path=Apps');
     assert.deepEqual(r.body.folders.map((f) => f.name), ['Cache']);
     const cache = (await j('POST', '/api/projects', { path: 'Apps/Cache' })).body;
-    assert.equal((await j('GET', '/api/projects')).body.current, cache.id, 'Use makes it the current project');
-    // new outputs go to the current project
-    const a = (await j('POST', '/api/history', { prompt: 'a', promptId: 'p1', images: [], project: 'p_hacked' })).body;
-    assert.equal(a.project, cache.id, 'the server decides, not the client');
+    // batch 12: the app sends the project picked on that device; unknown ids are ignored
+    assert.equal((await j('POST', '/api/history', { prompt: 'x', images: [], project: 'p_hacked' })).body.project, null);
+    assert.equal((await j('POST', '/api/history', { prompt: 'x', images: [] })).body.project, null, 'No project by default');
+    const a = (await j('POST', '/api/history', { prompt: 'a', promptId: 'p1', images: [], project: cache.id })).body;
+    assert.equal(a.project, cache.id);
     await j('PATCH', `/api/history/${a.id}`, { images: [img('a.png')], status: 'done' });
     // made from it (upscale / Use as reference) -> same project even after switching
     const rocket = (await j('POST', '/api/projects/new', { name: 'Rocket', parent: '' })).body;
-    assert.equal((await j('GET', '/api/projects')).body.current, rocket.id);
-    const up = (await j('POST', '/api/history', { prompt: 'up', parent: { historyId: a.id, image: img('a.png') }, images: [img('a_up.png')] })).body;
+    const up = (await j('POST', '/api/history', { prompt: 'up', parent: { historyId: a.id, image: img('a.png') }, images: [img('a_up.png')], project: rocket.id })).body;
     assert.equal(up.project, cache.id);
-    const viaRef = (await j('POST', '/api/history', { prompt: '3d', source: a.id, images: [img('a3d.png')] })).body;
+    const viaRef = (await j('POST', '/api/history', { prompt: '3d', source: a.id, images: [img('a3d.png')], project: rocket.id })).body;
     assert.equal(viaRef.project, cache.id);
-    const fresh = (await j('POST', '/api/history', { prompt: 'f', images: [img('f.png')] })).body;
+    const fresh = (await j('POST', '/api/history', { prompt: 'f', images: [img('f.png')], project: rocket.id })).body;
     assert.equal(fresh.project, rocket.id);
-    await j('POST', '/api/projects/current', { id: null });
     const none = (await j('POST', '/api/history', { prompt: 'n', images: [img('n.png')] })).body;
     assert.equal(none.project, null);
     await s.app.filer.tick();
@@ -285,7 +283,7 @@ test('UI wiring: chip at the top of the form, Move in the selection bar and the 
   assert.match(read('app/js/ui/viewer.js'), /Move to project…/);
   const sw = read('app/sw.js');
   assert.match(sw, /'\/js\/ui\/projects\.js'/);
-  assert.match(sw, /shell-v28/);
+  assert.match(sw, /shell-v29/);
   assert.match(read('app/js/ui/projects.js'), /act: 'use-here'/, 'inside a folder: use that folder itself');
 });
 
@@ -297,8 +295,8 @@ test('Save to Drive starts in the current project (or ACTIVE/__Comfy UI) and nev
     assert.equal(r.defaults.image, 'Creative/PROJECTS/ACTIVE/__Comfy UI/Images');
     assert.equal(r.defaults['3d'], 'Creative/PROJECTS/ACTIVE/__Comfy UI/3D');
     fs.mkdirSync(path.join(s.projectsDir, 'Apps', 'Cache'), { recursive: true });
-    await j('POST', '/api/projects', { path: 'Apps/Cache' });
-    r = (await j('GET', '/api/drive/folders?path=Creative/PROJECTS/ACTIVE/Apps/Cache/__comfy outputs/Images')).body;
+    const cache = (await j('POST', '/api/projects', { path: 'Apps/Cache' })).body;
+    r = (await j('GET', `/api/drive/folders?path=Creative/PROJECTS/ACTIVE/Apps/Cache/__comfy outputs/Images&project=${cache.id}`)).body;
     assert.equal(r.defaults.image, 'Creative/PROJECTS/ACTIVE/Apps/Cache/__comfy outputs/Images');
     assert.equal(r.path, 'Creative/PROJECTS/ACTIVE/Apps/Cache/__comfy outputs/Images', 'the default kind folder is made on first use');
     // the old remembered folder is gone: the server falls back to My Drive, the sheet then opens the default

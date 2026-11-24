@@ -7,6 +7,7 @@
 import { h, toast } from './dom.js';
 import * as api from '../api.js';
 import { driveLogo } from './action-menu.js';
+import { getCurrentProject } from './projects.js';
 
 const LAST = 'driveFolder.v1'; // { image: 'Comfy UI/Images', '3d': 'Projects/Props', ... }
 const lastFolders = () => { try { return JSON.parse(localStorage.getItem(LAST)) || {}; } catch { return {}; } };
@@ -44,7 +45,7 @@ export class DriveFolderSheet {
     this.list.replaceChildren(h('div.muted.df-msg', {}, 'Loading…'));
     let r;
     // Drive not there (Drive for desktop not running ...): say so and close.
-    try { r = await api.getDriveFolders(path ?? ''); } catch (e) {
+    try { r = await api.getDriveFolders(path ?? '', getCurrentProject()); } catch (e) {
       toast(e.message, 8000);
       // With the phone option the sheet stays: saving to the phone still works.
       if (this.phone) { this.saveBtn.disabled = true; this.list.replaceChildren(h('div.muted.df-msg', {}, e.message)); return; }

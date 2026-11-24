@@ -11,6 +11,8 @@ import { batchSeeds, MAX_SEED } from '../../app/js/lib/seed.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const load = (p) => JSON.parse(fs.readFileSync(path.resolve(root, p), 'utf8'));
+// Real klein workflows live next to the repo in ../claude_tests (removed 2026-11-24): skipped when absent.
+const KLEIN_MISSING = fs.existsSync(path.resolve(root, '../claude_tests/klein')) ? false : 'needs ../claude_tests/klein (not on this PC)';
 
 test('basic-txt2img fixture (old fast-concept): prompt, seed, width/height in both nodes, prefix; original untouched', () => {
   const wf = load('test/fixtures/workflows/basic-txt2img.json');
@@ -37,7 +39,7 @@ test('basic-reference fixture (old from-reference-image): image slot + strength'
   assert.equal(out['58'].inputs.filename_prefix, 'reference', 'no prefix given -> unchanged');
 });
 
-test('real klein_ref_s0: all three LoadImage slots and the prompt can be replaced', () => {
+test('real klein_ref_s0: all three LoadImage slots and the prompt can be replaced', { skip: KLEIN_MISSING }, () => {
   const wf = load('../claude_tests/klein/klein_ref_s0.json');
   const c = detectControls(wf);
   const out = injectParams(wf, c, { prompt: 'new', seed: 5, images: { 10: 'a.png', 20: 'b.png', 30: 'c.png' } });

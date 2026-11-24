@@ -19,7 +19,7 @@ const RUN_STORE = 'conceptRun.v1';
 const ACTIVE = ['submitting', 'queued', 'running'];
 /** What is saved per active job: enough to find its result again. */
 export function persistable(items) {
-  return items.filter((i) => ACTIVE.includes(i.status) && i.promptId)
+  return items.filter((i) => !i.external && ACTIVE.includes(i.status) && i.promptId)
     .map((i) => ({ key: i.key, promptId: i.promptId, historyId: i.historyId || null, meta: i.meta, run: i.run || null, at: i.at || null }));
 }
 
@@ -199,7 +199,30 @@ export class JobQueue extends EventTarget {
     return created;
   }
 
-  get active() { return this.items.filter((i) => ['submitting', 'queued', 'running'].includes(i.status)); }
+  // Batch 12: a job the PC runs (desktop ComfyUI), followed here: it never locks Run and Cancel leaves it alone.
+  get active() { return this.items.filter((i) => !i.external && ['submitting', 'queued', 'running'].includes(i.status)); }
+
+  /**
+   * Batch 12: follow a job someone else queued (desktop ComfyUI) in "This session".
+   * ComfyUI sends its progress only to that page, so it shows as running until
+   * /history has it (main.js polls resync() while one is followed). The server
+   * records it in History itself (pc-sync), so nothing is recorded from here.
+   */
+  follow(promptId, meta = {}) {
+    if (!promptId || this.byPrompt.has(promptId)) return this.byPrompt.get(promptId) || null;
+    const it = { key: 'p' + Math.random().toString(36).slice(2, 10), promptId, status: 'running', progress: 0, image: null, extraImages: [], files: [], meta, historyId: null, favorite: false, error: null, restored: true, external: true, at: Date.now() };
+    this.items.push(it); this.byPrompt.set(promptId, it);
+    this.#changed(it);
+    return it;
+  }
+  /** Batch 12: live progress of a followed PC job (read by the server from the ComfyUI add-on). */
+  progressOf(promptId, fraction) {
+    const it = this.byPrompt.get(promptId);
+    if (!it?.external || !['queued', 'running'].includes(it.status)) return;
+    it.status = 'running'; it.progress = Math.max(0, Math.min(1, fraction));
+    this.#changed(it);
+  }
+  get following() { return this.items.some((i) => i.external && ['queued', 'running'].includes(i.status)); }
 
   /** Cancel everything unfinished: delete pending from ComfyUI's queue, interrupt the running one. */
   async cancelAll() {

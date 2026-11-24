@@ -46,15 +46,24 @@ export const getMemorySettings = () => req('GET', '/api/memory/settings');
 export const setMemorySettings = (patch) => req('POST', '/api/memory/settings', patch);
 export const saveToDrive = (f, kind, folder) => req('POST', '/api/drive/save', { filename: f.filename, subfolder: f.subfolder || '', type: f.type || 'output', ...(kind ? { kind } : {}), ...(typeof folder === 'string' ? { folder } : {}) });
 // Batch 8: Save to… folder chooser (folders of My Drive).
-export const getDriveFolders = (path = '') => req('GET', `/api/drive/folders?${new URLSearchParams({ path })}`);
+export const getDriveFolders = (path = '', project = null) => req('GET', `/api/drive/folders?${new URLSearchParams({ path, ...(project ? { project } : {}) })}`);
 export const makeDriveFolder = (path, name) => req('POST', '/api/drive/folders', { path, name });
 // Batch 11: projects (folders under Creative/PROJECTS/ACTIVE on Drive).
 export const getProjects = () => req('GET', '/api/projects');
 export const browseProjects = (path = '') => req('GET', `/api/projects/browse?${new URLSearchParams({ path })}`);
 export const markProject = (path) => req('POST', '/api/projects', { path });
 export const newProject = (name, parent = '') => req('POST', '/api/projects/new', { name, parent });
-export const setCurrentProject = (id) => req('POST', '/api/projects/current', { id: id || null });
 export const moveToProject = (ids, project) => req('POST', '/api/projects/move', { ids, project: project || null });
+// Batch 12: desktop ComfyUI in the app, and batches the PC runs later.
+export const getPcNow = () => req('GET', '/api/pc/now');
+export const getPcJob = (promptId) => req('GET', `/api/pc/job/${encodeURIComponent(promptId)}`);
+export const getSchedule = () => req('GET', '/api/schedule');
+export const addToSchedule = (jobs) => req('POST', '/api/schedule/jobs', { jobs });
+export const removeScheduled = (id) => req('DELETE', `/api/schedule/jobs/${encodeURIComponent(id)}`);
+export const orderSchedule = (ids) => req('POST', '/api/schedule/order', { ids });
+export const startSchedule = (at = null) => req('POST', '/api/schedule/start', { at });
+export const stopSchedule = () => req('POST', '/api/schedule/stop', {});
+export const clearSchedule = () => req('POST', '/api/schedule/clear', {});
 // Batch 9: History tags (background tagger) and the stills it reads for 3D / video.
 export const getTagger = () => req('GET', '/api/tagger');
 export const setTagger = (enabled) => req('POST', '/api/tagger', { enabled });

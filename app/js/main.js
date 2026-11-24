@@ -48,7 +48,9 @@ import { NodeView } from './ui/node-view.js';
 import { SavePresetSheet } from './ui/save-preset.js';
 import { textEncoderOnCpu, tiledVaeDecode, hasVaeDecode, wantTiledDecode, isOom } from './lib/memory-options.js';
 import { withUpscale, pickUpscaleModel, RESOLUTIONS } from './lib/resolution.js';
-import { ProjectChip, ProjectSheet, loadProjects, projectLabel } from './ui/projects.js';
+import { ProjectChip, ProjectSheet, loadProjects, projectLabel, getCurrentProject } from './ui/projects.js';
+import { PcCard } from './ui/pc-card.js';
+import { BatchSheet } from './ui/batch-sheet.js';
 
 const comfy = new ComfyClient();
 const queue = new JobQueue(comfy);
@@ -85,8 +87,6 @@ async function moveToProject(ids) {
     return true;
   } catch (e) { toast(e.message, 6000); return false; }
 }
-// The other device may have changed the project: repaint when the app comes back.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) projectChip.refresh(); });
 // "Use as reference": which History entry a reference picture came from, so what
 // is made from it lands in the same project (sent as meta.source).
 const refSources = new Map(); // ref value ("subfolder/name.png") -> history id
@@ -127,6 +127,8 @@ const viewer = new Viewer({
   onFavorite: (it) => (it.historyId ? api.patchHistory(it.historyId, { favorite: it.favorite }) : Promise.reject(new Error('not saved yet'))),
   onReuse: (it) => {
     if (isLocked()) return busy(); // Reuse rewrites the form: wait for the run to end
+    // Batch 12: a job made in desktop ComfyUI: open its own workflow (kept by the server).
+    if (String(it.meta?.workflow || '').startsWith('desktop:') && it.meta?.promptId) return openPcJob(it.meta.promptId, { follow: false });
     // Switch back to the preset that made it (if it still exists). Results made
     // with the retired Fast concept / From reference image presets map to the
     // Klein 4B presets (lib/legacy-presets.js; history.json is not rewritten).
@@ -182,7 +184,7 @@ $('#btn-history').addEventListener('click', () => {
 
 // ---- non-image results: 3D viewer, audio player, file sheet ------------------
 /** Model name for a preset id (old ids map to today's presets). */
-function labelOf(id) { const w = workflows.find((x) => x.id === resolvePresetId(id)) || workflows.find((x) => x.id === id); return w ? (w.short || w.label) : String(id || '').replace(/^(ai|user|graph):/, ''); }
+function labelOf(id) { const w = workflows.find((x) => x.id === resolvePresetId(id)) || workflows.find((x) => x.id === id); if (w) return w.short || w.label; const s = String(id || ''); return s.startsWith('desktop:') ? `PC · ${s.slice(8)}` : s.replace(/^(ai|user|graph):/, ''); }
 // Batch 10: the 3D / video / audio / file viewers' ⋮ menu: Save… (Drive or this phone) and Share.
 const fileHooks = { onSave: (f) => saveToDrive(f, fileKind(f), { phone: () => downloadFile(f) }), onShare: (f) => shareFile(f) };
 const modelViewer = new ModelViewer(fileHooks);
@@ -197,6 +199,33 @@ function openFile(f, meta = {}) {
   if (k === 'video' && /\.(mp4|webm|mov|mkv)$/i.test(f.filename || '')) return videoPlayer.open(f, meta);
   return fileSheet.open(f, meta);
 }
+
+// ---- batch 12: desktop ComfyUI on the phone, and batches ---------------------
+/**
+ * Open a PC job here: its workflow becomes a temporary preset ("From PC · model")
+ * with the controls the app finds in it, filled in with what the PC used, so it
+ * can be changed and run again from the phone (the canvas button shows the whole
+ * workflow). follow: also show the running job in This session until it is done.
+ */
+async function openPcJob(promptId, { follow = true } = {}) {
+  if (isLocked()) return busy();
+  let j;
+  try { j = await api.getPcJob(promptId); } catch (e) { toast(e.message, 6000); return; }
+  const controls = detectControls(j.graph);
+  if (!controls.ok) { toast(`Cannot open that workflow: ${controls.error}`, 8000); return; }
+  const id = `desktop:${j.label}`;
+  const preset = { id, ok: true, file: null, label: `From PC · ${j.label}`, short: `PC · ${j.label}`, group: 'From PC', workflow: j.graph, controls, output: 'image', pc: true };
+  workflows = [...workflows.filter((w) => !w.pc), preset];
+  picker.setItems(workflows);
+  selectPreset(id, { remember: false });
+  panel.reuse({ prompt: j.meta.prompt, negative: j.meta.negative, seed: j.meta.seed, steps: j.meta.steps });
+  if (follow) { queue.follow(promptId, { prompt: j.meta.prompt, seed: j.meta.seed, workflow: id }); paintThumbs(); }
+  toast(follow ? 'The PC job is here: change it and Run, or wait for its result below' : 'Workflow loaded: change it and Run');
+}
+const pcCard = new PcCard($('#pc-card'), { onOpen: (promptId) => openPcJob(promptId), onProgress: (promptId, f) => queue.progressOf(promptId, f) });
+// A followed PC job sends its progress only to the desktop page: look in /history every few seconds.
+setInterval(() => { if (queue.following && !document.hidden) queue.resync().then(paintThumbs); }, 5000);
+const batchSheet = new BatchSheet({ button: $('#btn-batch'), badge: $('#batch-count') });
 
 // ---- Save to Drive (server copies the file into a folder of Q:\My Drive) ----
 // Batch 8: asks where every time (ui/drive-folder.js), starting in the folder
@@ -362,6 +391,25 @@ async function beforeComfyQueue(workflowId) {
 // ---- generate --------------------------------------------------------------
 async function generate() {
   if (isLocked()) return busy();
+  const r = await buildRun();
+  if (r?.jobs) await startRun(r.workflowId, r.jobs);
+}
+
+/**
+ * Batch 12: "Save to batch" - the same jobs Run would queue, kept by the PC's
+ * scheduler (server/scheduler.js) and run later, one after another.
+ */
+async function saveToBatch() {
+  const r = await buildRun();
+  if (!r?.jobs) return;
+  const label = current.short || current.label;
+  const seeds = (current.controls?.seed || []).map((t) => ({ node: String(t.node), input: String(t.input) }));
+  const group = 'g' + Math.random().toString(36).slice(2, 10); // one row in the batch sheet for this Save
+  await batchSheet.add(withMemoryOptions(r.workflowId, r.jobs).map((j) => ({ graph: j.workflow, meta: j.meta, seeds, randomSeed: r.seedMode !== 'locked', label, group })));
+}
+
+/** The jobs for the form as it is now ({ workflowId, jobs, seedMode }), or null after saying what is missing. */
+async function buildRun() {
   if (!current?.ok || !current.workflow) return toast(current?.availability?.reason || 'Pick a usable preset first', 6000);
   if (current.availability?.status === 'unavailable') return toast(`Unavailable: ${current.availability.reason}`, 8000);
   const c = current.controls;
@@ -412,10 +460,11 @@ async function generate() {
         mask: maskSlot.value || undefined,
         // Batch 11: made from a History picture -> the server files it in that picture's project.
         source: Object.values(refs.values).map((r) => refSources.get(r)).find(Boolean),
+        project: getCurrentProject() || undefined, // batch 12: this device's pick (No project by default)
       },
     };
   });
-  await startRun(current.id, jobs);
+  return { workflowId: current.id, jobs, seedMode: v.seedMode };
 }
 
 // ---- memory options (lib/memory-options.js) ------------------------------------
@@ -486,7 +535,7 @@ async function runBuilderTest({ graph, name }) {
   const vv = Object.values(graph).some((n) => n.class_type === 'VibeVoiceTTS');
   const prompt = vv ? formatPrompt({ promptFormat: { unless: '\\[\\d+\\]|Speaker \\d+:', template: '[1] {text}' } }, v.prompt) : v.prompt;
   const workflow = injectParams(graph, c, { prompt, negative: v.negative, seed, outputPrefix: '', batchSize: 1 });
-  const run = await startRun('builder:test', [{ workflow, meta: { workflow: 'builder:test', prompt: `Test run · ${name} · ${v.prompt}`.slice(0, 400), seed } }]);
+  const run = await startRun('builder:test', [{ workflow, meta: { workflow: 'builder:test', prompt: `Test run · ${name} · ${v.prompt}`.slice(0, 400), seed, project: getCurrentProject() || undefined } }]);
   if (run.length) toast('Test run queued');
 }
 
@@ -516,6 +565,7 @@ async function runAction(r) {
   if (run.length) toast(`${r.action.manifest.name} queued`);
 }
 $('#btn-generate').addEventListener('click', generate);
+$('#btn-batch-add').addEventListener('click', saveToBatch);
 $('#prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) generate(); });
 $('#btn-cancel').addEventListener('click', async () => { lock.cancel(); await queue.cancelAll(); paintThumbs(); toast('Queue cleared'); });
 $('#btn-clear').addEventListener('click', () => queue.clearFinished());

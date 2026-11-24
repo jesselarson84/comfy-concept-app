@@ -58,12 +58,12 @@ export class HistoryStore {
     return s;
   }
 
-  async add(input) {
+  async add(input, { sessionId = null } = {}) {
     const now = Number(input.createdAt) || Date.now();
     const pick = (k) => (input[k] === undefined ? undefined : input[k]);
     const e = {
       id: 'h_' + crypto.randomUUID().slice(0, 12),
-      sessionId: this.#sessionFor(now).id,
+      sessionId: sessionId || this.#sessionFor(now).id,
       createdAt: now,
       promptId: pick('promptId'),
       workflow: String(input.workflow || ''),
@@ -83,10 +83,25 @@ export class HistoryStore {
       // source: the History entry its reference picture came from ("Use as reference").
       project: typeof input.project === 'string' && input.project ? input.project : null,
       source: typeof input.source === 'string' && input.source ? input.source : undefined,
+      // Batch 12: where the job came from when not this app's form ("desktop" ComfyUI, "schedule").
+      origin: ['desktop', 'schedule'].includes(input.origin) ? input.origin : undefined,
     };
     this.data.entries.push(e);
     await this.#save();
     return e;
+  }
+
+  /**
+   * Batch 12: a job recorded from outside the app's form (desktop ComfyUI, possibly
+   * long ago): one "desktop" session, so old runs never reshuffle the app's sessions.
+   */
+  async addExternal(input) {
+    const sid = 's_desktop';
+    const at = Number(input.createdAt) || Date.now();
+    let s = this.data.sessions.find((x) => x.id === sid);
+    if (!s) { s = { id: sid, startedAt: at, lastAt: at }; this.data.sessions.unshift(s); }
+    s.startedAt = Math.min(s.startedAt, at); s.lastAt = Math.max(s.lastAt, at);
+    return this.add(input, { sessionId: sid });
   }
 
   async update(id, patch) {

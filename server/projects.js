@@ -10,8 +10,9 @@
 //   <project>\.comfy-project                               marker {id, name}: the project
 //                                                          stays linked after a rename / move
 //
-// data/projects.json holds the list (id, name, rel path inside ACTIVE, last used)
-// and the current project (shared by every device, like History sessions).
+// data/projects.json holds the list (id, name, rel path inside ACTIVE, last used).
+// Batch 12: which project new outputs go to is picked per device in the app (and
+// starts on No project every load); the app sends it with each run.
 // Folders starting with "." "__" or "$" are never shown or used as projects.
 // -----------------------------------------------------------------------------
 import fs from 'node:fs';
@@ -40,7 +41,7 @@ export class ProjectStore {
     fs.mkdirSync(dataDir, { recursive: true });
     let d = null;
     try { d = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch {}
-    this.data = d && Array.isArray(d.projects) ? { version: 1, current: d.current ?? null, projects: d.projects } : { version: 1, current: null, projects: [] };
+    this.data = d && Array.isArray(d.projects) ? { version: 1, projects: d.projects } : { version: 1, projects: [] };
     this.writing = Promise.resolve();
     this.lastScan = 0;
   }
@@ -66,7 +67,6 @@ export class ProjectStore {
 
   get(id) { return this.data.projects.find((p) => p.id === id) || null; }
   byRel(rel) { const r = splitRel(rel).join('/').toLowerCase(); return this.data.projects.find((p) => p.rel.toLowerCase() === r) || null; }
-  get current() { return this.get(this.data.current) ? this.data.current : null; }
 
   #readMarker(dir) { try { const m = JSON.parse(fs.readFileSync(path.join(dir, MARKER), 'utf8')); return typeof m?.id === 'string' ? m : null; } catch { return null; } }
   #writeMarker(dir, p) { fs.writeFileSync(path.join(dir, MARKER), JSON.stringify({ id: p.id, name: p.name, app: 'Comfy UI' }, null, 1)); }
@@ -173,17 +173,8 @@ export class ProjectStore {
     const p = { id: 'p_' + crypto.randomUUID().slice(0, 8), name: n, rel: [...parts, n].join('/'), createdAt: this.now(), lastUsedAt: this.now() };
     this.#writeMarker(dir, p);
     this.data.projects.push(p);
-    this.data.current = p.id;
     await this.#save();
     return p;
-  }
-
-  async setCurrent(id) {
-    if (id && !this.get(id)) throw err(404, 'No such project');
-    this.data.current = id || null;
-    if (id) this.get(id).lastUsedAt = this.now();
-    await this.#save();
-    return this.current;
   }
 
   async touch(id) { const p = this.get(id); if (p) { p.lastUsedAt = this.now(); await this.#save(); } }

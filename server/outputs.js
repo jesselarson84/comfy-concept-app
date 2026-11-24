@@ -193,7 +193,7 @@ export function mergeOutputs(lists, { kind, offset = 0, limit = 120 } = {}) {
  * Returns { ok: true, deleted | missing } or { ok: false, reason }. Never throws
  * for a locked file: see unlinkWithRetry. unlink / wait are test seams.
  */
-export async function deleteAppFile(ref, { outputDir, outputSubfolder = 'concept-app', unlink, wait } = {}) {
+export async function deleteAppFile(ref, { outputDir, outputSubfolder = 'concept-app', unlink, wait, anywhere = false } = {}) {
   const no = (reason) => ({ ok: false, reason });
   if (!outputDir) return no('ComfyUI output folder is unknown');
   if (!ref || typeof ref !== 'object') return no('No file given');
@@ -202,17 +202,22 @@ export async function deleteAppFile(ref, { outputDir, outputSubfolder = 'concept
   if (!safeFileName(filename)) return no('Bad file name');
   if (!safeSubfolder(subfolder) || subfolder.split('/').some((s) => s === '..' || s === '.')) return no('Bad folder');
   const root = String(outputSubfolder || '').replace(/^\/+|\/+$/g, '');
-  if (!root || !safeSubfolder(root)) return no('App folder not set');
-  if (!(subfolder === root || subfolder.startsWith(root + '/'))) return no('Not in the app\'s output folder');
+  // Batch 12: anywhere = a job recorded from desktop ComfyUI (History origin "desktop"):
+  // its files sit anywhere inside ComfyUI's output folder, not in the app's own folder.
+  if (!anywhere && (!root || !safeSubfolder(root))) return no('App folder not set');
+  if (!anywhere && !(subfolder === root || subfolder.startsWith(root + '/'))) return no('Not in the app\'s output folder');
   let base, appRoot;
   try { base = await fs.promises.realpath(path.resolve(outputDir)); } catch { return no('ComfyUI output folder is missing'); }
-  const appPath = path.resolve(base, ...root.split('/'));
-  try {
-    const st = await fs.promises.lstat(appPath);
-    if (st.isSymbolicLink() || !st.isDirectory()) return no('App folder is not a plain folder');
-    appRoot = await fs.promises.realpath(appPath);
-  } catch { return no('App folder is missing'); }
-  if (!appRoot.startsWith(base + path.sep)) return no('App folder is outside the output folder');
+  if (anywhere) appRoot = base;
+  else {
+    const appPath = path.resolve(base, ...root.split('/'));
+    try {
+      const st = await fs.promises.lstat(appPath);
+      if (st.isSymbolicLink() || !st.isDirectory()) return no('App folder is not a plain folder');
+      appRoot = await fs.promises.realpath(appPath);
+    } catch { return no('App folder is missing'); }
+    if (!appRoot.startsWith(base + path.sep)) return no('App folder is outside the output folder');
+  }
   const full = path.resolve(base, ...subfolder.split('/'), filename);
   if (!full.startsWith(appRoot + path.sep)) return no('Outside the app\'s output folder');
   let st;
