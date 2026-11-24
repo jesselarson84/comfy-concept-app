@@ -4,7 +4,7 @@
 // three.js (/vendor/, only used by the 3D viewer) is cached the first time it
 // is fetched, so the 3D viewer also opens without a network round trip later.
 // Bump VERSION when you change app files so phones pick up the new shell.
-const VERSION = 'shell-v28';
+const VERSION = 'shell-v29';
 const SHELL = [
   '/', '/index.html', '/styles.css', '/icons.css', '/fonts/inter-latin-normal.woff2', '/manifest.webmanifest',
   '/js/main.js', '/js/api.js', '/js/comfy-client.js', '/js/job-queue.js',
@@ -17,7 +17,7 @@ const SHELL = [
   '/js/ui/workflow-picker.js', '/js/ui/file-inputs.js', '/js/ui/drive-folder.js', '/js/lib/history-filter.js', '/js/ui/action-menu.js',
   '/js/ui/chat-panel.js', '/js/ui/save-preset.js', '/js/ui/import-sheet.js', '/js/lib/recorder.js', '/js/ui/prompt-versions.js',
   '/js/ui/overlay.js', '/js/ui/model-viewer.js', '/js/ui/audio-player.js', '/js/ui/video-player.js', '/js/ui/file-sheet.js', '/js/ui/output-picker.js', '/js/ui/preset-chooser.js',
-  '/js/ui/dom.js', '/js/ui/prompt-panel.js', '/js/ui/reference.js', '/js/ui/thumbs.js', '/js/ui/viewer.js', '/js/ui/history-view.js', '/js/ui/projects.js',
+  '/js/ui/dom.js', '/js/ui/prompt-panel.js', '/js/ui/reference.js', '/js/ui/thumbs.js', '/js/ui/viewer.js', '/js/ui/history-view.js', '/js/ui/projects.js', '/js/ui/pc-card.js', '/js/ui/batch-sheet.js',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png',
 ];
 

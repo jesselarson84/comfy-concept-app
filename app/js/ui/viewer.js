@@ -28,7 +28,15 @@ import { h, toast } from './dom.js';
 import { viewUrl } from '../comfy-client.js';
 import { bridge, has, absoluteUrl } from '../native.js';
 import { confirmDialog } from './history-view.js';
-import { projectLabel } from './projects.js';
+import { projectLabel, projectById } from './projects.js';
+import { GROUP_COLORS, swatchOf } from '../lib/history-filter.js';
+
+/** [muted 'Apps ›', 'Cache'] for a project id, ['Unsorted'] for none. */
+function projectCrumb(id) {
+  const p = projectById(id);
+  if (!p) return [h('b', {}, id ? projectLabel(id) : 'Unsorted')];
+  return [p.group.length ? h('span.muted', {}, `${p.group.join(' › ')} ›`) : null, h('b', {}, p.name)].filter(Boolean);
+}
 import { ActionMenu, driveLogo, moreButton } from './action-menu.js';
 
 const dayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -294,29 +302,41 @@ export class Viewer {
   #fillDetails() {
     const it = this.current(); if (!it) return this.closeDetails();
     const m = it.meta || {};
-    const rows = [
-      ['Made', whenLabel(this.#at(it), { full: true })],
+    // Batch 12 (option A): prompt card with Copy + Reuse, small fact tiles, a
+    // "Saved to" card (project + Drive path), tags with a dot per kind (colour
+    // tags show their colour; no separate Colours section).
+    const facts = [
       ['Model', this.#model(it)],
       ['Size', m.width && m.height ? `${m.width} × ${m.height}` : ''],
+      ['Made', whenLabel(this.#at(it), { full: true })],
       ['Seed', m.seed ?? ''],
       ['Steps', m.steps ?? ''],
       ['Strength', m.strength ?? ''],
-      ['File', it.image?.filename || ''],
-      // Batch 11: the project and where the Drive copy is (History pictures).
-      ['Project', it.project !== undefined && it.drive ? projectLabel(it.project) : ''],
-      ['On Drive', it.drive ? ({ ok: `${it.drive.path} ✓ filed`, waiting: '⏳ Waiting to be filed (Drive or ComfyUI offline?)', moving: '⏳ Moving to its new project', missing: `⚠ Not found on Drive (moved or renamed outside the app): ${it.drive.path}`, gone: 'Not filed (no longer in ComfyUI\'s output folder)' })[it.drive.state] || '' : ''],
+      ['File', it.image?.filename || '', true],
     ].filter(([, v]) => v !== '' && v !== null && v !== undefined);
-    const copy = h('button.link.vd-copy', { type: 'button', dataset: { act: 'copy' }, onclick: async () => {
+    const copy = h('button.vd-btn', { type: 'button', dataset: { act: 'copy' }, onclick: async () => {
       try { await navigator.clipboard.writeText(m.prompt || ''); toast('Prompt copied'); } catch { toast('Could not copy'); }
     } }, h('i.i.i-copy'), 'Copy prompt');
+    const reuse = this.hooks.onReuse ? h('button.vd-btn', { type: 'button', dataset: { act: 'reuse' }, onclick: () => { const cur = this.current(); this.close(); this.hooks.onReuse(cur); } }, h('i.i.i-rotate-ccw'), 'Reuse settings') : null;
+    const d = it.drive;
+    const saved = d && it.project !== undefined ? h('div.vd-card.vd-saved', {},
+      h('div.vd-crumb', {}, h('i.i.i-folder'), ...projectCrumb(it.project), h('span.spacer'),
+        h(`span.vd-state.${d.state}`, {}, { ok: '✓ filed', waiting: '⏳ waiting', moving: '⏳ moving', missing: '⚠ not found', gone: 'not filed' }[d.state] || '')),
+      h('div.vd-path', {}, d.path || ({ waiting: 'Filed on Drive once Drive and ComfyUI are reachable', moving: 'Moving to its new project', gone: "No longer in ComfyUI's output folder" }[d.state] || ''))) : null;
     const tags = [...new Set(it.tags || [])];
+    const groupOf = (t) => { for (const [g, list] of Object.entries(it.tagsBy || {})) if (list?.includes(t)) return g; return null; };
+    const mark = (t) => { const g = groupOf(t); if (g === 'colors' && swatchOf(t)) return h('i.hswatch', { style: `background:${swatchOf(t)}` }); return GROUP_COLORS[g] ? h('i.hdot2', { style: `background:${GROUP_COLORS[g]}` }) : null; };
     // (replaceChildren would print a null as the text "null": drop the empty parts)
     this.detailsBody.replaceChildren(...[
-      m.prompt ? h('div.vd-prompt', {}, m.prompt) : h('div.vd-prompt.muted', {}, 'No prompt'),
-      m.negative ? h('div.vd-neg', {}, h('span.muted', {}, 'Negative: '), m.negative) : null,
-      m.prompt ? copy : null,
-      h('div.vd-grid', {}, ...rows.flatMap(([k, v]) => [h('span.vd-k', {}, k), h('span.vd-v', {}, String(v))])),
-      tags.length ? h('div.viewer-tags.vd-tags', {}, ...tags.map((t) => this.#tagBtn(t))) : null,
+      h('div.vd-card', {},
+        m.prompt ? h('div.vd-prompt', {}, m.prompt) : h('div.vd-prompt.muted', {}, 'No prompt'),
+        m.negative ? h('div.vd-neg', {}, h('span.muted', {}, 'Negative: '), m.negative) : null,
+        m.prompt || reuse ? h('div.vd-actions', {}, m.prompt ? copy : null, reuse) : null),
+      facts.length ? h('div.vd-sec', {}, 'Info') : null,
+      facts.length ? h('div.vd-facts', {}, ...facts.map(([k, v, wide]) => h(`div.vd-fact${wide ? '.wide' : ''}`, {}, h('span.vd-k', {}, k), h('span.vd-v', {}, String(v))))) : null,
+      saved ? h('div.vd-sec', {}, 'Saved to') : null, saved,
+      tags.length ? h('div.vd-sec', {}, 'Tags') : null,
+      tags.length ? h('div.viewer-tags.vd-tags', {}, ...tags.map((t) => { const b = this.#tagBtn(t); const mk = mark(t); if (mk) b.prepend(mk); return b; })) : null,
     ].filter(Boolean));
   }
 
@@ -413,6 +433,24 @@ export class Viewer {
     this.#dismissAt(0, animate);
     const s = this.slides[1];
     setTimeout(() => { s.style.transition = ''; this.#layoutSlides(); this.root.style.backgroundColor = ''; this.top.style.opacity = this.bottom.style.opacity = ''; }, animate ? 230 : 0);
+  }
+
+  /**
+   * Batch 12: a single tap hides the top bar and the info area completely, so the
+   * picture area becomes the whole screen (before, they only faded out and kept
+   * their space, which clipped a zoomed picture). The picture grows with the
+   * area, so the pan offset is scaled by the same amount (the same spot stays in
+   * the middle) and clamped to the new size.
+   */
+  #toggleChrome() {
+    const w0 = this.img?.clientWidth || 0;
+    this.root.classList.toggle('chrome-hidden');
+    requestAnimationFrame(() => {
+      this.#layoutSlides();
+      const w1 = this.img?.clientWidth || 0;
+      if (w0 && w1 && this.z?.scale > 1.01) { const k = w1 / w0; this.z.x *= k; this.z.y *= k; this.#clampPan(); }
+      this.#apply(false);
+    });
   }
 
   // ---- zoom / pan state ----------------------------------------------------
@@ -524,7 +562,7 @@ export class Viewer {
           this.#apply(true);
         } else {
           lastTap = now;
-          tapTimer = setTimeout(() => this.root.classList.toggle('chrome-hidden'), 260);
+          tapTimer = setTimeout(() => this.#toggleChrome(), 260);
         }
         return;
       }

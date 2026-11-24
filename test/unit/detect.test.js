@@ -9,11 +9,13 @@ import { detectControls, checkApiFormat, tagsOf } from '../../app/js/lib/workflo
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
 const load = (p) => JSON.parse(fs.readFileSync(path.resolve(root, p), 'utf8'));
+// Real klein workflows live next to the repo in ../claude_tests (removed 2026-11-24): skipped when absent.
+const KLEIN_MISSING = fs.existsSync(path.resolve(root, '../claude_tests/klein')) ? false : 'needs ../claude_tests/klein (not on this PC)';
 const fx = (n) => load(`test/fixtures/${n}.json`);
 const kleinDir = path.resolve(root, '../claude_tests/klein');
 const T = (node, input) => ({ node, input });
 
-test('real klein_ref_s0/s1/s2: prompt, seed, steps, 3 image slots, no negative, size follows reference', () => {
+test('real klein_ref_s0/s1/s2: prompt, seed, steps, 3 image slots, no negative, size follows reference', { skip: KLEIN_MISSING }, () => {
   for (const s of [0, 1, 2]) {
     const wf = load(path.join(kleinDir, `klein_ref_s${s}.json`));
     const c = detectControls(wf);
@@ -31,7 +33,7 @@ test('real klein_ref_s0/s1/s2: prompt, seed, steps, 3 image slots, no negative, 
   }
 });
 
-test('real klein_faces_s0: two image slots, node 43 defined last still traced', () => {
+test('real klein_faces_s0: two image slots, node 43 defined last still traced', { skip: KLEIN_MISSING }, () => {
   const c = detectControls(load(path.join(kleinDir, 'klein_faces_s0.json')));
   assert.deepEqual(c.prompt, [T('40', 'text')]);
   assert.deepEqual(c.images.map((i) => i.node), ['10', '20']);

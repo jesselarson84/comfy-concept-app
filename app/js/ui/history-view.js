@@ -13,7 +13,7 @@
 //   - 3D tiles get real preview stills (ui/model-thumbs.js), rendered lazily.
 import { h, toast } from './dom.js';
 import { getHistory, deleteHistory, getFolders, createFolder, addToFolder, removeFromFolder, patchHistory, getTagger, setTagger, uploadPreview } from '../api.js';
-import { TYPES, DATES, entryType, entryTags, matches, isFiltering, statsOf } from '../lib/history-filter.js';
+import { TYPES, DATES, entryType, entryTags, matches, isFiltering, statsOf, TYPE_COLORS, GROUP_COLORS, GROUP_LABELS, modelColor, swatchOf } from '../lib/history-filter.js';
 import { viewUrl } from '../comfy-client.js';
 import { deleteThumb, thumbKey } from '../lib/thumb-cache.js';
 import { fileLabel } from '../lib/outputs.js';
@@ -372,24 +372,36 @@ export class HistoryView {
     this.stats.setAttribute('aria-expanded', String(this.statsOpen));
     this.stats.hidden = !all.length;
     const ch = h('i.i.i-chevron-down.hstats-ch', { 'aria-hidden': 'true' });
+    // Batch 12 (option C): colour only where it means something - the type bar,
+    // the model bars, real colours for colour tags and a dot per kind of tag.
+    const types = TYPES.filter((t) => TYPE_COLORS[t.key]);
+    const typeBar = (cls) => h(`span.htbar${cls}`, { 'aria-hidden': 'true' }, ...types.filter((t) => s.byType[t.key]).map((t) => h('i', { style: `flex:${s.byType[t.key]};background:${TYPE_COLORS[t.key]}` })));
     if (!this.statsOpen) {
-      this.stats.replaceChildren(h('span', {}, h('b', {}, String(s.total)), 'outputs'), h('span', {}, h('b', {}, String(s.today)), 'today'), h('span', {}, h('b', {}, String(s.month)), 'this month'), ch);
+      this.stats.replaceChildren(h('span', {}, h('b', {}, String(s.total)), 'outputs'), h('span', {}, h('b', {}, String(s.today)), 'today'), h('span', {}, h('b', {}, String(s.month)), 'this month'), typeBar('.mini'), ch);
       return;
     }
-    const types = TYPES.filter((t) => s.byType[t.key]).map((t) => `${s.byType[t.key]} ${t.label.toLowerCase()}`).join(', ');
     const max = Math.max(1, ...s.models.map((m) => m.n));
     const tg = this.taggerState;
     const tagLine = tg ? h('div.htagger', {},
       h('span.hdot', { dataset: { status: tg.status } }),
       h('span', {}, `${{ off: 'Tagging is off', done: 'All tagged', tagging: 'Tagging…', paused: `Tagging paused: ${tg.reason}`, waiting: 'Tagging waits for a quiet GPU' }[tg.status] || 'Tagging'} · ${tg.tagged} of ${tg.total} tagged`),
       h('label.hswitch', { title: 'Background tagging' }, h('input', { type: 'checkbox', checked: tg.enabled, 'aria-label': 'Background tagging', onchange: async (e) => { try { this.taggerState = await setTagger(e.target.checked); this.paintStats(); } catch (err) { toast(err.message, 6000); } } }), h('span'))) : null;
-    this.stats.replaceChildren(
-      h('div.hnums', {}, h('div', {}, h('b', {}, String(s.total)), h('span', {}, `outputs${types ? ` · ${types}` : ''}`)), h('div', {}, h('b', {}, String(s.today)), h('span', {}, 'today')), h('div', {}, h('b', {}, String(s.month)), h('span', {}, 'this month'))),
+    const colours = s.tags.filter((t) => t.group === 'colors').slice(0, 12);
+    const others = s.tags.filter((t) => t.group !== 'colors').slice(0, 16);
+    const groups = [...new Set(others.map((t) => t.group).filter((g) => GROUP_COLORS[g]))];
+    const tagBtn = (t, mark) => h('button.htag', { type: 'button', dataset: { tag: t.tag }, onclick: () => this.searchTag(t.tag) }, mark, t.tag, h('em', {}, String(t.n)));
+    this.stats.replaceChildren(...[
+      h('div.hnums', {}, h('div', {}, h('b', {}, String(s.total)), h('span', {}, 'outputs')), h('div', {}, h('b', {}, String(s.today)), h('span', {}, 'today')), h('div', {}, h('b', {}, String(s.month)), h('span', {}, 'this month'))),
+      h('div.hsec', {}, 'By type'), typeBar(''),
+      h('div.hlegend', {}, ...types.map((t) => h(`span${s.byType[t.key] ? '' : '.zero'}`, {}, h('i.hsw', { style: `background:${s.byType[t.key] ? TYPE_COLORS[t.key] : 'var(--c-border)'}` }), `${t.label} ${s.byType[t.key] || 0}`))),
       s.models.length ? h('div.hsec', {}, 'Top models') : null,
-      ...s.models.map((m) => h('button.hbar', { type: 'button', dataset: { model: m.id }, onclick: () => { this.filter.models = new Set([m.id]); this.render(); } }, h('span', {}, m.label), h('i', {}, h('b', { style: `width:${Math.round((m.n / max) * 100)}%` })), h('span.n', {}, String(m.n)))),
-      s.tags.length ? h('div.hsec', {}, 'Tags') : null,
-      s.tags.length ? h('div.htags', {}, ...s.tags.slice(0, 12).map((t) => h('button.htag', { type: 'button', dataset: { tag: t.tag }, onclick: () => this.searchTag(t.tag) }, t.tag, h('em', {}, String(t.n))))) : null,
-      tagLine, ch);
+      ...s.models.map((m) => h('button.hbar', { type: 'button', dataset: { model: m.id }, onclick: () => { this.filter.models = new Set([m.id]); this.render(); } }, h('span', {}, m.label), h('i', {}, h('b', { style: `width:${Math.round((m.n / max) * 100)}%;background:${modelColor(m.slot)}` })), h('span.n', {}, String(m.n)))),
+      colours.length ? h('div.hsec', {}, 'Colours') : null,
+      colours.length ? h('div.htags', {}, ...colours.map((t) => tagBtn(t, swatchOf(t.tag) ? h('i.hswatch', { style: `background:${swatchOf(t.tag)}` }) : null))) : null,
+      others.length ? h('div.hsec', {}, 'Tags') : null,
+      others.length ? h('div.htags', {}, ...others.map((t) => tagBtn(t, GROUP_COLORS[t.group] ? h('i.hdot2', { style: `background:${GROUP_COLORS[t.group]}` }) : null))) : null,
+      groups.length ? h('div.hlegend.hgroups', {}, ...groups.map((g) => h('span', {}, h('i.hdot2', { style: `background:${GROUP_COLORS[g]}` }), GROUP_LABELS[g]))) : null,
+      tagLine, ch].filter(Boolean));
   }
 
   async refreshTagger() {
@@ -472,8 +484,8 @@ export class HistoryView {
       // Turn history entries into the same item shape the viewer uses.
       const items = s.entries.filter((e) => e.images.length).map((e) => ({
         key: e.id, historyId: e.id, image: e.images[0], favorite: e.favorite, status: 'done', tags: [...new Set(entryTags(e))], at: e.createdAt,
-        meta: { prompt: e.prompt, negative: e.negative, seed: e.seed, workflow: e.workflow, legacyWorkflow: e.legacyWorkflow, width: e.width, height: e.height, steps: e.steps, strength: e.strength, reference: e.reference, action: e.action, parent: e.parent },
-        project: e.project ?? null, drive: driveInfo(e, projectsCache()),
+        meta: { prompt: e.prompt, negative: e.negative, seed: e.seed, workflow: e.workflow, legacyWorkflow: e.legacyWorkflow, width: e.width, height: e.height, steps: e.steps, strength: e.strength, reference: e.reference, action: e.action, parent: e.parent, promptId: e.promptId },
+        project: e.project ?? null, drive: driveInfo(e, projectsCache()), tagsBy: e.tags || null,
       }));
       // Non-image results (3D .glb, audio, video) open the 3D viewer / audio player / file sheet.
       const files = s.entries.filter((e) => !e.images.length && e.files?.length);
