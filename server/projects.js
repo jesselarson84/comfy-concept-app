@@ -129,7 +129,10 @@ export class ProjectStore {
       const inside = this.data.projects.filter((x) => x.rel.toLowerCase().startsWith(r.toLowerCase() + '/')).length;
       return { name: e.name, path: r, project: p ? p.id : null, projects: inside };
     }).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-    return { root: path.basename(this.root), path: parts.join('/'), folders };
+    // here: the open folder itself (its "Use … as project" button shows when it holds no project).
+    const low = parts.join('/').toLowerCase();
+    const here = { name: parts.at(-1) || path.basename(this.root), projects: parts.length ? this.data.projects.filter((x) => x.rel.toLowerCase().startsWith(low + '/')).length : this.data.projects.length };
+    return { root: path.basename(this.root), path: parts.join('/'), here, folders };
   }
 
   /** The folder under `rel` is a project from now on. */
@@ -146,6 +149,7 @@ export class ProjectStore {
     const r = parts.join('/').toLowerCase();
     if (this.data.projects.some((p) => p.rel.toLowerCase().startsWith(r + '/'))) throw err(400, 'This folder already holds a project; projects cannot hold other projects');
     const p = { id: m?.id || 'p_' + crypto.randomUUID().slice(0, 8), name: parts.at(-1), rel: parts.join('/'), createdAt: this.now(), lastUsedAt: this.now() };
+    fs.mkdirSync(path.join(dir, OUTPUTS_DIR), { recursive: true }); // already there (made by hand) is fine
     this.#writeMarker(dir, p);
     this.data.projects.push(p);
     await this.#save();

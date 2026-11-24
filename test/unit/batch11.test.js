@@ -48,6 +48,9 @@ test('projects: Use marks a folder (hidden marker), grouping folders hold projec
   assert.deepEqual(b.folders.map((f) => f.name), ['Apps', 'GTA 6 Mods', 'Nameless_Things'], '__BlankProject is hidden');
   const cache = await r.projects.mark('Apps/Cache');
   assert.equal(JSON.parse(fs.readFileSync(path.join(r.root, 'Apps/Cache', MARKER), 'utf8')).id, cache.id);
+  assert.ok(fs.statSync(path.join(r.root, 'Apps/Cache', OUTPUTS_DIR)).isDirectory(), 'Use makes __comfy outputs');
+  assert.deepEqual(r.projects.browse('Apps').here, { name: 'Apps', projects: 1 }, 'Apps holds a project: no Use-this-folder');
+  assert.deepEqual(r.projects.browse('GTA 6 Mods').here, { name: 'GTA 6 Mods', projects: 0 });
   b = r.projects.browse('');
   assert.equal(b.folders.find((f) => f.name === 'Apps').projects, 1, 'Apps is a grouping folder with 1 project');
   assert.equal(r.projects.browse('Apps').folders.find((f) => f.name === 'Cache').project, cache.id);
@@ -282,5 +285,6 @@ test('UI wiring: chip at the top of the form, Move in the selection bar and the 
   assert.match(read('app/js/ui/viewer.js'), /Move to project…/);
   const sw = read('app/sw.js');
   assert.match(sw, /'\/js\/ui\/projects\.js'/);
-  assert.match(sw, /shell-v26/);
+  assert.match(sw, /shell-v27/);
+  assert.match(read('app/js/ui/projects.js'), /act: 'use-here'/, 'inside a folder: use that folder itself');
 });

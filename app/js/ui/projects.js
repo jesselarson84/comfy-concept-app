@@ -101,8 +101,12 @@ export class ProjectSheet {
       return this.#row({ name: f.name, sub: f.projects ? `${f.projects} ${f.projects === 1 ? 'project' : 'projects'} inside` : '', act: 'open', data: { folder: f.name },
         end: h('span.pj-ends', {}, f.projects ? null : use, h('i.i.i-chevron-right')), click: () => this.showBrowse(f.path) });
     });
-    this.body.replaceChildren(crumbs, ...(rows.length ? rows : [h('div.muted.df-msg', {}, 'No folders here.')]),
-      h('div.muted.pj-note', {}, 'Tap a folder to open it, or "Use" to make it a project. Folders starting with "__" are hidden.'));
+    // The open folder itself as the project (e.g. inside Apps/Cache: "Use Cache as the project").
+    const useHere = parts.length && !r.here?.projects ? h('button.btn.primary.pj-here', { type: 'button', dataset: { act: 'use-here' }, onclick: async () => {
+      try { const p = await api.markProject(r.path); toast(`"${p.name}" is a project now`); this.finish(p.id); } catch (err) { toast(err.message, 6000); }
+    } }, h('i.i.i-check'), `Use "${parts.at(-1)}" as the project`) : null;
+    this.body.replaceChildren(...[crumbs, useHere, ...(rows.length ? rows : [h('div.muted.df-msg', {}, 'No sub folders here.')]),
+      h('div.muted.pj-note', {}, 'Tap a folder to open it, or "Use" to make it a project. The app makes the "__comfy outputs" folder itself (folders starting with "__" are hidden).')].filter(Boolean));
   }
 
   async showNew() {
