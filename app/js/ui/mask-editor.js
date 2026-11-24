@@ -10,11 +10,14 @@
 //   - Hover cursor ring (mouse and hovering pen) at the real brush size.
 //   - Re-fits on rotation / resize; side toolbar on tablets in landscape.
 //   - Undo, Clear, Invert. The mask is exported at the picture's own size.
+//   - Batch 14: Select - tap an object and SAM 2 (on the PC, server/sam.js) adds
+//     it to the mask; Undo takes a selection back like a stroke.
 import { h, toast } from './dom.js';
 import { infoButton } from './info-tip.js';
 import { infoFor } from '../lib/setting-info.js';
 import { Overlay, overlayTop } from './overlay.js';
 import { inputViewUrl } from '../comfy-client.js';
+import { samSelect } from '../api.js';
 import { isEraserPointer, isPalm, brushWidth, smoothPoint, pinchView, fitView, toImage, maskPixels } from '../lib/mask-paint.js';
 
 const PAINT = '#fd9903';
@@ -45,7 +48,7 @@ export class MaskEditor {
     this.cursor = h('div.me-cursor', { hidden: true });
     this.stage = h('div.me-stage', {}, this.layer, this.cursor);
     const tool = (id, label) => h('button.seg-btn', { type: 'button', dataset: { tool: id }, 'aria-pressed': String(this.tool === id), onclick: () => this.setTool(id) }, label);
-    this.toolSeg = h('div.me-seg', { role: 'group', 'aria-label': 'Tool' }, tool('brush', 'Brush'), tool('eraser', 'Eraser'));
+    this.toolSeg = h('div.me-seg', { role: 'group', 'aria-label': 'Tool' }, tool('brush', 'Brush'), tool('eraser', 'Eraser'), tool('select', 'Select'));
     this.sizeIn = h('input.me-size', { type: 'range', min: 4, max: 200, step: 1, value: this.size, 'aria-label': 'Brush size', oninput: (e) => { this.size = Number(e.target.value); localStorage.setItem('maskBrush', this.size); this.paintSize(); } });
     this.pressBtn = h('button.btn.me-pressure', { type: 'button', 'aria-pressed': String(this.pressure), onclick: () => { this.pressure = !this.pressure; localStorage.setItem('maskPressure', this.pressure ? '1' : '0'); this.pressBtn.setAttribute('aria-pressed', String(this.pressure)); } }, 'Pressure');
     const tools = h('div.me-tools', {},
@@ -117,6 +120,8 @@ export class MaskEditor {
   setTool(t) {
     this.tool = t;
     for (const b of this.toolSeg.children) b.setAttribute('aria-pressed', String(b.dataset.tool === t));
+    this.stage.classList.toggle('selecting', t === 'select');
+    if (t === 'select') { this.cursor.hidden = true; toast('Tap an object to add it to the mask'); }
   }
 
   paintSize() { this.cursor.style.width = this.cursor.style.height = `${this.size}px`; }
@@ -124,7 +129,7 @@ export class MaskEditor {
   local(e) { const r = this.stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
 
   showCursor(e) {
-    if (e.pointerType === 'touch') { this.cursor.hidden = true; return; }
+    if (e.pointerType === 'touch' || this.tool === 'select') { this.cursor.hidden = true; return; }
     const p = this.local(e);
     this.cursor.hidden = false;
     this.cursor.style.transform = `translate(${p.x - this.size / 2}px, ${p.y - this.size / 2}px)`;
@@ -143,6 +148,8 @@ export class MaskEditor {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
     try { this.stage.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
+    // Select: a tap (not a drag) picks the object under it.
+    if (this.tool === 'select' && !isEraserPointer(e)) { this.tap = { id: e.pointerId, ...this.local(e), t: Date.now() }; return; }
     this.pushUndo();
     const erase = this.tool === 'eraser' || isEraserPointer(e);
     const p = { ...toImage(this.view, ...Object.values(this.local(e))), w: brushWidth(this.size, e, this.pressure) / this.view.scale };
@@ -176,6 +183,45 @@ export class MaskEditor {
       if (!this.touches.size) this.touchLock = false;
     }
     if (this.stroke?.id === e.pointerId) this.endStroke(cancelled);
+    const tap = this.tap;
+    if (tap?.id === e.pointerId) {
+      this.tap = null;
+      const p = this.local(e);
+      if (!cancelled && !this.gesture && Math.hypot(p.x - tap.x, p.y - tap.y) < 12 && Date.now() - tap.t < 800) this.selectAt(toImage(this.view, tap.x, tap.y));
+    }
+  }
+
+  /** Batch 14: SAM 2 finds the object at p (picture pixels) and it is painted into the mask. */
+  async selectAt(p) {
+    if (this.selecting || !this.ctx || p.x < 0 || p.y < 0 || p.x >= this.w || p.y >= this.h) return;
+    this.selecting = true;
+    this.stage.classList.add('busy');
+    const r = 14 / this.view.scale; // a dot that looks the same size at any zoom
+    const dot = h('div.me-tapdot', { style: { left: `${p.x - r}px`, top: `${p.y - r}px`, width: `${2 * r}px`, height: `${2 * r}px`, borderWidth: `${3 / this.view.scale}px` } });
+    this.layer.append(dot);
+    try {
+      const blob = await samSelect(this.source, [{ x: p.x, y: p.y }]);
+      const bmp = await createImageBitmap(blob);
+      const tmp = h('canvas'); tmp.width = this.w; tmp.height = this.h;
+      const tc = tmp.getContext('2d', { willReadFrequently: true });
+      tc.drawImage(bmp, 0, 0, this.w, this.h);
+      const d = tc.getImageData(0, 0, this.w, this.h);
+      let n = 0;
+      for (let i = 0; i < d.data.length; i += 4) {
+        const on = d.data[i] > 127;
+        d.data[i] = 0xfd; d.data[i + 1] = 0x99; d.data[i + 2] = 0x03; d.data[i + 3] = on ? 255 : 0; // PAINT
+        if (on) n++;
+      }
+      if (!n) { toast('Nothing found there - try tapping the middle of the object'); return; }
+      tc.putImageData(d, 0, 0);
+      this.pushUndo();
+      this.ctx.globalCompositeOperation = 'source-over';
+      this.ctx.drawImage(tmp, 0, 0);
+    } catch (e) { toast(e.message, 6000); } finally {
+      dot.remove();
+      this.selecting = false;
+      this.stage.classList.remove('busy');
+    }
   }
 
   endStroke(cancel) {
@@ -187,6 +233,7 @@ export class MaskEditor {
   startGesture() {
     // A finger that started painting just before the second one landed: undo it.
     if (this.stroke?.type === 'touch') this.endStroke(true);
+    this.tap = null; // a pinch is not a Select tap
     const [a, b] = [...this.touches.values()];
     this.gesture = { view0: { ...this.view }, a0: a, b0: b };
     this.cursor.hidden = true;

@@ -79,6 +79,7 @@ import { ProjectStore, KIND_DIRS } from './projects.js';
 import { createFiler } from './filer.js';
 import { createPcSync } from './pc-sync.js';
 import { createScheduler } from './scheduler.js';
+import { createSam } from './sam.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
 const COMFY_SNIPPET = '<link rel="stylesheet" href="/comfy-tweaks.css" data-concept-tweaks><script src="/js/comfy-tweaks.js" data-concept-tweaks></script>';
@@ -125,6 +126,7 @@ export function createApp(cfg, opts = {}) {
   const outputDirOf = () => comfyOutputDir(cfg, { cache: outDirCache, log, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
 
   // Batch 12: desktop ComfyUI jobs into History (+ their workflows), and batches run by the PC.
+  const sam = createSam({ getComfyUrl: () => cfg.comfyUrl, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}), ...(opts.sam || {}) }); // batch 14: Select in the mask editor
   const scheduler = createScheduler({ dataDir: cfg.dataDir, history, getComfyUrl: () => cfg.comfyUrl, gpuUtil: opts.gpuUtil || (() => readGpuBusy()), beforeQueue: async (id) => memory.beforeQueue(id, await memoryFor(id)), log, onFinished: () => filer.kick(), ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}), ...(opts.scheduler || {}) });
   const pcSync = createPcSync({ history, dataDir: cfg.dataDir, getComfyUrl: () => cfg.comfyUrl, outputDirOf, log, isScheduled: (id) => scheduler.has(id), onRecorded: () => filer.kick(), ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}), ...(opts.pcSync || {}) });
 
@@ -386,6 +388,16 @@ export function createApp(cfg, opts = {}) {
     {
       const jm = /^\/api\/pc\/job\/([\w-]+)$/.exec(p);
       if (jm && req.method === 'GET') { const j = await pcSync.job(jm[1]); return j ? json(res, 200, j) : json(res, 404, { error: 'That workflow is no longer available' }); }
+    }
+    // Batch 14: "Select" in the mask editor -> SAM 2 mask (PNG) for one or more taps.
+    if (p === '/api/sam/select' && req.method === 'POST') {
+      let body;
+      try { body = JSON.parse((await readBody(req, 64 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
+      try {
+        const png = await sam.select(body);
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+        return res.end(png);
+      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     if (p.startsWith('/api/schedule')) {
       let body = {};

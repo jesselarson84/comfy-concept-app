@@ -10,7 +10,8 @@
 //     group: "3D" | "Image" | "Video" | "Audio", label, menuPath, menuOrder, source,
 //     output: "image" | "video" | "audio" | "3d", description,
 //     size:   { base: [w, h], min, max, multiple }   (aspect chips -> clamped size)
-//     params: { key: { node, input, also?: [{node,input}], type: "int"|"number"|"enum"|"text",
+//     params: { key: { node, input, also?: [{node,input}], set?: { option: [{node,input,value}] },
+//                      type: "int"|"number"|"enum"|"text",
 //                      min, max, default, options, label, divideBy } }
 //     inputs: [{ kind: "video", node, input, label }]   file slots other than LoadImage
 //     promptFormat: { unless: regex, template: "[1] {text}" }
@@ -37,7 +38,7 @@ export const groupsFor = (kind) => (kind === 'workflow' ? WORKFLOW_GROUPS : GROU
 // one when its menuPath is "<group>/<sub section>/<short name>", e.g.
 // "Image/Text to Image/Z-Image Turbo"; the short name is what the row shows
 // (the full label stays the preset's name everywhere else).
-export const SUBGROUPS = { Image: ['Text to Image', 'Image Edit', 'Inpainting', 'Upscale'] };
+export const SUBGROUPS = { Image: ['Text to Image', 'Image Edit', 'Inpainting', 'Outpainting', 'Upscale'] }; // batch 14: Outpainting
 
 /** { subgroup, short } from a menuPath ("Video/Wan 2.2 5B Text/Image to Video" has no sub section). */
 export function menuParts(group, menuPath, label) {
@@ -74,6 +75,17 @@ export function validatePreset(id, file) {
     if (p.type === 'enum') {
       if (!Array.isArray(p.options) || !p.options.length) return fail(`param ${key}: enum needs options`);
       if (!p.options.includes(p.default)) return fail(`param ${key}: default not in options`);
+      // Batch 13+: { set: { option: [{ node, input, value }] } } - one choice sets several inputs (switches).
+      if (p.set !== undefined) {
+        if (!p.set || typeof p.set !== 'object') return fail(`param ${key}: set must be { option: [...] }`);
+        for (const [opt, list] of Object.entries(p.set)) {
+          if (!p.options.map(String).includes(opt)) return fail(`param ${key}: set names unknown option ${opt}`);
+          for (const t of Array.isArray(list) ? list : [null]) {
+            const n = wf[t?.node];
+            if (!n || !(t.input in n.inputs) || Array.isArray(n.inputs[t.input])) return fail(`param ${key}: set ${opt}: ${t?.node}.${t?.input} is not a value on a node`);
+          }
+        }
+      }
     } else if (p.type === 'number' || p.type === 'int') {
       if (!(Number.isFinite(p.min) && Number.isFinite(p.max) && p.min <= p.max)) return fail(`param ${key}: needs min <= max`);
       if (!(p.default >= p.min && p.default <= p.max)) return fail(`param ${key}: default outside [min, max]`);
@@ -268,6 +280,7 @@ export function applyPresetParams(manifest, workflow, params) {
     if (p.multiplyBy) v = Math.round(v * p.multiplyBy);
     if (p.divideBy) v = Number((v / p.divideBy).toFixed(4));
     for (const t of [p, ...(p.also || [])]) if (out[t.node]) out[t.node].inputs[t.input] = v;
+    for (const t of p.set?.[String(v)] || []) if (out[t.node]) out[t.node].inputs[t.input] = t.value;
   }
   return out;
 }

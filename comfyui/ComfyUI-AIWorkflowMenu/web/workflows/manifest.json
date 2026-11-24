@@ -74,6 +74,20 @@
     },
     {
       "menu": "models",
+      "path": "Image/Inpainting/FLUX.1 Fill (GGUF)",
+      "file": "api/flux1-fill-inpaint.json",
+      "format": "api",
+      "preset": "ai:flux1-fill-inpaint"
+    },
+    {
+      "menu": "models",
+      "path": "Image/Outpainting/FLUX.1 Fill (GGUF)",
+      "file": "api/flux1-fill-outpaint.json",
+      "format": "api",
+      "preset": "ai:flux1-fill-outpaint"
+    },
+    {
+      "menu": "models",
       "path": "Image/Text to Image/Z-Image Turbo",
       "file": "image/z_image_turbo.json",
       "format": "ui",
@@ -246,6 +260,27 @@
       "file": "api/wf-concept-depth.json",
       "format": "api",
       "preset": "ai:wf-concept-depth"
+    },
+    {
+      "menu": "workflows",
+      "path": "Concept/Concept Looks (Pose)",
+      "file": "api/wf-concept-pose.json",
+      "format": "api",
+      "preset": "ai:wf-concept-pose"
+    },
+    {
+      "menu": "workflows",
+      "path": "Concept/Concept Looks (FLUX.1 Dev)",
+      "file": "api/wf-concept-flux.json",
+      "format": "api",
+      "preset": "ai:wf-concept-flux"
+    },
+    {
+      "menu": "workflows",
+      "path": "Concept/Concept Looks (Qwen-Image)",
+      "file": "api/wf-concept-qwen.json",
+      "format": "api",
+      "preset": "ai:wf-concept-qwen"
     },
     {
       "menu": "workflows",

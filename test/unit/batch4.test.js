@@ -251,13 +251,13 @@ test('banner: resume() hides it and starts a fresh grace period', () => {
 
 // ---- D. an info text for every control every bundled workflow exposes -------------
 
-test('info: every control of every bundled AI preset (21 models + 15 workflows) has a plain-language text', async () => {
+test('info: every control of every bundled AI preset (23 models + 18 workflows) has a plain-language text', async () => {
   const st = await startStack({ folderWorkflows: false });
   try {
     const list = (await (await fetch(st.base + '/api/workflows')).json()).workflows.filter((w) => w.id.startsWith('ai:'));
     const files = fs.readdirSync(path.join(st.wfDir, 'ai')).filter((f) => f.endsWith('.json'));
-    assert.equal(files.length, 36);
-    assert.equal(list.length, 36, 'all 36 presets are listed');
+    assert.equal(files.length, 41);
+    assert.equal(list.length, 41, 'all 41 presets are listed');
     const missing = [];
     for (const w of list) {
       assert.ok(w.ok, `${w.id}: ${w.error}`);
@@ -318,7 +318,7 @@ test('info: preset texts match what the presets really do (spot checks against t
 
 // ---- E. Image sub sections --------------------------------------------------------
 test('Image presets are split into Text to Image / Image Edit / Inpainting / Upscale (from menuPath)', async () => {
-  assert.deepEqual(SUBGROUPS.Image, ['Text to Image', 'Image Edit', 'Inpainting', 'Upscale']);
+  assert.deepEqual(SUBGROUPS.Image, ['Text to Image', 'Image Edit', 'Inpainting', 'Outpainting', 'Upscale']);
   assert.deepEqual(menuParts('Image', 'Image/Text to Image/Z-Image Turbo', 'Z-Image Turbo Text to Image'), { subgroup: 'Text to Image', short: 'Z-Image Turbo' });
   assert.deepEqual(menuParts('Video', 'Video/Wan 2.2 5B Text/Image to Video', 'Wan'), { subgroup: null, short: 'Wan' }, 'a "/" in a name is not a sub section');
   assert.deepEqual(menuParts('Image', 'Image/Something Else/X', 'X full'), { subgroup: null, short: 'X full' });
@@ -328,7 +328,8 @@ test('Image presets are split into Text to Image / Image Edit / Inpainting / Ups
     const by = (sub) => list.filter((w) => w.subgroup === sub).sort((a, b) => a.menuOrder - b.menuOrder).map((w) => w.id);
     assert.deepEqual(by('Text to Image'), ['ai:z-image-turbo', 'ai:klein-4b-t2i', 'ai:qwen-2512-t2i', 'ai:flux1-dev-gguf', 'ai:flux1-schnell-gguf']);
     assert.deepEqual(by('Image Edit'), ['ai:klein-4b-edit', 'ai:qwen-edit-2509', 'ai:qwen-edit-2511']);
-    assert.deepEqual(by('Inpainting'), ['ai:klein-4b-inpaint']);
+    assert.deepEqual(by('Inpainting'), ['ai:klein-4b-inpaint', 'ai:flux1-fill-inpaint']);
+    assert.deepEqual(by('Outpainting'), ['ai:flux1-fill-outpaint']); // batch 14
     assert.deepEqual(by('Upscale'), ['ai:seedvr2-7b-image', 'ai:upscale-4x-model']);
     assert.ok(list.filter((w) => w.group === 'Image').every((w) => w.subgroup), 'every Image preset has a sub section');
     assert.ok(list.filter((w) => w.group !== 'Image').every((w) => !w.subgroup));
@@ -338,8 +339,8 @@ test('Image presets are split into Text to Image / Image Edit / Inpainting / Ups
     const lay = pickerLayout(list);
     assert.deepEqual(lay.map((x) => x.sec.key), ['3D', 'Image', 'Video', 'Audio', 'Textures', 'Concept', 'VFX', '3D Assets', 'Sound', 'My presets']);
     const img = lay.find((x) => x.sec.key === 'Image');
-    assert.deepEqual(img.subs.map((x) => x.name), ['Text to Image', 'Image Edit', 'Inpainting', 'Upscale'], 'Upscale last');
-    assert.equal(img.rows.length, 0); assert.equal(img.count, 11);
+    assert.deepEqual(img.subs.map((x) => x.name), ['Text to Image', 'Image Edit', 'Inpainting', 'Outpainting', 'Upscale'], 'Upscale last');
+    assert.equal(img.rows.length, 0); assert.equal(img.count, 13);
   } finally { await st.close(); }
 });
 

@@ -963,3 +963,8 @@ body.node-view-on #btn-import-media { display: none; }
 .pc-bar[hidden] { display: none; }
 .pc-bar i { display: block; height: 100%; width: 0; background: #3987e5; border-radius: 2px; transition: width .4s; }
 .attach-btn[hidden] { display: none; }
+/* batch 14: Select (SAM 2) in the mask editor */
+.me-stage.selecting { cursor: crosshair; }
+.me-stage.busy { cursor: progress; }
+.me-tapdot { position: absolute; border-radius: 50%; border: 3px solid #fff; background: #fd990399; box-shadow: 0 0 0 1px #000a; pointer-events: none; animation: me-pulse 1s ease-in-out infinite; }
+@keyframes me-pulse { 50% { opacity: .35; } }

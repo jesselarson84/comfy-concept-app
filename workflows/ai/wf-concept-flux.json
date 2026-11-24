@@ -1,0 +1,522 @@
+{
+ "preset": {
+  "kind": "workflow",
+  "group": "Concept",
+  "label": "Concept Looks (FLUX.1 Dev)",
+  "menuPath": "Concept/Concept Looks (FLUX.1 Dev)",
+  "menuOrder": 4,
+  "source": "Batch 14: FLUX.1 dev Q5_K_S GGUF + Shakker Labs FLUX.1-dev-ControlNet-Union-Pro-2.0; guides from Canny, Depth Anything 3 or DWPose.",
+  "output": "image",
+  "description": "Keeps the layout of a render or photo and changes the look from the prompt, with FLUX.1 Dev: slower than the Z-Image versions (24 steps) but with more detail and better text and hands. Guide by edges, depth, a depth pass or a person's pose. Non-commercial license.",
+  "params": {
+   "guide": {
+    "node": "40",
+    "input": "value",
+    "type": "enum",
+    "options": [
+     "edges",
+     "depth",
+     "pass",
+     "pose"
+    ],
+    "default": "edges",
+    "label": "Guide by",
+    "control": "seg",
+    "span2": true,
+    "labels": {
+     "edges": "Edges",
+     "depth": "Depth",
+     "pass": "Depth pass",
+     "pose": "Pose"
+    },
+    "set": {
+     "edges": [
+      {
+       "node": "30",
+       "input": "switch",
+       "value": false
+      },
+      {
+       "node": "31",
+       "input": "switch",
+       "value": false
+      },
+      {
+       "node": "32",
+       "input": "switch",
+       "value": false
+      }
+     ],
+     "pass": [
+      {
+       "node": "30",
+       "input": "switch",
+       "value": true
+      },
+      {
+       "node": "31",
+       "input": "switch",
+       "value": false
+      },
+      {
+       "node": "32",
+       "input": "switch",
+       "value": false
+      }
+     ],
+     "depth": [
+      {
+       "node": "31",
+       "input": "switch",
+       "value": true
+      },
+      {
+       "node": "32",
+       "input": "switch",
+       "value": false
+      }
+     ],
+     "pose": [
+      {
+       "node": "32",
+       "input": "switch",
+       "value": true
+      }
+     ]
+    },
+    "info": "What the picture keeps from your render or photo. Edges: outlines and panel lines (canny). Depth: the shapes and distances, worked out with Depth Anything 3. Depth pass: the picture already is a depth pass (white near) from Cinema 4D or Redshift. Pose: a person's pose (DWPose), so a figure keeps its stance in a new look."
+   },
+   "strength": {
+    "node": "42",
+    "input": "strength",
+    "type": "number",
+    "min": 0.3,
+    "max": 1.2,
+    "step": 0.05,
+    "default": 0.7,
+    "label": "Follow layout",
+    "control": "slider",
+    "info": "How strictly the picture follows the guide. 0.6-0.8 suits edges and depth; pose works well up to 1.0. Too high copies the render too literally."
+   },
+   "release": {
+    "node": "42",
+    "input": "end_percent",
+    "type": "number",
+    "min": 0.4,
+    "max": 1,
+    "step": 0.05,
+    "default": 0.8,
+    "label": "Release at",
+    "control": "slider",
+    "info": "When the guide lets go, as a share of the steps. Lower lets the last steps add free detail on top of the fixed layout."
+   },
+   "steps": {
+    "node": "17",
+    "input": "steps",
+    "type": "int",
+    "min": 12,
+    "max": 40,
+    "default": 24,
+    "label": "Steps",
+    "control": "stepper",
+    "info": "Refinement passes. FLUX.1 Dev is usually run at 20-30."
+   },
+   "guidance": {
+    "node": "6",
+    "input": "guidance",
+    "type": "number",
+    "min": 1.5,
+    "max": 5,
+    "step": 0.1,
+    "default": 3.5,
+    "label": "Guidance",
+    "control": "slider",
+    "info": "How closely the picture follows the prompt. 3.5 is the usual FLUX.1 Dev value."
+   },
+   "detail": {
+    "node": "20",
+    "input": "low_threshold",
+    "type": "number",
+    "min": 0.05,
+    "max": 0.6,
+    "step": 0.05,
+    "default": 0.2,
+    "label": "Edge detail",
+    "control": "slider",
+    "when": {
+     "param": "guide",
+     "is": "edges"
+    },
+    "info": "Edges only: which edges count. Lower picks up fine panel lines and texture edges; higher keeps only the strong silhouettes."
+   }
+  },
+  "maxBatch": 4,
+  "vram": {
+   "estMB": 14500,
+   "basis": "FLUX.1 Dev Q5_K_S GGUF 8.3 GB + ControlNet Union Pro 2.0 4 GB + T5 fp8 (swapped out after encode); ComfyUI keeps what does not fit on the GPU in system RAM"
+  },
+  "info": {
+   "image": "A frame from Cinema 4D (greybox or rough Redshift lighting), a depth pass, or a photo of a person for Pose. Its shape (fitted to about 1 MP) is the shape of the result.",
+   "prompt": "The look: materials, lighting and mood, e.g. \"broadcast studio set, brushed steel, warm LED strips, glossy black floor, haze\". Ten variations of one camera angle: raise Batch."
+  }
+ },
+ "workflow": {
+  "5": {
+   "inputs": {
+    "text": "",
+    "clip": [
+     "11",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Look #prompt"
+   }
+  },
+  "6": {
+   "inputs": {
+    "guidance": 3.5,
+    "conditioning": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "FluxGuidance",
+   "_meta": {
+    "title": "FluxGuidance"
+   }
+  },
+  "7": {
+   "inputs": {
+    "image": "example.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Render or photo #image"
+   }
+  },
+  "8": {
+   "inputs": {
+    "image": [
+     "7",
+     0
+    ],
+    "upscale_method": "lanczos",
+    "megapixels": 1,
+    "resolution_steps": 16
+   },
+   "class_type": "ImageScaleToTotalPixels",
+   "_meta": {
+    "title": "Fit to 1 MP"
+   }
+  },
+  "9": {
+   "inputs": {
+    "conditioning": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "ConditioningZeroOut",
+   "_meta": {
+    "title": "Conditioning Zero Out"
+   }
+  },
+  "10": {
+   "inputs": {
+    "unet_name": "flux1-dev-Q5_K_S.gguf"
+   },
+   "class_type": "UnetLoaderGGUF",
+   "_meta": {
+    "title": "Unet Loader (GGUF)"
+   }
+  },
+  "11": {
+   "inputs": {
+    "clip_name1": "t5xxl_fp8_e4m3fn.safetensors",
+    "clip_name2": "clip_l.safetensors",
+    "type": "flux",
+    "device": "default"
+   },
+   "class_type": "DualCLIPLoader",
+   "_meta": {
+    "title": "Load CLIP (Dual)"
+   }
+  },
+  "12": {
+   "inputs": {
+    "vae_name": "ae.safetensors"
+   },
+   "class_type": "VAELoader",
+   "_meta": {
+    "title": "Load VAE"
+   }
+  },
+  "13": {
+   "inputs": {
+    "image": [
+     "8",
+     0
+    ]
+   },
+   "class_type": "GetImageSize",
+   "_meta": {
+    "title": "Size"
+   }
+  },
+  "14": {
+   "inputs": {
+    "width": [
+     "13",
+     0
+    ],
+    "height": [
+     "13",
+     1
+    ],
+    "batch_size": 1
+   },
+   "class_type": "EmptySD3LatentImage",
+   "_meta": {
+    "title": "Latent (same shape as the render)"
+   }
+  },
+  "17": {
+   "inputs": {
+    "seed": 0,
+    "steps": 24,
+    "cfg": 1,
+    "sampler_name": "euler",
+    "scheduler": "simple",
+    "denoise": 1,
+    "model": [
+     "10",
+     0
+    ],
+    "positive": [
+     "42",
+     0
+    ],
+    "negative": [
+     "42",
+     1
+    ],
+    "latent_image": [
+     "14",
+     0
+    ]
+   },
+   "class_type": "KSampler",
+   "_meta": {
+    "title": "KSampler"
+   }
+  },
+  "18": {
+   "inputs": {
+    "samples": [
+     "17",
+     0
+    ],
+    "vae": [
+     "12",
+     0
+    ]
+   },
+   "class_type": "VAEDecode",
+   "_meta": {
+    "title": "VAE Decode"
+   }
+  },
+  "19": {
+   "inputs": {
+    "filename_prefix": "concept-app/concept_flux",
+    "images": [
+     "18",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save Image"
+   }
+  },
+  "20": {
+   "inputs": {
+    "image": [
+     "8",
+     0
+    ],
+    "low_threshold": 0.2,
+    "high_threshold": 0.5
+   },
+   "class_type": "Canny",
+   "_meta": {
+    "title": "Edges (canny)"
+   }
+  },
+  "21": {
+   "inputs": {
+    "model_name": "depth_anything_3_base.safetensors",
+    "weight_dtype": "default"
+   },
+   "class_type": "LoadDA3Model",
+   "_meta": {
+    "title": "Load Depth Anything 3"
+   }
+  },
+  "22": {
+   "inputs": {
+    "da3_model": [
+     "21",
+     0
+    ],
+    "image": [
+     "8",
+     0
+    ],
+    "resolution": 1008,
+    "resize_method": "upper_bound_resize",
+    "mode": "mono"
+   },
+   "class_type": "DA3Inference",
+   "_meta": {
+    "title": "Depth Anything 3"
+   }
+  },
+  "23": {
+   "inputs": {
+    "da3_geometry": [
+     "22",
+     0
+    ],
+    "output": "depth",
+    "output.normalization": "v2_style",
+    "output.apply_sky_clip": false
+   },
+   "class_type": "DA3Render",
+   "_meta": {
+    "title": "Depth (white near)"
+   }
+  },
+  "24": {
+   "inputs": {
+    "image": [
+     "8",
+     0
+    ],
+    "detect_hand": "enable",
+    "detect_body": "enable",
+    "detect_face": "enable",
+    "resolution": 1024,
+    "bbox_detector": "yolox_l.onnx",
+    "pose_estimator": "dw-ll_ucoco_384.onnx",
+    "scale_stick_for_xinsr_cn": "disable"
+   },
+   "class_type": "DWPreprocessor",
+   "_meta": {
+    "title": "Pose (DWPose)"
+   }
+  },
+  "30": {
+   "inputs": {
+    "switch": false,
+    "on_false": [
+     "20",
+     0
+    ],
+    "on_true": [
+     "8",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "Edges or depth pass"
+   }
+  },
+  "31": {
+   "inputs": {
+    "switch": false,
+    "on_false": [
+     "30",
+     0
+    ],
+    "on_true": [
+     "23",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "or estimated depth"
+   }
+  },
+  "32": {
+   "inputs": {
+    "switch": false,
+    "on_false": [
+     "31",
+     0
+    ],
+    "on_true": [
+     "24",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "or pose"
+   }
+  },
+  "40": {
+   "inputs": {
+    "value": "edges"
+   },
+   "class_type": "PrimitiveString",
+   "_meta": {
+    "title": "Guide by (setting)"
+   }
+  },
+  "41": {
+   "inputs": {
+    "control_net_name": "FLUX.1-dev-ControlNet-Union-Pro-2.0.safetensors"
+   },
+   "class_type": "ControlNetLoader",
+   "_meta": {
+    "title": "Load ControlNet (Union Pro 2.0)"
+   }
+  },
+  "42": {
+   "inputs": {
+    "positive": [
+     "6",
+     0
+    ],
+    "negative": [
+     "9",
+     0
+    ],
+    "control_net": [
+     "41",
+     0
+    ],
+    "image": [
+     "32",
+     0
+    ],
+    "strength": 0.7,
+    "start_percent": 0,
+    "end_percent": 0.8,
+    "vae": [
+     "12",
+     0
+    ]
+   },
+   "class_type": "ControlNetApplyAdvanced",
+   "_meta": {
+    "title": "Apply ControlNet"
+   }
+  }
+ }
+}

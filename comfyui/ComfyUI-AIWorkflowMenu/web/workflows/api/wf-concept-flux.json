@@ -1,0 +1,359 @@
+{
+ "5": {
+  "inputs": {
+   "text": "",
+   "clip": [
+    "11",
+    0
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "Look #prompt"
+  }
+ },
+ "6": {
+  "inputs": {
+   "guidance": 3.5,
+   "conditioning": [
+    "5",
+    0
+   ]
+  },
+  "class_type": "FluxGuidance",
+  "_meta": {
+   "title": "FluxGuidance"
+  }
+ },
+ "7": {
+  "inputs": {
+   "image": "example.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Render or photo #image"
+  }
+ },
+ "8": {
+  "inputs": {
+   "image": [
+    "7",
+    0
+   ],
+   "upscale_method": "lanczos",
+   "megapixels": 1,
+   "resolution_steps": 16
+  },
+  "class_type": "ImageScaleToTotalPixels",
+  "_meta": {
+   "title": "Fit to 1 MP"
+  }
+ },
+ "9": {
+  "inputs": {
+   "conditioning": [
+    "5",
+    0
+   ]
+  },
+  "class_type": "ConditioningZeroOut",
+  "_meta": {
+   "title": "Conditioning Zero Out"
+  }
+ },
+ "10": {
+  "inputs": {
+   "unet_name": "flux1-dev-Q5_K_S.gguf"
+  },
+  "class_type": "UnetLoaderGGUF",
+  "_meta": {
+   "title": "Unet Loader (GGUF)"
+  }
+ },
+ "11": {
+  "inputs": {
+   "clip_name1": "t5xxl_fp8_e4m3fn.safetensors",
+   "clip_name2": "clip_l.safetensors",
+   "type": "flux",
+   "device": "default"
+  },
+  "class_type": "DualCLIPLoader",
+  "_meta": {
+   "title": "Load CLIP (Dual)"
+  }
+ },
+ "12": {
+  "inputs": {
+   "vae_name": "ae.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "13": {
+  "inputs": {
+   "image": [
+    "8",
+    0
+   ]
+  },
+  "class_type": "GetImageSize",
+  "_meta": {
+   "title": "Size"
+  }
+ },
+ "14": {
+  "inputs": {
+   "width": [
+    "13",
+    0
+   ],
+   "height": [
+    "13",
+    1
+   ],
+   "batch_size": 1
+  },
+  "class_type": "EmptySD3LatentImage",
+  "_meta": {
+   "title": "Latent (same shape as the render)"
+  }
+ },
+ "17": {
+  "inputs": {
+   "seed": 0,
+   "steps": 24,
+   "cfg": 1,
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "denoise": 1,
+   "model": [
+    "10",
+    0
+   ],
+   "positive": [
+    "42",
+    0
+   ],
+   "negative": [
+    "42",
+    1
+   ],
+   "latent_image": [
+    "14",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "18": {
+  "inputs": {
+   "samples": [
+    "17",
+    0
+   ],
+   "vae": [
+    "12",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  }
+ },
+ "19": {
+  "inputs": {
+   "filename_prefix": "concept-app/concept_flux",
+   "images": [
+    "18",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "Save Image"
+  }
+ },
+ "20": {
+  "inputs": {
+   "image": [
+    "8",
+    0
+   ],
+   "low_threshold": 0.2,
+   "high_threshold": 0.5
+  },
+  "class_type": "Canny",
+  "_meta": {
+   "title": "Edges (canny)"
+  }
+ },
+ "21": {
+  "inputs": {
+   "model_name": "depth_anything_3_base.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "LoadDA3Model",
+  "_meta": {
+   "title": "Load Depth Anything 3"
+  }
+ },
+ "22": {
+  "inputs": {
+   "da3_model": [
+    "21",
+    0
+   ],
+   "image": [
+    "8",
+    0
+   ],
+   "resolution": 1008,
+   "resize_method": "upper_bound_resize",
+   "mode": "mono"
+  },
+  "class_type": "DA3Inference",
+  "_meta": {
+   "title": "Depth Anything 3"
+  }
+ },
+ "23": {
+  "inputs": {
+   "da3_geometry": [
+    "22",
+    0
+   ],
+   "output": "depth",
+   "output.normalization": "v2_style",
+   "output.apply_sky_clip": false
+  },
+  "class_type": "DA3Render",
+  "_meta": {
+   "title": "Depth (white near)"
+  }
+ },
+ "24": {
+  "inputs": {
+   "image": [
+    "8",
+    0
+   ],
+   "detect_hand": "enable",
+   "detect_body": "enable",
+   "detect_face": "enable",
+   "resolution": 1024,
+   "bbox_detector": "yolox_l.onnx",
+   "pose_estimator": "dw-ll_ucoco_384.onnx",
+   "scale_stick_for_xinsr_cn": "disable"
+  },
+  "class_type": "DWPreprocessor",
+  "_meta": {
+   "title": "Pose (DWPose)"
+  }
+ },
+ "30": {
+  "inputs": {
+   "switch": false,
+   "on_false": [
+    "20",
+    0
+   ],
+   "on_true": [
+    "8",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "Edges or depth pass"
+  }
+ },
+ "31": {
+  "inputs": {
+   "switch": false,
+   "on_false": [
+    "30",
+    0
+   ],
+   "on_true": [
+    "23",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "or estimated depth"
+  }
+ },
+ "32": {
+  "inputs": {
+   "switch": false,
+   "on_false": [
+    "31",
+    0
+   ],
+   "on_true": [
+    "24",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "or pose"
+  }
+ },
+ "40": {
+  "inputs": {
+   "value": "edges"
+  },
+  "class_type": "PrimitiveString",
+  "_meta": {
+   "title": "Guide by (setting)"
+  }
+ },
+ "41": {
+  "inputs": {
+   "control_net_name": "FLUX.1-dev-ControlNet-Union-Pro-2.0.safetensors"
+  },
+  "class_type": "ControlNetLoader",
+  "_meta": {
+   "title": "Load ControlNet (Union Pro 2.0)"
+  }
+ },
+ "42": {
+  "inputs": {
+   "positive": [
+    "6",
+    0
+   ],
+   "negative": [
+    "9",
+    0
+   ],
+   "control_net": [
+    "41",
+    0
+   ],
+   "image": [
+    "32",
+    0
+   ],
+   "strength": 0.7,
+   "start_percent": 0,
+   "end_percent": 0.8,
+   "vae": [
+    "12",
+    0
+   ]
+  },
+  "class_type": "ControlNetApplyAdvanced",
+  "_meta": {
+   "title": "Apply ControlNet"
+  }
+ }
+}

@@ -61,6 +61,12 @@ export const getSchedule = () => req('GET', '/api/schedule');
 export const addToSchedule = (jobs) => req('POST', '/api/schedule/jobs', { jobs });
 export const removeScheduled = (id) => req('DELETE', `/api/schedule/jobs/${encodeURIComponent(id)}`);
 export const orderSchedule = (ids) => req('POST', '/api/schedule/order', { ids });
+/** Batch 14: SAM 2 "Select" in the mask editor -> the mask as a PNG Blob (white = the object). */
+export async function samSelect(image, points) {
+  const r = await fetch('/api/sam/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image, points }) });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Select failed (${r.status})`);
+  return r.blob();
+}
 export const replaceScheduled = (ids, jobs) => req('POST', '/api/schedule/replace', { ids, jobs }); // batch 13: Edit
 export const startSchedule = (at = null) => req('POST', '/api/schedule/start', { at });
 export const stopSchedule = () => req('POST', '/api/schedule/stop', {});
