@@ -17,7 +17,7 @@ const listen = (server) => new Promise((r) => server.listen(0, '127.0.0.1', () =
 // ram: { totalMB, freeMB }. env: e.g. { MEMORY_PROFILE: 'large' }. memoryFile: a memory-profiles.json path.
 export const GPU_2080TI = { name: 'NVIDIA GeForce RTX 2080 Ti', totalMB: 11264, freeMB: 4000 };
 export const GPU_5080 = { name: 'NVIDIA GeForce RTX 5080', totalMB: 16303, freeMB: 9000 };
-export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = false, gpu = GPU_2080TI, ram = { totalMB: 98204, freeMB: 60000 }, env = {}, memoryFile, ollamaOptions = {}, comfyOptions = {}, folderWorkflows = true, legacyFiles = false, data = null, drive = true, outputDir = null, appOptions = {} } = {}) {
+export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = false, gpu = GPU_2080TI, ram = { totalMB: 98204, freeMB: 60000 }, env = {}, memoryFile, ollamaOptions = {}, comfyOptions = {}, folderWorkflows = true, legacyFiles = false, data = null, drive = true, projects = false, outputDir = null, appOptions = {} } = {}) {
   const mock = createMockComfy({ stepMs, ...comfyOptions });
   const mockPort = await listen(mock.server);
   const ollama = createMockOllama(ollamaOptions);
@@ -44,8 +44,11 @@ export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = 
   const driveRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-drive-'));
   if (drive) fs.mkdirSync(path.join(driveRoot, 'My Drive'));
   const driveDir = path.join(driveRoot, 'My Drive', 'Comfy UI');
+  // Batch 11: projects live in a temp "My Drive/Creative/PROJECTS/ACTIVE" (never the real one).
+  const projectsDir = path.join(driveRoot, 'My Drive', 'Creative', 'PROJECTS', 'ACTIVE');
+  if (drive && projects) fs.mkdirSync(projectsDir, { recursive: true });
   // outputDir: a temp ComfyUI output folder for "From Comfy UI" (else none: history only).
-  const cfg = loadConfig({ comfyUrl, workflowsDir: wfDir, dataDir, ollamaUrl, driveDir, comfyOutputDir: outputDir || '', ...(memoryFile ? { memoryProfilesFile: memoryFile } : {}) });
+  const cfg = loadConfig({ comfyUrl, workflowsDir: wfDir, dataDir, ollamaUrl, driveDir, projectsDir, comfyOutputDir: outputDir || '', ...(memoryFile ? { memoryProfilesFile: memoryFile } : {}) });
   const hw = { gpu, ram };
   const runSmi = async () => { if (!hw.gpu) throw Object.assign(new Error('not found'), { code: 'ENOENT' }); return `${hw.gpu.name}, ${hw.gpu.totalMB}, ${hw.gpu.freeMB}\n`; };
   const fakeOs = { totalmem: () => hw.ram.totalMB * 1048576, freemem: () => hw.ram.freeMB * 1048576 };
@@ -54,7 +57,7 @@ export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = 
   const port = await listen(app.server);
   const base = `http://127.0.0.1:${port}`;
   return {
-    mock, app, base, mockBase: `http://127.0.0.1:${mockPort}`, wfDir, dataDir, port, driveRoot, driveDir,
+    mock, app, base, mockBase: `http://127.0.0.1:${mockPort}`, wfDir, dataDir, port, driveRoot, driveDir, projectsDir,
     ollama, ollamaBase: `http://127.0.0.1:${ollamaPort}`, hw,
     async close() {
       app.server.closeAllConnections?.(); mock.server.closeAllConnections?.(); ollama.server.closeAllConnections?.();

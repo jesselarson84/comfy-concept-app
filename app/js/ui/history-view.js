@@ -19,6 +19,7 @@ import { deleteThumb, thumbKey } from '../lib/thumb-cache.js';
 import { fileLabel } from '../lib/outputs.js';
 import { Overlay, overlayTop, afterBack } from './overlay.js';
 import { bridge, has, absoluteUrl } from '../native.js';
+import { loadProjects, projectsCache } from './projects.js';
 
 const LONG_PRESS_MS = 450;
 
@@ -29,8 +30,12 @@ export class HistoryView {
    * (under the top bar, which stays put); `button` shows the pressed state;
    * onChange(on) lets main hide the node view / picker.
    */
-  constructor(openViewer, openFile, { modelThumbs, host, button, onChange, labelOf } = {}) {
+  constructor(openViewer, openFile, { modelThumbs, host, button, onChange, labelOf, onMove } = {}) {
     this.openViewer = openViewer; this.openFile = openFile; this.modelThumbs = modelThumbs;
+    // Batch 11: History is grouped by project by default ("By date" = the day groups).
+    this.onMove = onMove;
+    this.groupBy = localStorage.getItem('historyGroup') === 'date' ? 'date' : 'project';
+    try { this.collapsed = new Set(JSON.parse(localStorage.getItem('historyCollapsed') || '[]')); } catch { this.collapsed = new Set(); }
     // Batch 9: model names for search / filters / stats (main.js knows the presets).
     this.labelOf = labelOf || ((id) => id);
     this.filter = { q: '', types: new Set(), models: new Set(), date: null, tags: new Set() };
@@ -57,6 +62,7 @@ export class HistoryView {
       h('button.icon-btn', { type: 'button', 'aria-label': 'Cancel selection', dataset: { act: 'cancel-sel' }, onclick: () => this.endSelect() }, '✕'),
       this.count, h('span.spacer'),
       this.selFavBtn,
+      h('button.icon-btn', { type: 'button', 'aria-label': 'Move to project', title: 'Move to project', dataset: { act: 'move' }, onclick: () => this.moveSelected() }, h('i.i.i-folder-input')),
       h('button.icon-btn', { type: 'button', 'aria-label': 'Share', dataset: { act: 'share' }, onclick: () => this.share() }, h('i.i.i-share-2')),
       h('button.icon-btn', { type: 'button', 'aria-label': 'Add to', dataset: { act: 'add' }, onclick: () => this.openAddTo() }, h('i.i.i-plus')),
       h('button.icon-btn', { type: 'button', 'aria-label': 'Delete', dataset: { act: 'delete' }, onclick: () => this.confirmDelete() }, h('i.i.i-trash-2')),
@@ -65,7 +71,14 @@ export class HistoryView {
     this.search = h('input.hsearch', { type: 'search', placeholder: 'Search prompts, tags, colours', 'aria-label': 'Search History', autocomplete: 'off', enterkeyhint: 'search',
       oninput: () => { this.filter.q = this.search.value; this.render(); } });
     this.chips = h('div.hfilters');
-    this.tools = h('div.history-tools', {}, h('label.hsearch-row', {}, h('i.i.i-search', { 'aria-hidden': 'true' }), this.search), this.chips);
+    // Batch 11: By project (default) / By date.
+    const seg = (key, label) => h('button.hseg-btn', { type: 'button', dataset: { group: key }, 'aria-pressed': String(this.groupBy === key), onclick: () => {
+      this.groupBy = key; localStorage.setItem('historyGroup', key);
+      for (const b of this.groupSeg.children) b.setAttribute('aria-pressed', String(b.dataset.group === key));
+      this.render();
+    } }, label);
+    this.groupSeg = h('div.hseg', { role: 'group', 'aria-label': 'Group History' }, seg('project', 'By project'), seg('date', 'By date'));
+    this.tools = h('div.history-tools', {}, h('label.hsearch-row', {}, h('i.i.i-search', { 'aria-hidden': 'true' }), this.search), this.groupSeg, this.chips);
     this.statsOpen = localStorage.getItem('historyStatsOpen') === '1';
     this.stats = h('div.hstats', { role: 'button', tabindex: 0, dataset: { act: 'stats' } });
     this.stats.addEventListener('click', (e) => { if (e.target.closest('button, .hswitch')) return; this.statsOpen = !this.statsOpen; localStorage.setItem('historyStatsOpen', this.statsOpen ? '1' : '0'); this.paintStats(); });
@@ -255,11 +268,18 @@ export class HistoryView {
     ]);
   }
 
+  /** Batch 11: the selection (and what was made from it) to another project; its Drive files move too. */
+  async moveSelected() {
+    const ids = [...this.selected];
+    if (!ids.length || !this.onMove) return;
+    if (await this.onMove(ids)) { this.endSelect(); await this.load(); }
+  }
+
   async confirmDelete() {
     const ids = [...this.selected];
     if (!ids.length) return;
     const n = ids.length;
-    const ok = await confirmDialog(`Delete ${n} ${n === 1 ? 'item' : 'items'} from the PC?`, 'Delete');
+    const ok = await confirmDialog(`Delete ${n} ${n === 1 ? 'item' : 'items'} from the PC? ${n === 1 ? 'Its' : 'Their'} Drive ${n === 1 ? 'copy goes' : 'copies go'} to the Drive trash.`, 'Delete');
     if (!ok) return;
     const filesOf = new Map(ids.map((id) => [id, this.entries.get(id)?.files || []]));
     try {
@@ -307,7 +327,8 @@ export class HistoryView {
     this.backBtn.hidden = !this.inSub;
     this.list.replaceChildren(h('p.muted', {}, 'Loading…'));
     let sessions;
-    try { sessions = await getHistory(this.favOnly, this.folder?.id); } catch (e) { this.list.replaceChildren(h('p.muted', {}, e.message)); return; }
+    // Batch 11: the projects (names, grouping folders) come along for the project groups.
+    try { [sessions] = await Promise.all([getHistory(this.favOnly, this.folder?.id), loadProjects().catch(() => null)]); } catch (e) { this.list.replaceChildren(h('p.muted', {}, e.message)); return; }
     this.sessions = sessions;
     this.entries = new Map(sessions.flatMap((s) => s.entries.map((e) => [e.id, e])));
     for (const id of [...this.selected]) if (!this.entries.has(id)) this.selected.delete(id);
@@ -426,11 +447,33 @@ export class HistoryView {
     const shown = filtering ? all.filter((e) => matches(e, this.filter, { labelOf: this.labelOf })) : all;
     const head = filtering ? [h('div.hresults', {}, `${shown.length} ${shown.length === 1 ? 'result' : 'results'}`, h('button.link', { type: 'button', dataset: { act: 'clear-filters' }, onclick: () => this.clearFilters() }, 'Clear'))] : [];
     if (!shown.length) { this.list.replaceChildren(...head, h('p.muted', {}, 'Nothing matches.')); this.paintSelection(); return; }
-    this.list.replaceChildren(...head, ...byDay([{ entries: shown }]).map((s) => {
+    const body = this.groupBy === 'project'
+      ? byProject(shown, projectsCache()).flatMap((b) => {
+        const secs = b.projects.map((p) => this.#section(p.label, p.entries, { sub: p.sub, cls: p.id ? '' : '.unsorted', key: p.id || 'unsorted' }));
+        if (!b.head) return secs;
+        const key = `g:${b.head}`, closed = this.collapsed.has(key);
+        const n = b.projects.reduce((a, p) => a + p.entries.length, 0);
+        const hd = h('button.hgroup', { type: 'button', dataset: { group: b.head }, 'aria-expanded': String(!closed), onclick: () => {
+          if (this.collapsed.has(key)) this.collapsed.delete(key); else this.collapsed.add(key);
+          localStorage.setItem('historyCollapsed', JSON.stringify([...this.collapsed]));
+          this.render();
+        } }, h('i.i.i-folder'), h('span.hg-name', {}, b.head), h('span.hg-n', {}, `${b.projects.length} ${b.projects.length === 1 ? 'project' : 'projects'} · ${n}`), h(`i.i.${closed ? 'i-chevron-right' : 'i-chevron-down'}`));
+        return [hd, ...(closed ? [] : secs)];
+      })
+      : byDay([{ entries: shown }]).map((s) => this.#section(s.label, s.entries));
+    this.list.replaceChildren(...head, ...body);
+    this.paintSelection();
+  }
+
+  /** One group of tiles (a day, or a project) with its header and select-all circle. */
+  #section(label, entries, { sub = '', cls = '', key = '' } = {}) {
+    {
+      const s = { label, entries };
       // Turn history entries into the same item shape the viewer uses.
       const items = s.entries.filter((e) => e.images.length).map((e) => ({
         key: e.id, historyId: e.id, image: e.images[0], favorite: e.favorite, status: 'done', tags: [...new Set(entryTags(e))], at: e.createdAt,
         meta: { prompt: e.prompt, negative: e.negative, seed: e.seed, workflow: e.workflow, legacyWorkflow: e.legacyWorkflow, width: e.width, height: e.height, steps: e.steps, strength: e.strength, reference: e.reference, action: e.action, parent: e.parent },
+        project: e.project ?? null, drive: driveInfo(e, projectsCache()),
       }));
       // Non-image results (3D .glb, audio, video) open the 3D viewer / audio player / file sheet.
       const files = s.entries.filter((e) => !e.images.length && e.files?.length);
@@ -453,14 +496,60 @@ export class HistoryView {
           return b;
         }),
       ];
-      return h('section.history-session', { dataset: { ids: JSON.stringify(ids) } },
+      return h(`section.history-session${cls}`, { dataset: { ids: JSON.stringify(ids), ...(key ? { project: key } : {}) } },
         h('h3', {},
-          h('span.day', {}, s.label), h('small.day-n', {}, String(s.entries.length)),
+          h('span.day', {}, s.label, sub ? h('small.proj-sub', {}, sub) : null), h('small.day-n', {}, String(s.entries.length)),
           h('button.sel-all', { type: 'button', 'aria-label': `Select all from ${s.label}`, onclick: () => this.toggleGroup(ids) }, h('i.i.i-check'))),
         h('div.thumbs.grid', {}, tiles));
-    }));
-    this.paintSelection();
+    }
   }
+}
+
+/**
+ * Batch 11: entries (newest first) grouped by project for History:
+ * [{ head: 'Apps' | null, projects: [{ id, label, sub, entries }] }]
+ * A grouping folder (Apps, GTA 6 Mods) gathers its projects under one header; a
+ * project right in ACTIVE stands alone. Most recently used first; Unsorted (no
+ * project, or a project no longer known) always last.
+ */
+export function byProject(entries, data, now = new Date()) {
+  const known = new Map((data?.projects || []).map((p) => [p.id, p]));
+  const per = new Map();
+  for (const e of [...entries].sort((a, b) => b.createdAt - a.createdAt)) {
+    const id = e.project && known.has(e.project) ? e.project : null;
+    if (!per.has(id)) per.set(id, []);
+    per.get(id).push(e);
+  }
+  const blocks = new Map();
+  for (const [id, list] of per) {
+    if (!id) continue;
+    const p = known.get(id);
+    const head = p.group.length ? p.group.join(' › ') : null;
+    const key = head ? `g:${head}` : `p:${id}`;
+    if (!blocks.has(key)) blocks.set(key, { head, latest: 0, projects: [] });
+    const b = blocks.get(key);
+    b.projects.push({ id, label: p.name, sub: `${dayLabel(new Date(list[0].createdAt), now)}${p.missing ? ' · folder not found on Drive' : ''}`, entries: list, latest: list[0].createdAt });
+    b.latest = Math.max(b.latest, list[0].createdAt);
+  }
+  const out = [...blocks.values()].sort((a, b) => b.latest - a.latest);
+  for (const b of out) b.projects.sort((x, y) => y.latest - x.latest);
+  if (per.has(null)) out.push({ head: null, projects: [{ id: null, label: 'Unsorted', sub: `In ${data?.root || 'ACTIVE'}/__Comfy UI · select some to move them into a project`, entries: per.get(null) }] });
+  return out;
+}
+
+/** Batch 11: where an entry's (first) output is filed on Drive, for the viewer's Details. */
+export function driveInfo(e, data) {
+  const f = e.images?.[0] || e.files?.[0];
+  if (!f) return null;
+  const rec = e.filed?.[`${f.subfolder || ''}/${f.filename}`];
+  const root = data?.root || 'ACTIVE';
+  const p = (id) => data?.projects.find((x) => x.id === id);
+  const base = (id) => (id && p(id) ? `${root}/${[...p(id).group, p(id).name].join('/')}/__comfy outputs` : `${root}/__Comfy UI`);
+  if (!rec) return { state: 'waiting', path: '' };
+  if (rec.s === 'missing') return { state: 'missing', path: `${base(rec.p)}/${rec.f}` };
+  if (rec.s === 'gone') return { state: 'gone', path: '' };
+  if ((rec.p ?? null) !== (e.project ?? null)) return { state: 'moving', path: `${base(rec.p)}/${rec.f}` };
+  return { state: 'ok', path: `${base(rec.p)}/${rec.f}` };
 }
 
 /** Sessions (newest first) regrouped by calendar day: [{ key, label, entries }]. */

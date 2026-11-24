@@ -79,6 +79,10 @@ export class HistoryStore {
       files: sanitizeImages(input.files), // non-image outputs, e.g. a .glb
       favorite: !!input.favorite,
       status: input.status || (input.images?.length ? 'done' : 'queued'),
+      // Batch 11: the project (projects.js id) it belongs to; null = Unsorted.
+      // source: the History entry its reference picture came from ("Use as reference").
+      project: typeof input.project === 'string' && input.project ? input.project : null,
+      source: typeof input.source === 'string' && input.source ? input.source : undefined,
     };
     this.data.entries.push(e);
     await this.#save();
@@ -103,6 +107,38 @@ export class HistoryStore {
     e.tags = tags; delete e.tagFails;
     await this.#save();
     return e;
+  }
+
+  /** Batch 11: where one output file was filed on Drive (server/filer.js). */
+  async setFiled(id, key, rec) {
+    const e = this.data.entries.find((x) => x.id === id);
+    if (!e) return null;
+    e.filed = { ...(e.filed || {}), [key]: rec };
+    await this.#save();
+    return e;
+  }
+
+  /** Batch 11: move entries to a project (null = Unsorted); the filer moves their files. */
+  async setProject(ids, project) {
+    const set = new Set(ids);
+    let n = 0;
+    for (const e of this.data.entries) if (set.has(e.id) && (e.project ?? null) !== (project || null)) { e.project = project || null; n++; }
+    if (n) await this.#save();
+    return n;
+  }
+
+  /** The entries made from these ones (upscale / 3D of a picture, "Use as reference"), all the way down. */
+  descendants(ids) {
+    const all = new Set(ids);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const e of this.data.entries) {
+        if (all.has(e.id)) continue;
+        if ((e.parent?.historyId && all.has(e.parent.historyId)) || (e.source && all.has(e.source))) { all.add(e.id); grew = true; }
+      }
+    }
+    return [...all];
   }
 
   /** A tagging attempt failed; after a few the entry is skipped. */

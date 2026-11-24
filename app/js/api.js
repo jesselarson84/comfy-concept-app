@@ -48,6 +48,13 @@ export const saveToDrive = (f, kind, folder) => req('POST', '/api/drive/save', {
 // Batch 8: Save to… folder chooser (folders of My Drive).
 export const getDriveFolders = (path = '') => req('GET', `/api/drive/folders?${new URLSearchParams({ path })}`);
 export const makeDriveFolder = (path, name) => req('POST', '/api/drive/folders', { path, name });
+// Batch 11: projects (folders under Creative/PROJECTS/ACTIVE on Drive).
+export const getProjects = () => req('GET', '/api/projects');
+export const browseProjects = (path = '') => req('GET', `/api/projects/browse?${new URLSearchParams({ path })}`);
+export const markProject = (path) => req('POST', '/api/projects', { path });
+export const newProject = (name, parent = '') => req('POST', '/api/projects/new', { name, parent });
+export const setCurrentProject = (id) => req('POST', '/api/projects/current', { id: id || null });
+export const moveToProject = (ids, project) => req('POST', '/api/projects/move', { ids, project: project || null });
 // Batch 9: History tags (background tagger) and the stills it reads for 3D / video.
 export const getTagger = () => req('GET', '/api/tagger');
 export const setTagger = (enabled) => req('POST', '/api/tagger', { enabled });

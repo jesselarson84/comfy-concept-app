@@ -48,6 +48,7 @@ import { NodeView } from './ui/node-view.js';
 import { SavePresetSheet } from './ui/save-preset.js';
 import { textEncoderOnCpu, tiledVaeDecode, hasVaeDecode, wantTiledDecode, isOom } from './lib/memory-options.js';
 import { withUpscale, pickUpscaleModel, RESOLUTIONS } from './lib/resolution.js';
+import { ProjectChip, ProjectSheet, loadProjects, projectLabel } from './ui/projects.js';
 
 const comfy = new ComfyClient();
 const queue = new JobQueue(comfy);
@@ -67,6 +68,28 @@ let current = null;
 const lock = new RunLock();
 const isLocked = () => lock.locked() || queue.active.length > 0;
 const busy = () => { toast('Running'); };
+// Batch 11: the project chip (top of the form) and "Move to project".
+const projectChip = new ProjectChip($('#project-row'));
+const projectSheet = new ProjectSheet();
+/** Move History entries (and what was made from them) to a project picked in the sheet. */
+async function moveToProject(ids) {
+  if (!ids.length) return false;
+  const to = await projectSheet.pick({ title: `Move ${ids.length} ${ids.length === 1 ? 'item' : 'items'} to…`, move: true });
+  if (to === undefined) return false;
+  try {
+    const r = await api.moveToProject(ids, to);
+    await loadProjects().catch(() => {});
+    const extra = r.ids.length - ids.length;
+    toast(`Moved to ${projectLabel(to)}${extra > 0 ? ` (+${extra} made from them)` : ''}`);
+    projectChip.paint();
+    return true;
+  } catch (e) { toast(e.message, 6000); return false; }
+}
+// The other device may have changed the project: repaint when the app comes back.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) projectChip.refresh(); });
+// "Use as reference": which History entry a reference picture came from, so what
+// is made from it lands in the same project (sent as meta.source).
+const refSources = new Map(); // ref value ("subfolder/name.png") -> history id
 // Node view (canvas button): ComfyUI's graph in an iframe under the top bar,
 // kept alive between toggles. Batch 5: the workflow dropdown is hidden while it
 // is shown, it opens the selected preset's graph, and it switches straight
@@ -119,7 +142,8 @@ const viewer = new Viewer({
     panel.reuse(it.meta || {});
     toast(`Prompt + seed ${it.meta?.seed ?? ''} loaded`);
   },
-  onUseAsReference: (it) => useAsReference(it.image),
+  onUseAsReference: (it) => useAsReference(it.image, it.historyId),
+  onMove: async (it) => { const ok = await moveToProject([it.historyId]); if (ok) historyDirty = true; return ok; },
   // Batch 10: one Save - the Drive folder sheet, with "Save to this phone instead".
   onSave: (it) => saveToDrive(it.image, 'image', { phone: () => viewer.save() }),
   labelOf: (id) => labelOf(id),
@@ -145,6 +169,8 @@ const historyView = new HistoryView((getItems, i) => viewer.open(getItems, i), (
   onChange: () => { picker.close(); paintThumbs(); },
   // Batch 9: model names for History search / filters / stats (old ids map to today's presets).
   labelOf: (id) => labelOf(id),
+  // Batch 11: selection bar "Move to project".
+  onMove: (ids) => moveToProject(ids),
 });
 $('#btn-history').addEventListener('click', () => {
   if (historyView.on) return historyView.close();
@@ -201,11 +227,11 @@ refs.onPickFromComfy = (node) => outputPicker.open({ session: sessionImages, onP
 const presetChooser = new PresetChooser();
 const takesPicture = (w) => isUsable(w) && !!w.controls?.images?.length;
 const referencePresets = () => workflows.filter((w) => takesPicture(w) && isAiWorkflow(w) && (w.group === '3D' || (w.group === 'Image' && /edit/i.test(w.label))));
-async function useAsReference(img) {
+async function useAsReference(img, historyId) {
   if (!img) return;
   if (isLocked()) { busy(); return null; } // the reference slots are locked during a run
   if (!viewer.root.hidden) { viewer.close(); await afterBack(); }
-  const load = async () => { const ref = await refs.useImage(refs.targetNode(), img); if (ref) toast('Reference image ready'); return ref; };
+  const load = async () => { const ref = await refs.useImage(refs.targetNode(), img); if (ref) { if (historyId) refSources.set(ref, historyId); toast('Reference image ready'); } return ref; };
   if (current && takesPicture(current)) return load();
   const list = referencePresets();
   if (!list.length) { toast('No preset with a reference image slot'); return null; }
@@ -384,6 +410,8 @@ async function generate() {
         width: size.width * upscale, height: size.height * upscale, renderWidth: upscale > 1 ? size.width : undefined, renderHeight: upscale > 1 ? size.height : undefined, steps: v.steps, strength: v.strength, params: ai ? params : undefined, output: ai?.output,
         reference: c.images.length ? Object.fromEntries(c.images.map((s) => [s.node, refs.values[s.node]])) : undefined,
         mask: maskSlot.value || undefined,
+        // Batch 11: made from a History picture -> the server files it in that picture's project.
+        source: Object.values(refs.values).map((r) => refSources.get(r)).find(Boolean),
       },
     };
   });
