@@ -71,7 +71,7 @@ import { defaultPreset } from '../app/js/lib/preset-choice.js';
 import { historyOutputs, comfyOutputDir, createOutputDirCache, scanAppFolder, mergeOutputs, deleteAppFile } from './outputs.js';
 import { FolderStore } from './folders.js';
 import { saveToDrive, listDriveFolders, makeDriveFolder } from './drive.js';
-import { ProjectStore } from './projects.js';
+import { ProjectStore, KIND_DIRS } from './projects.js';
 import { createFiler } from './filer.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
@@ -162,6 +162,20 @@ export function createApp(cfg, opts = {}) {
     if (id.startsWith('user:')) { const u = userPresets.get(id); if (!u) return undefined; const r = await builder.check({ blocks: u.blocks, name: u.name }); return r.estMB; }
     if (id.startsWith('builder:')) return undefined;
     return undefined;
+  }
+  /**
+   * Batch 11: Save… starts in the current project's "__comfy outputs/<kind>" (or
+   * ACTIVE/__Comfy UI/<kind>), as paths relative to My Drive, so the old top-level
+   * My Drive\Comfy UI folder is no longer made. null when ACTIVE is not inside My Drive.
+   */
+  function saveDefaults() {
+    if (!projects.available()) return null;
+    const root = path.dirname(path.resolve(cfg.driveDir));
+    const base = projects.outputsDir(projects.current) || projects.outputsDir(null);
+    const rel = path.relative(root, base);
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+    const r = rel.split(path.sep).join('/');
+    return Object.fromEntries(Object.entries(KIND_DIRS).map(([k, f]) => [k, `${r}/${f}`]));
   }
   workflows.on('change', () => { for (const r of sseClients) r.write('event: workflows\ndata: {}\n\n'); });
 
@@ -436,7 +450,7 @@ export function createApp(cfg, opts = {}) {
     }
     // Batch 8: the "Save to…" folder chooser (any folder in My Drive).
     if (p === '/api/drive/folders' && req.method === 'GET') {
-      try { return json(res, 200, listDriveFolders(cfg.driveDir, url.searchParams.get('path') || '')); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      try { return json(res, 200, listDriveFolders(cfg.driveDir, url.searchParams.get('path') || '', saveDefaults())); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     if (p === '/api/drive/folders' && req.method === 'POST') {
       let body;
@@ -447,7 +461,7 @@ export function createApp(cfg, opts = {}) {
       let body;
       try { body = JSON.parse((await readBody(req, 64 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
       const historyFiles = new Set(historyOutputs(history).map((f) => `${f.subfolder}/${f.filename}`));
-      try { return json(res, 200, await saveToDrive(body, { driveDir: cfg.driveDir, comfyUrl: cfg.comfyUrl, outputSubfolder: cfg.outputSubfolder, historyFiles })); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      try { return json(res, 200, await saveToDrive(body, { driveDir: cfg.driveDir, comfyUrl: cfg.comfyUrl, outputSubfolder: cfg.outputSubfolder, historyFiles, defaults: saveDefaults() })); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     if (p === '/api/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });

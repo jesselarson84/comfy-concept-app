@@ -77,30 +77,33 @@ export function resolveDriveFolder(root, rel) {
 /** Absolute folder -> "Comfy UI/Images" ('' = the Drive root). */
 export const relDriveFolder = (root, dir) => path.relative(root, dir).split(path.sep).filter(Boolean).join('/');
 
-/** Default folder per kind, relative to the Drive root ("Comfy UI/Images"). */
-export function driveDefaults(driveDir = DEFAULT_DRIVE_DIR) {
+/** Default folder per kind, relative to the Drive root ("Comfy UI/Images").
+ *  Batch 11: the server passes `defaults` = the current project's "__comfy outputs/<kind>"
+ *  (or ACTIVE/__Comfy UI/<kind>), so My Drive\Comfy UI is no longer made. */
+export function driveDefaults(driveDir = DEFAULT_DRIVE_DIR, defaults = null) {
+  if (defaults) return defaults;
   const base = path.basename(path.resolve(driveDir));
   return Object.fromEntries(Object.entries(DRIVE_FOLDERS).map(([k, f]) => [k, `${base}/${f}`]));
 }
 
 /** A default kind folder ("Comfy UI/Images") is created when first asked for. */
-function ensureDefaultFolder(driveDir, root, rel) {
+function ensureDefaultFolder(driveDir, root, rel, defaults = null) {
   const r = String(rel ?? "").split("/").filter(Boolean).join("/");
-  if (!Object.values(driveDefaults(driveDir)).includes(r)) return;
+  if (!Object.values(driveDefaults(driveDir, defaults)).includes(r)) return;
   fs.mkdirSync(path.join(root, ...r.split("/")), { recursive: true });
 }
 
 /** Sub folders of a Drive folder (hidden / system ones left out), sorted by name. */
-export function listDriveFolders(driveDir, rel = '') {
+export function listDriveFolders(driveDir, rel = '', defaults = null) {
   const root = driveRoot(driveDir);
-  ensureDefaultFolder(driveDir, root, rel);
+  ensureDefaultFolder(driveDir, root, rel, defaults);
   // A remembered folder that was deleted or renamed: fall back to the Drive root.
   let dir;
   try { dir = resolveDriveFolder(root, rel); } catch (e) { if (e.status === 404) dir = root; else throw e; }
   const folders = fs.readdirSync(dir, { withFileTypes: true })
     .filter((d) => d.isDirectory() && !d.name.startsWith('.') && !d.name.startsWith('$') && d.name !== 'desktop.ini')
     .map((d) => d.name).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-  return { root: path.basename(root) || root, path: relDriveFolder(root, dir), folders, defaults: driveDefaults(driveDir) };
+  return { root: path.basename(root) || root, path: relDriveFolder(root, dir), folders, defaults: driveDefaults(driveDir, defaults) };
 }
 
 /** New folder `name` inside `rel`; returns its relative path. An existing one is fine. */
@@ -121,7 +124,9 @@ export function makeDriveFolder(driveDir, rel, name) {
  * @param o { driveDir, comfyUrl, outputSubfolder, historyFiles, fetchImpl }
  * @returns { name, folder, drivePath, path }  drivePath: "Comfy UI/Images" (relative to the Drive root)
  */
-export async function saveToDrive(ref, { driveDir = DEFAULT_DRIVE_DIR, comfyUrl, outputSubfolder, historyFiles, fetchImpl = fetch } = {}) {
+export async function saveToDrive(ref, { driveDir = DEFAULT_DRIVE_DIR, comfyUrl, outputSubfolder, historyFiles, fetchImpl = fetch, defaults = null } = {}) {
+  // Batch 11: no folder picked -> the default folder for its kind (the current project).
+  if (typeof ref?.folder !== 'string' && defaults?.[driveKind(ref)]) ref = { ...ref, folder: defaults[driveKind(ref)] };
   const why = checkAppOutput(ref, { outputSubfolder, historyFiles });
   if (why) throw err(400, why);
   const root = path.resolve(driveDir);
@@ -132,7 +137,7 @@ export async function saveToDrive(ref, { driveDir = DEFAULT_DRIVE_DIR, comfyUrl,
   if (typeof ref.folder === 'string') {
     // Batch 8: a folder picked in the app (relative to Q:\My Drive); it must exist
     // (the default kind folders are made on first use).
-    ensureDefaultFolder(driveDir, parent, ref.folder);
+    ensureDefaultFolder(driveDir, parent, ref.folder, defaults);
     dir = resolveDriveFolder(parent, ref.folder);
     folder = relDriveFolder(parent, dir);
   } else {

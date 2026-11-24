@@ -285,6 +285,25 @@ test('UI wiring: chip at the top of the form, Move in the selection bar and the 
   assert.match(read('app/js/ui/viewer.js'), /Move to project…/);
   const sw = read('app/sw.js');
   assert.match(sw, /'\/js\/ui\/projects\.js'/);
-  assert.match(sw, /shell-v27/);
+  assert.match(sw, /shell-v28/);
   assert.match(read('app/js/ui/projects.js'), /act: 'use-here'/, 'inside a folder: use that folder itself');
+});
+
+test('Save to Drive starts in the current project (or ACTIVE/__Comfy UI) and never makes My Drive/Comfy UI again', async () => {
+  const s = await startStack({ projects: true });
+  const j = async (method, url, body) => { const r = await fetch(s.base + url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, body: await r.json() }; };
+  try {
+    let r = (await j('GET', '/api/drive/folders?path=')).body;
+    assert.equal(r.defaults.image, 'Creative/PROJECTS/ACTIVE/__Comfy UI/Images');
+    assert.equal(r.defaults['3d'], 'Creative/PROJECTS/ACTIVE/__Comfy UI/3D');
+    fs.mkdirSync(path.join(s.projectsDir, 'Apps', 'Cache'), { recursive: true });
+    await j('POST', '/api/projects', { path: 'Apps/Cache' });
+    r = (await j('GET', '/api/drive/folders?path=Creative/PROJECTS/ACTIVE/Apps/Cache/__comfy outputs/Images')).body;
+    assert.equal(r.defaults.image, 'Creative/PROJECTS/ACTIVE/Apps/Cache/__comfy outputs/Images');
+    assert.equal(r.path, 'Creative/PROJECTS/ACTIVE/Apps/Cache/__comfy outputs/Images', 'the default kind folder is made on first use');
+    // the old remembered folder is gone: the server falls back to My Drive, the sheet then opens the default
+    assert.equal((await j('GET', '/api/drive/folders?path=Comfy UI/Images')).body.path, '');
+    assert.ok(!fs.existsSync(path.join(s.driveRoot, 'My Drive', 'Comfy UI')), 'no top-level Comfy UI folder');
+    assert.match(read('app/js/ui/drive-folder.js'), /if \(path && !r\.path && kind && r\.defaults\?\.\[kind\]\)/);
+  } finally { await s.close(); }
 });
