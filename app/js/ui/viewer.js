@@ -28,6 +28,7 @@ import { h, toast } from './dom.js';
 import { viewUrl } from '../comfy-client.js';
 import { bridge, has, absoluteUrl } from '../native.js';
 import { confirmDialog } from './history-view.js';
+import { projectLabel } from './projects.js';
 import { ActionMenu, driveLogo, moreButton } from './action-menu.js';
 
 const dayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -248,6 +249,8 @@ export class Viewer {
       { title: 'Keep & send', items: [
         { act: 'save', icon: driveLogo(), label: 'Save…', sub: 'Google Drive or this phone', fn: run((cur) => (this.hooks.onSave ? this.hooks.onSave(cur) : this.save())) },
         { act: 'share', icon: 'i-share-2', label: 'Share', fn: () => this.share() },
+        // Batch 11: to another project (its Drive file moves too).
+        { act: 'move', icon: 'i-folder-input', label: 'Move to project…', sub: 'Its Drive file moves too', hidden: !(it.historyId && this.hooks.onMove), fn: run(async (cur) => { if (await this.hooks.onMove(cur)) { cur.project = undefined; cur.drive = { state: 'moving', path: '' }; if (this.details) this.#fillDetails(); } }) },
       ] },
       { title: 'Make more', items: [
         // Use as reference: this picture, full resolution, into an image slot.
@@ -299,6 +302,9 @@ export class Viewer {
       ['Steps', m.steps ?? ''],
       ['Strength', m.strength ?? ''],
       ['File', it.image?.filename || ''],
+      // Batch 11: the project and where the Drive copy is (History pictures).
+      ['Project', it.project !== undefined && it.drive ? projectLabel(it.project) : ''],
+      ['On Drive', it.drive ? ({ ok: `${it.drive.path} ✓ filed`, waiting: '⏳ Waiting to be filed (Drive or ComfyUI offline?)', moving: '⏳ Moving to its new project', missing: `⚠ Not found on Drive (moved or renamed outside the app): ${it.drive.path}`, gone: 'Not filed (no longer in ComfyUI\'s output folder)' })[it.drive.state] || '' : ''],
     ].filter(([, v]) => v !== '' && v !== null && v !== undefined);
     const copy = h('button.link.vd-copy', { type: 'button', dataset: { act: 'copy' }, onclick: async () => {
       try { await navigator.clipboard.writeText(m.prompt || ''); toast('Prompt copied'); } catch { toast('Could not copy'); }
@@ -343,7 +349,7 @@ export class Viewer {
   /** Delete this one picture from the PC (after a confirm), then show the next one. */
   async remove() {
     const it = this.current(); if (!it?.historyId || !this.hooks.onDelete) return;
-    if (!(await confirmDialog('Delete this image from the PC?', 'Delete'))) return;
+    if (!(await confirmDialog('Delete this image from the PC? Its Drive copy goes to the Drive trash.', 'Delete'))) return;
     let ok = false;
     try { ok = await this.hooks.onDelete(it); } catch (e) { toast(e.message, 8000); }
     if (!ok) return;

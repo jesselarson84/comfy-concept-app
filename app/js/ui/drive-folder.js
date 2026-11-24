@@ -2,7 +2,8 @@
 // A bottom sheet that browses the folders of My Drive on the PC (server
 // /api/drive/folders): a path line you can tap back along, the sub folders,
 // "New folder", and "Save here". It opens in the folder last used for that
-// kind of file (images, 3D, audio, video), else Comfy UI/<kind folder>.
+// kind of file (images, 3D, audio, video), else (batch 11) the current project's
+// "__comfy outputs/<kind>" folder, or ACTIVE/__Comfy UI/<kind> with no project.
 import { h, toast } from './dom.js';
 import * as api from '../api.js';
 import { driveLogo } from './action-menu.js';
@@ -51,6 +52,8 @@ export class DriveFolderSheet {
     }
     // First time for this kind: start in its default folder (Comfy UI/Images ...).
     if (path === undefined && kind && r.defaults?.[kind]) return this.load(r.defaults[kind]);
+    // Batch 11: the folder used last is gone (e.g. the old My Drive/Comfy UI): start in the default instead.
+    if (path && !r.path && kind && r.defaults?.[kind]) return this.load(r.defaults[kind]);
     this.root = r.root; this.path = r.path; this.saveBtn.disabled = false;
     const parts = r.path ? r.path.split('/') : [];
     const crumb = (label, to, last) => h(`button.df-crumb${last ? '.on' : ''}`, { type: 'button', onclick: () => !last && this.load(to) }, label);

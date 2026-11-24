@@ -29,6 +29,14 @@
 //   /api/outputs    GET   ?kind=image&offset&limit  the app's results on the PC ("From Comfy UI"), see outputs.js
 //   /api/drive/save POST  {filename, subfolder, type, kind, folder?}  copy a result into Google Drive (drive.js)
 //   /api/drive/folders GET ?path= / POST {path, name}  list / make folders in My Drive (Save to…)
+//   Batch 11 - projects (folders under Creative/PROJECTS/ACTIVE, server/projects.js) and
+//   filing every output there (server/filer.js):
+//   /api/projects          GET   projects + counts, current, Unsorted count, filing status
+//   /api/projects/browse   GET   ?path=Apps  sub folders of ACTIVE (project / grouping folder)
+//   /api/projects          POST  {path}            an existing folder becomes a project
+//   /api/projects/new      POST  {name, parent}    new folder (+ "__comfy outputs") as a project
+//   /api/projects/current  POST  {id|null}         the project new outputs go to
+//   /api/projects/move     POST  {ids, project}    entries (+ what was made from them) to a project
 //   /scripts/* /extensions/* /assets/* -> ComfyUI too (custom-node extensions
 //                   that import from the ComfyUI root instead of /comfy/)
 // Binds 127.0.0.1 only. Remote access = `tailscale serve` in front of it.
@@ -63,6 +71,8 @@ import { defaultPreset } from '../app/js/lib/preset-choice.js';
 import { historyOutputs, comfyOutputDir, createOutputDirCache, scanAppFolder, mergeOutputs, deleteAppFile } from './outputs.js';
 import { FolderStore } from './folders.js';
 import { saveToDrive, listDriveFolders, makeDriveFolder } from './drive.js';
+import { ProjectStore, KIND_DIRS } from './projects.js';
+import { createFiler } from './filer.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
 const COMFY_SNIPPET = '<link rel="stylesheet" href="/comfy-tweaks.css" data-concept-tweaks><script src="/js/comfy-tweaks.js" data-concept-tweaks></script>';
@@ -81,6 +91,9 @@ export function createApp(cfg, opts = {}) {
   const workflows = new WorkflowStore(cfg.workflowsDir);
   const history = new HistoryStore(cfg.dataDir, { sessionGapMinutes: cfg.sessionGapMinutes });
   const folders = new FolderStore(cfg.dataDir);
+  // Batch 11: projects on Drive, and every output filed into its project's folder.
+  const projects = new ProjectStore(cfg.dataDir, { projectsDir: cfg.projectsDir });
+  const filer = createFiler({ history, projects, getComfyUrl: () => cfg.comfyUrl, outputSubfolder: cfg.outputSubfolder, log, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}), ...(opts.filer || {}) });
   // /comfy/ page: + app/comfy-tweaks.css and app/js/comfy-tweaks.js (hide the Agent
   // button / toasts, node-view mode); framing allowed for the app's node view.
   const proxy = createComfyProxy(() => cfg.comfyUrl, '/comfy', { injectHtml: COMFY_SNIPPET, frameable: true });
@@ -149,6 +162,20 @@ export function createApp(cfg, opts = {}) {
     if (id.startsWith('user:')) { const u = userPresets.get(id); if (!u) return undefined; const r = await builder.check({ blocks: u.blocks, name: u.name }); return r.estMB; }
     if (id.startsWith('builder:')) return undefined;
     return undefined;
+  }
+  /**
+   * Batch 11: Save… starts in the current project's "__comfy outputs/<kind>" (or
+   * ACTIVE/__Comfy UI/<kind>), as paths relative to My Drive, so the old top-level
+   * My Drive\Comfy UI folder is no longer made. null when ACTIVE is not inside My Drive.
+   */
+  function saveDefaults() {
+    if (!projects.available()) return null;
+    const root = path.dirname(path.resolve(cfg.driveDir));
+    const base = projects.outputsDir(projects.current) || projects.outputsDir(null);
+    const rel = path.relative(root, base);
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+    const r = rel.split(path.sep).join('/');
+    return Object.fromEntries(Object.entries(KIND_DIRS).map(([k, f]) => [k, `${r}/${f}`]));
   }
   workflows.on('change', () => { for (const r of sseClients) r.write('event: workflows\ndata: {}\n\n'); });
 
@@ -273,16 +300,18 @@ export function createApp(cfg, opts = {}) {
         for (const id of ids) {
           const e = history.get(id);
           if (!e) { refused.push({ id, reason: 'Not found' }); continue; }
-          const left = { images: [], files: [] };
+          const left = { images: [], files: [] }, gone = [];
           for (const key of ['images', 'files']) {
             for (const f of e[key] || []) {
               let r;
               try { r = await deleteAppFile(f, { outputDir, outputSubfolder: cfg.outputSubfolder, unlink: opts.unlink, wait: opts.wait }); } catch (err) { r = { ok: false, reason: err.message }; }
-              if (r.ok) continue;
+              if (r.ok) { gone.push(f); continue; }
               left[key].push(f);
               refused.push({ id, file: `${f.subfolder ? f.subfolder + '/' : ''}${f.filename}`, reason: r.reason });
             }
           }
+          // Batch 11: its filed copies on Drive go too (Drive for Desktop puts them in the Drive trash).
+          if (gone.length) await filer.trash(e, gone);
           if (!left.images.length && !left.files.length) deleted.push(id);
           else if (left.images.length + left.files.length < (e.images?.length || 0) + (e.files?.length || 0)) trimmed.set(id, left);
         }
@@ -322,14 +351,63 @@ export function createApp(cfg, opts = {}) {
     if (p === '/api/history' && req.method === 'POST') {
       let body;
       try { body = JSON.parse((await readBody(req, 1024 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
-      return json(res, 201, await history.add(body));
+      // Batch 11: the project of the picture it was made from (upscale / 3D / Use as
+      // reference), else the current project, else Unsorted. Never what the client says.
+      const from = history.get(body?.parent?.historyId) || history.get(body?.source);
+      const project = from ? (from.project ?? null) : projects.current;
+      if (project) projects.touch(project);
+      const e = await history.add({ ...body, project, source: from && history.get(body?.source) ? body.source : undefined });
+      if (e.images.length || e.files.length) filer.kick();
+      return json(res, 201, e);
     }
     const m = /^\/api\/history\/([\w-]+)$/.exec(p);
     if (m && (req.method === 'PATCH' || req.method === 'POST')) {
       let body;
       try { body = JSON.parse((await readBody(req, 1024 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
       const e = await history.update(m[1], body);
+      if (e && ('images' in body || 'files' in body)) filer.kick(); // finished: file it on Drive
       return e ? json(res, 200, migrateHistoryEntry(e)) : json(res, 404, { error: 'Not found' });
+    }
+    // ---- Batch 11: projects ----
+    if (p.startsWith('/api/projects')) {
+      let body = {};
+      if (req.method === 'POST') { try { const t = (await readBody(req, 256 * 1024)).toString('utf8'); body = t ? JSON.parse(t) : {}; } catch { return json(res, 400, { error: 'Bad JSON' }); } }
+      try {
+        if (p === '/api/projects' && req.method === 'GET') {
+          const list = projects.list();
+          const counts = new Map(), lastAt = new Map();
+          let unsorted = 0;
+          for (const e of history.data.entries) {
+            if (!e.images?.length && !e.files?.length) continue;
+            const id = e.project ?? null;
+            if (!id || !projects.get(id)) { unsorted++; continue; }
+            counts.set(id, (counts.get(id) || 0) + 1);
+            lastAt.set(id, Math.max(lastAt.get(id) || 0, e.createdAt || 0));
+          }
+          return json(res, 200, {
+            available: projects.available(), root: path.basename(projects.root), current: projects.current,
+            projects: list.map((x) => ({ id: x.id, name: x.name, path: x.rel, group: x.group, missing: x.missing, lastUsedAt: x.lastUsedAt || 0, count: counts.get(x.id) || 0, lastAt: lastAt.get(x.id) || 0 })),
+            unsorted: { count: unsorted }, filing: filer.status(),
+          });
+        }
+        if (p === '/api/projects/browse' && req.method === 'GET') return json(res, 200, projects.browse(url.searchParams.get('path') || ''));
+        if (p === '/api/projects' && req.method === 'POST') { const x = await projects.mark(body.path); await projects.setCurrent(x.id); return json(res, 201, x); }
+        if (p === '/api/projects/new' && req.method === 'POST') return json(res, 201, await projects.create(body.parent || '', body.name));
+        if (p === '/api/projects/current' && req.method === 'POST') return json(res, 200, { current: await projects.setCurrent(body.id || null) });
+        if (p === '/api/projects/move' && req.method === 'POST') {
+          const target = body.project || null;
+          if (target && !projects.get(target)) return json(res, 404, { error: 'No such project' });
+          const ids = Array.isArray(body.ids) ? body.ids.filter((x) => typeof x === 'string' && history.get(x)).slice(0, 2000) : [];
+          if (!ids.length) return json(res, 400, { error: 'Nothing to move' });
+          // What was made from them (upscales, 3D, references) moves along.
+          const all = history.descendants(ids);
+          const moved = await history.setProject(all, target);
+          if (target) await projects.touch(target);
+          filer.kick();
+          return json(res, 200, { moved, ids: all });
+        }
+      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      return json(res, 404, { error: 'Unknown API route' });
     }
     // ---- Chat tab ----
     if (p === '/api/chats' && req.method === 'GET') return json(res, 200, { chats: chats.list() });
@@ -372,7 +450,7 @@ export function createApp(cfg, opts = {}) {
     }
     // Batch 8: the "Save to…" folder chooser (any folder in My Drive).
     if (p === '/api/drive/folders' && req.method === 'GET') {
-      try { return json(res, 200, listDriveFolders(cfg.driveDir, url.searchParams.get('path') || '')); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      try { return json(res, 200, listDriveFolders(cfg.driveDir, url.searchParams.get('path') || '', saveDefaults())); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     if (p === '/api/drive/folders' && req.method === 'POST') {
       let body;
@@ -383,7 +461,7 @@ export function createApp(cfg, opts = {}) {
       let body;
       try { body = JSON.parse((await readBody(req, 64 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'Bad JSON' }); }
       const historyFiles = new Set(historyOutputs(history).map((f) => `${f.subfolder}/${f.filename}`));
-      try { return json(res, 200, await saveToDrive(body, { driveDir: cfg.driveDir, comfyUrl: cfg.comfyUrl, outputSubfolder: cfg.outputSubfolder, historyFiles })); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      try { return json(res, 200, await saveToDrive(body, { driveDir: cfg.driveDir, comfyUrl: cfg.comfyUrl, outputSubfolder: cfg.outputSubfolder, historyFiles, defaults: saveDefaults() })); } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     if (p === '/api/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
@@ -436,12 +514,13 @@ export function createApp(cfg, opts = {}) {
   server.close = (cb) => {
     workflows.close();
     tagger.stop();
+    filer.stop();
     for (const r of sseClients) r.end();
     for (const sock of upgraded) sock.destroy();
     server.closeAllConnections?.();
     return close(cb);
   };
-  return { server, workflows, history, folders, chats, memory, hardware, cfg, presets, userPresets, builder, comfyInfo, tagger };
+  return { server, workflows, history, folders, chats, memory, hardware, cfg, presets, userPresets, builder, comfyInfo, tagger, projects, filer };
 }
 
 // Run directly: `node server/index.js` / `npm start` / start.bat
@@ -449,12 +528,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const cfg = loadConfig();
   const probe = await probeComfy(cfg);
   if (probe.ok) cfg.comfyUrl = probe.url;
-  const { server, memory, tagger } = createApp(cfg);
+  const { server, memory, tagger, filer } = createApp(cfg);
   tagger.start(); // only in the real server (tests drive tagger.tick() themselves)
+  filer.start();  // batch 11: files every output on Drive (tests drive filer.tick())
   server.listen(cfg.port, cfg.host, () => {
     console.log(`Comfy UI app:       http://${cfg.host}:${cfg.port}/`);
     console.log(`ComfyUI target:     ${cfg.comfyUrl}  (${probe.ok ? 'reachable' : 'NOT reachable yet - start Comfy Desktop'})`);
     console.log(`Workflows folder:   ${cfg.workflowsDir}`);
+    console.log(`Projects folder:    ${cfg.projectsDir}`);
     memory.status({ fresh: true }).then((s) => console.log(`GPU / RAM:          ${s.hardware.gpu ? `${s.hardware.gpu.name} ${s.hardware.gpu.totalMB} MiB (${s.hardware.gpu.source})` : 'no GPU detected'} / ${s.hardware.ram.totalMB} MiB RAM -> memory profile "${s.profile.id}" (${s.profile.source})`)).catch(() => {});
     console.log(`Remote access:      tailscale serve --bg ${cfg.port}`);
   });

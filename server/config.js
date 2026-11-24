@@ -28,6 +28,8 @@ export function loadConfig(overrides = {}) {
     memoryProfilesFile: 'config/memory-profiles.json',
     // "Save to Drive" target: the Google Drive for Desktop folder (server/drive.js).
     driveDir: 'Q:\\My Drive\\Comfy UI',
+    // Batch 11: projects are folders under this one; every output is filed there (server/projects.js, filer.js).
+    projectsDir: 'Q:\\My Drive\\Creative\\PROJECTS\\ACTIVE',
     // ComfyUI's output folder on disk ("From Comfy UI" grid). Empty = ask ComfyUI
     // (its --output-directory, when it runs on this PC); see server/outputs.js.
     comfyOutputDir: '',
@@ -43,6 +45,7 @@ export function loadConfig(overrides = {}) {
   if (env.OLLAMA_URL) cfg.ollamaUrl = env.OLLAMA_URL;
   if (env.MEMORY_PROFILES_FILE) cfg.memoryProfilesFile = env.MEMORY_PROFILES_FILE;
   if (env.DRIVE_DIR) cfg.driveDir = env.DRIVE_DIR;
+  if (env.PROJECTS_DIR) cfg.projectsDir = env.PROJECTS_DIR;
   if (env.COMFY_OUTPUT_DIR) cfg.comfyOutputDir = env.COMFY_OUTPUT_DIR;
   Object.assign(cfg, overrides);
   cfg.comfyUrl = String(cfg.comfyUrl).replace(/\/+$/, '');
