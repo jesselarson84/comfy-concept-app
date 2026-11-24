@@ -4,7 +4,7 @@
 //   one finger drag  -> orbit          pinch -> zoom          two fingers -> pan
 //   (mouse: left drag orbit, wheel zoom, right drag pan) - three.js OrbitControls
 //   Shaded / Wireframe / Shaded+wireframe, Reset view, vertex + triangle count,
-//   Download and Save to Drive.
+//   ⋮ = Save… (Google Drive or this phone) and Share (batch 10).
 // three.js (r187, MIT) is vendored under /vendor/three/ and served by the app
 // server, so this works over the tailnet, offline and in the Android WebView.
 // It is only loaded when a 3D result is opened. Untextured meshes (Hunyuan3D
@@ -13,6 +13,7 @@
 import { h } from './dom.js';
 import { viewUrl } from '../comfy-client.js';
 import { Overlay, overlayTop } from './overlay.js';
+import { fileMoreButton } from './action-menu.js';
 
 const VENDOR = '/vendor/three';
 let libs = null;
@@ -48,7 +49,7 @@ export function meshStats(root) {
 const fmt = (n) => Number(n).toLocaleString('en-US');
 
 export class ModelViewer {
-  /** hooks: { onDownload(file), onSaveToDrive(file) } */
+  /** hooks: { onSave(file) (Drive or this phone), onShare(file) } - the ⋮ menu (batch 10) */
   constructor(hooks = {}) {
     this.hooks = hooks;
     this.ov = new Overlay('model-viewer', '3D viewer');
@@ -61,14 +62,12 @@ export class ModelViewer {
     this.statsEl = h('span.mv-stats');
     this.modeBtns = MODES.map((m) => h('button', { type: 'button', role: 'radio', dataset: { mode: m.id }, onclick: () => this.setMode(m.id) }, m.label));
     this.top = overlayTop('', () => this.close(),
-      h('button.icon-btn', { type: 'button', title: 'Reset view', 'aria-label': 'Reset view', dataset: { act: 'reset' }, onclick: () => this.resetView() }, h('i.i.i-rotate-ccw')));
+      h('button.icon-btn', { type: 'button', title: 'Reset view', 'aria-label': 'Reset view', dataset: { act: 'reset' }, onclick: () => this.resetView() }, h('i.i.i-rotate-ccw')),
+      fileMoreButton(() => this.file, this.hooks));
     this.ov.root.append(this.stage, this.status, this.top,
       h('div.ov-bottom', {},
         h('div.seg.mv-modes', { role: 'radiogroup', 'aria-label': 'Display' }, this.modeBtns),
-        this.statsEl,
-        h('div.ov-actions', {},
-          h('button.btn', { type: 'button', dataset: { act: 'download' }, onclick: () => this.file && this.hooks.onDownload?.(this.file) }, h('i.i.i-download'), 'Download'),
-          h('button.btn', { type: 'button', dataset: { act: 'drive' }, onclick: () => this.file && this.hooks.onSaveToDrive?.(this.file) }, h('i.i.i-cloud-upload'), 'Save to Drive'))));
+        this.statsEl));
     this.#paintModes();
   }
 

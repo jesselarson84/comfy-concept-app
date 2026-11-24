@@ -142,15 +142,30 @@ export class ComfyClient extends EventTarget {
   }
 
   async uploadImage(file, filename) {
-    const fd = new FormData();
-    fd.append('image', file, filename || file.name || 'reference.png');
-    fd.append('type', 'input');
-    fd.append('overwrite', 'false');
-    const r = await fetch(`${BASE}/upload/image`, { method: 'POST', body: fd });
+    const send = (body) => {
+      const fd = new FormData();
+      fd.append('image', body, filename || file.name || 'reference.png');
+      fd.append('type', 'input');
+      fd.append('overwrite', 'false');
+      return fetch(`${BASE}/upload/image`, { method: 'POST', body: fd });
+    };
+    let r;
+    try { r = await send(file); } catch (e) {
+      // A file picked from Google Drive on Android fails with
+      // ERR_UPLOAD_FILE_CHANGED (Chromium sees its details change when the
+      // upload starts). A copy in memory uploads fine, so retry with one.
+      if (!(file instanceof File)) throw e;
+      r = await send(await inMemoryCopy(file));
+    }
     if (!r.ok) throw new Error(`Upload failed (${r.status})`);
     const d = await r.json();
     return { ...d, ref: d.subfolder ? `${d.subfolder}/${d.name}` : d.name };
   }
+}
+
+/** A copy of a picked file held in memory (no longer tied to its content provider). */
+export async function inMemoryCopy(file) {
+  return new File([await file.arrayBuffer()], file.name, { type: file.type, lastModified: Date.now() });
 }
 
 export function viewUrl(img, { thumb = false } = {}) {

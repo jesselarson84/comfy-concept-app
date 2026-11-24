@@ -86,7 +86,8 @@ test('Drive path helpers: relative paths with forward slashes; a link out of My 
 
 test('Save to Drive UI: asks where every time, remembers the folder per kind; the toast shows the Drive path', () => {
   const main = read('app/js/main.js'), sheet = read('app/js/ui/drive-folder.js');
-  assert.match(main, /const folder = await driveSheet\.choose\(driveKind\);\s+if \(folder === null\) return null;/);
+  // batch 10: the same sheet also offers "Save to this phone instead" (PHONE)
+  assert.match(main, /const folder = await driveSheet\.choose\(driveKind, \{ phone: !!phone \}\);\s+if \(folder === PHONE\) \{ phone\(\); return null; \}\s+if \(folder === null\) return null;/);
   assert.match(main, /rememberFolder\(driveKind, r\.drivePath \?\? folder\)/);
   assert.match(sheet, /'Save here'/);
   assert.match(sheet, /'New folder'/);

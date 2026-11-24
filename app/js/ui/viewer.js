@@ -13,8 +13,14 @@
 //   double-tap        -> toggle 1x / 2.5x at the tapped point
 //   single tap        -> show/hide the controls (waits 250ms to rule out a double-tap)
 // A thumbnail strip at the bottom jumps to any picture and follows the swipes.
-// The trash button (pictures saved in History only) deletes that one picture
-// from the PC after a confirm and moves on to the next one.
+// Batch 10 layout: top bar = ✕, the count (★ when a favourite) and ⋮. The
+// picture sits between the top bar and the info area (prompt on 2 lines, date
+// · model, tags), with the thumbnail strip at the very bottom. ⋮ opens the
+// menu: Favorite / Keep & send (Save… = Drive or this phone, Share) / Make
+// more (Use as reference, Reuse settings) / Delete. Tapping the prompt or
+// "Details" opens the details sheet (full prompt + Copy, date, model, size,
+// seed, steps, file, all tags). Delete (pictures saved in History only)
+// removes that one picture from the PC after a confirm and moves on.
 // The list of images is read through getItems() every time, so images that
 // finish while the viewer is open simply become swipeable.
 // -----------------------------------------------------------------------------
@@ -22,14 +28,26 @@ import { h, toast } from './dom.js';
 import { viewUrl } from '../comfy-client.js';
 import { bridge, has, absoluteUrl } from '../native.js';
 import { confirmDialog } from './history-view.js';
+import { ActionMenu, driveLogo, moreButton } from './action-menu.js';
+
+const dayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+const yearFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+const timeFmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
+/** "Sat, Nov 21 · 7:42 PM" (full: with the year). */
+export function whenLabel(ms, { full = false } = {}) {
+  if (!ms) return '';
+  const d = new Date(ms);
+  return `${(full ? yearFmt : dayFmt).format(d)} · ${timeFmt.format(d)}`;
+}
 
 const EASE_OUT = 'cubic-bezier(.22,.8,.3,1)';
 const SPRING = 'cubic-bezier(.3,1.35,.5,1)';
 
 export class Viewer {
   /**
-   * getItems(): array of { image, meta, favorite, historyId }
-   * hooks: { onFavorite(item), onReuse(item), onDiscuss(item), onUseAsReference(item), onSaveToDrive(item), onDelete(item) -> Promise<boolean> }
+   * getItems(): array of { image, meta, favorite, historyId, at, tags }
+   * hooks: { onFavorite(item), onReuse(item), onUseAsReference(item), onSave(item) (Drive or phone),
+   *          onTag(tag), labelOf(workflowId), onDelete(item) -> Promise<boolean> }
    */
   constructor(hooks) {
     this.hooks = hooks;
@@ -50,28 +68,20 @@ export class Viewer {
     this.stage = h('div.viewer-stage', {}, this.track);
     this.stage.addEventListener('dragstart', (e) => e.preventDefault());
     this.counter = h('span.viewer-counter');
-    this.caption = h('div.viewer-caption');
+    this.favMark = h('i.i.i-star-fill.viewer-fav', { hidden: true, 'aria-label': 'Favorite' });
+    this.menu = new ActionMenu();
+    this.moreBtn = moreButton(() => this.openMenu());
+    this.top = h('div.viewer-top', {},
+      h('button.icon-btn.viewer-close', { type: 'button', title: 'Close', 'aria-label': 'Close', dataset: { act: 'close' }, onclick: () => this.close() }, h('i.i.i-x')),
+      this.counter, this.favMark, h('span.spacer'), this.moreBtn);
+    // Under the picture: prompt (2 lines; a tap opens Details), date · model, tags.
+    this.caption = h('button.viewer-caption', { type: 'button', onclick: () => this.openDetails() });
+    this.when = h('span.viewer-when');
+    this.meta = h('div.viewer-meta', {}, this.when, h('button.link.viewer-details-link', { type: 'button', dataset: { act: 'details' }, onclick: () => this.openDetails() }, 'Details'));
     this.tags = h('div.viewer-tags', { hidden: true });
-    this.favBtn = h('button.icon-btn', { title: 'Favorite', 'aria-label': 'Favorite', onclick: () => this.favorite() }, '☆');
-    this.delBtn = h('button.icon-btn.viewer-del', { title: 'Delete', 'aria-label': 'Delete', onclick: () => this.remove() }, h('i.i.i-trash-2'));
-    const btn = (label, title, fn) => h('button.icon-btn', { title, 'aria-label': title, onclick: fn }, label);
-    this.top = h('div.viewer-top', {}, btn('✕', 'Close', () => this.close()), this.counter, h('span.spacer'), this.delBtn, this.favBtn);
     this.strip = h('div.viewer-strip', { role: 'listbox', 'aria-label': 'All pictures' });
-    this.bottom = h('div.viewer-bottom', {},
-      this.strip,
-      this.caption,
-      this.tags,
-      h('div.viewer-actions', {},
-        btn('↓ Save', 'Save to device', () => this.save()),
-        btn('↪ Share', 'Share', () => this.share()),
-        btn('↻ Reuse', 'Reuse prompt + seed', () => { const it = this.current(); if (it) { this.close(); this.hooks.onReuse?.(it); } }),
-        // Discuss: attach this image (+ its prompt and seed) to the Prompt
-        // assistant chat, to say what is wrong and get a revised prompt.
-        btn('💬 Discuss', 'Discuss', () => { const it = this.current(); if (it) { this.close(); this.hooks.onDiscuss?.(it); } }),
-        // Use as reference: this picture, full resolution, into a reference slot.
-        btn('⧉ Use as reference', 'Use as reference', () => { const it = this.current(); if (it) this.hooks.onUseAsReference?.(it); }),
-        btn('☁ Save to Drive', 'Save to Drive', () => { const it = this.current(); if (it) this.hooks.onSaveToDrive?.(it); })));
-    this.root = h('div.viewer', { role: 'dialog', 'aria-modal': 'true', hidden: true }, this.stage, this.top, this.bottom);
+    this.bottom = h('div.viewer-bottom', {}, h('div.viewer-info', {}, this.caption, this.meta, this.tags), this.strip);
+    this.root = h('div.viewer', { role: 'dialog', 'aria-modal': 'true', hidden: true }, this.top, this.stage, this.bottom);
     document.body.append(this.root);
     this.#layoutSlides();
     this.#gestures();
@@ -81,8 +91,14 @@ export class Viewer {
       else if (e.key === 'ArrowLeft') this.go(-1);
       else if (e.key === 'Escape') this.close();
     });
-    // Android back button / gesture closes the viewer instead of leaving the app.
-    window.addEventListener('popstate', () => { if (!this.root.hidden) this.close(true); });
+    // Android back button / gesture closes the viewer instead of leaving the app
+    // (the details sheet first, when it is open: it has its own history entry).
+    window.addEventListener('popstate', () => {
+      if (this.ignorePop) { this.ignorePop = false; return; }
+      if (this.root.hidden) return;
+      if (this.details) { this.detailsPushed = false; this.closeDetails(); return; }
+      this.close(true);
+    });
   }
 
   /** The current picture's <img> (zoom and pan apply to it). */
@@ -95,19 +111,27 @@ export class Viewer {
     this.getItems = getItems;
     this.index = Math.max(0, index);
     this.root.hidden = false;
+    this.ignorePop = false;
     this.root.classList.remove('chrome-hidden');
     this.#resetDismiss(false);
     document.body.classList.add('viewer-open');
-    history.pushState({ viewer: true }, '');
+    // Keep the state underneath (History, its folder ...): a Back that only
+    // closes the details sheet lands here, and History must not see it as "left".
+    history.pushState({ ...(history.state || {}), viewer: true }, '');
     this.stripKey = '';
     this.show();
   }
 
   close(fromPop) {
     if (this.root.hidden) return;
+    this.menu.close();
+    // Our history entries to drop: the viewer's, plus the details sheet's if open.
+    const steps = fromPop ? 0 : this.detailsPushed ? 2 : 1;
+    this.detailsPushed = false;
+    this.closeDetails();
     this.root.hidden = true;
     document.body.classList.remove('viewer-open');
-    if (!fromPop && history.state?.viewer) history.back();
+    if (steps && history.state?.viewer) history.go(-steps);
     this.onClose?.();
   }
 
@@ -198,16 +222,96 @@ export class Viewer {
     const pending = this.getItems().filter((i) => !i.image && ['queued', 'running', 'submitting'].includes(i.status)).length;
     this.counter.textContent = `${this.index + 1} / ${list.length}${pending ? `  (+${pending} rendering)` : ''}`;
     if (!it) return;
-    this.favBtn.textContent = it.favorite ? '★' : '☆';
-    this.favBtn.classList.toggle('on', !!it.favorite);
-    this.delBtn.hidden = !(it.historyId && this.hooks.onDelete);
+    this.favMark.hidden = !it.favorite;
     const m = it.meta || {};
-    this.caption.textContent = `${m.prompt || ''}${m.seed !== undefined ? `  · seed ${m.seed}` : ''}`;
+    this.caption.textContent = m.prompt || '';
+    this.caption.hidden = !m.prompt;
+    this.when.textContent = [whenLabel(this.#at(it)), this.#model(it)].filter(Boolean).join(' · ');
     // Batch 9: the picture's tags (History pictures); a tap searches History for it.
     const tags = (it.tags || []).slice(0, 12);
-    this.tags.replaceChildren(...tags.map((t) => h('button.vtag', { type: 'button', dataset: { tag: t }, onclick: () => { this.close(); this.hooks.onTag?.(t); } }, t)));
+    this.tags.replaceChildren(...tags.map((t) => this.#tagBtn(t)));
     this.tags.hidden = !tags.length;
     this.#paintStrip(list);
+    if (this.details) this.#fillDetails();
+  }
+
+  #at(it) { return it.at || it.meta?.createdAt || null; }
+  #model(it) { const id = it.meta?.legacyWorkflow || it.meta?.workflow; return id ? (this.hooks.labelOf?.(id) || '') : ''; }
+  #tagBtn(t) { return h('button.vtag', { type: 'button', dataset: { tag: t }, onclick: () => { this.close(); this.hooks.onTag?.(t); } }, t); }
+
+  // ---- ⋮ menu ----------------------------------------------------------------
+  openMenu() {
+    const it = this.current(); if (!it) return;
+    const run = (fn) => () => { const cur = this.current(); if (cur) fn(cur); };
+    this.menu.open(this.moreBtn, [
+      { items: [{ act: 'favorite', icon: it.favorite ? 'i-star-fill' : 'i-star', label: it.favorite ? 'Remove from favorites' : 'Favorite', on: !!it.favorite, fn: () => this.favorite() }] },
+      { title: 'Keep & send', items: [
+        { act: 'save', icon: driveLogo(), label: 'Save…', sub: 'Google Drive or this phone', fn: run((cur) => (this.hooks.onSave ? this.hooks.onSave(cur) : this.save())) },
+        { act: 'share', icon: 'i-share-2', label: 'Share', fn: () => this.share() },
+      ] },
+      { title: 'Make more', items: [
+        // Use as reference: this picture, full resolution, into an image slot.
+        { act: 'reference', icon: 'i-image-plus', label: 'Use as reference', sub: 'This picture into an image slot', hidden: !this.hooks.onUseAsReference, fn: run((cur) => this.hooks.onUseAsReference(cur)) },
+        // Reuse: its prompt, seed and settings back into the form.
+        { act: 'reuse', icon: 'i-rotate-ccw', label: 'Reuse settings', sub: 'Its prompt, seed and model', hidden: !this.hooks.onReuse, fn: run((cur) => { this.close(); this.hooks.onReuse(cur); }) },
+      ] },
+      { items: [{ act: 'delete', icon: 'i-trash-2', label: 'Delete', danger: true, hidden: !(it.historyId && this.hooks.onDelete), fn: () => this.remove() }] },
+    ]);
+  }
+
+  // ---- details sheet ----------------------------------------------------------
+  openDetails() {
+    if (!this.current() || this.details) return;
+    this.detailsBody = h('div.vd-body');
+    this.detailsScrim = h('div.sheet-scrim.vd-scrim', { onclick: () => this.closeDetails() });
+    this.details = h('div.sheet.viewer-details', { role: 'dialog', 'aria-label': 'Details' },
+      h('button.vd-grab', { type: 'button', 'aria-label': 'Close details', onclick: () => this.closeDetails() }),
+      h('div.sheet-title', {}, 'Details'), this.detailsBody);
+    document.body.append(this.detailsScrim, this.details);
+    history.pushState({ ...(history.state || {}), viewer: true, details: true }, '');
+    this.detailsPushed = true;
+    this.onDetailsKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); this.closeDetails(); } };
+    document.addEventListener('keydown', this.onDetailsKey, true);
+    // Swipe the sheet down to close it.
+    let y0 = null;
+    this.details.addEventListener('pointerdown', (e) => { y0 = this.details.scrollTop <= 0 ? e.clientY : null; });
+    this.details.addEventListener('pointerup', (e) => { if (y0 !== null && e.clientY - y0 > 70) this.closeDetails(); y0 = null; });
+    this.#fillDetails();
+  }
+
+  closeDetails() {
+    if (!this.details) return;
+    this.details.remove(); this.detailsScrim.remove();
+    this.details = this.detailsScrim = null;
+    document.removeEventListener('keydown', this.onDetailsKey, true);
+    // Closed by a tap / Escape / swipe: drop its history entry (that Back is ours, ignore it).
+    if (this.detailsPushed) { this.detailsPushed = false; this.ignorePop = true; history.back(); }
+  }
+
+  #fillDetails() {
+    const it = this.current(); if (!it) return this.closeDetails();
+    const m = it.meta || {};
+    const rows = [
+      ['Made', whenLabel(this.#at(it), { full: true })],
+      ['Model', this.#model(it)],
+      ['Size', m.width && m.height ? `${m.width} × ${m.height}` : ''],
+      ['Seed', m.seed ?? ''],
+      ['Steps', m.steps ?? ''],
+      ['Strength', m.strength ?? ''],
+      ['File', it.image?.filename || ''],
+    ].filter(([, v]) => v !== '' && v !== null && v !== undefined);
+    const copy = h('button.link.vd-copy', { type: 'button', dataset: { act: 'copy' }, onclick: async () => {
+      try { await navigator.clipboard.writeText(m.prompt || ''); toast('Prompt copied'); } catch { toast('Could not copy'); }
+    } }, h('i.i.i-copy'), 'Copy prompt');
+    const tags = [...new Set(it.tags || [])];
+    // (replaceChildren would print a null as the text "null": drop the empty parts)
+    this.detailsBody.replaceChildren(...[
+      m.prompt ? h('div.vd-prompt', {}, m.prompt) : h('div.vd-prompt.muted', {}, 'No prompt'),
+      m.negative ? h('div.vd-neg', {}, h('span.muted', {}, 'Negative: '), m.negative) : null,
+      m.prompt ? copy : null,
+      h('div.vd-grid', {}, ...rows.flatMap(([k, v]) => [h('span.vd-k', {}, k), h('span.vd-v', {}, String(v))])),
+      tags.length ? h('div.viewer-tags.vd-tags', {}, ...tags.map((t) => this.#tagBtn(t))) : null,
+    ].filter(Boolean));
   }
 
   #paintStrip(list) {
@@ -233,7 +337,7 @@ export class Viewer {
     const it = this.current(); if (!it) return;
     it.favorite = !it.favorite;
     this.#updateChrome();
-    try { await this.hooks.onFavorite?.(it); } catch (e) { it.favorite = !it.favorite; this.#updateChrome(); toast('Could not save favorite: ' + e.message); }
+    try { await this.hooks.onFavorite?.(it); toast(it.favorite ? 'Added to favorites' : 'Removed from favorites'); } catch (e) { it.favorite = !it.favorite; this.#updateChrome(); toast('Could not save favorite: ' + e.message); }
   }
 
   /** Delete this one picture from the PC (after a confirm), then show the next one. */

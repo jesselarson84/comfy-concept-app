@@ -43,7 +43,7 @@ export function afterBack(ms = 400) {
 /** Top bar shared by the overlays: close button, title, optional extras. */
 export function overlayTop(title, onClose, ...extras) {
   const t = h('span.ov-title', {}, title);
-  const bar = h('div.ov-top', {}, h('button.icon-btn', { type: 'button', 'aria-label': 'Close', title: 'Close', onclick: onClose }, '✕'), t, h('span.spacer'), ...extras);
+  const bar = h('div.ov-top', {}, h('button.icon-btn', { type: 'button', 'aria-label': 'Close', title: 'Close', dataset: { act: 'close' }, onclick: onClose }, h('i.i.i-x')), t, h('span.spacer'), ...extras);
   bar.setTitle = (s) => { t.textContent = s; };
   return bar;
 }

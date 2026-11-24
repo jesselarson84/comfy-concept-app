@@ -189,10 +189,10 @@ test('History filters: type, model, date range, tags and every search word (prom
   assert.match(timeLabel(at(23, 15)), /^3:00\sPM$/);
 });
 
-test('History UI wiring: search + chips + stats strip + times + tagging switch; viewer tags; module cached', () => {
+test('History UI wiring: search + chips + stats strip + tagging switch; viewer tags; module cached', () => {
   const hv = read('app/js/ui/history-view.js'), viewer = read('app/js/ui/viewer.js'), main = read('app/js/main.js');
   assert.match(hv, /placeholder: 'Search prompts, tags, colours'/);
-  assert.match(hv, /h\('span\.thumb-time', \{\}, timeLabel\(/);
+  assert.doesNotMatch(hv, /thumb-time/, 'batch 10: no times on the tiles (the date is in the viewer)');
   assert.match(hv, /localStorage\.setItem\('historyStatsOpen'/);
   assert.match(hv, /setTagger\(e\.target\.checked\)/);
   assert.match(hv, /uploadPreview\(e\.id, blob\)/);

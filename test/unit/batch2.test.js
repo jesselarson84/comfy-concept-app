@@ -156,7 +156,7 @@ test('video player: own module, offline-cached, routed for real video files only
   const main = read('app/js/main.js'), vp = read('app/js/ui/video-player.js');
   assert.match(main, /if \(k === 'video' && \/\\\.\(mp4\|webm\|mov\|mkv\)\$\/i\.test\(f\.filename \|\| ''\)\) return videoPlayer\.open\(f, meta\);/);
   assert.match(read('app/sw.js'), /'\/js\/ui\/video-player\.js'/);
-  for (const re of [/h\('video\.vp-video'/, /'aria-label': 'Loop'/, /type: 'range'/, /fmtTime/, /act: 'download'/, /act: 'drive'/, /playsinline/]) assert.match(vp, re);
+  for (const re of [/h\('video\.vp-video'/, /'aria-label': 'Loop'/, /type: 'range'/, /fmtTime/, /fileMoreButton\(\(\) => this\.file, this\.hooks\)/, /playsinline/]) assert.match(vp, re);
   assert.match(read('app/icons.css'), /^\.i-repeat\{--svg:url\("data:image\/svg\+xml,/m);
 });
 

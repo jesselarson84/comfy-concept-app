@@ -36,13 +36,13 @@ after(async () => { await browser?.close(); await s?.close(); });
 
 const tiles = () => page.$$eval('.history .thumb[data-id]', (t) => t.length);
 
-test('History: search box, filter chips, stats strip, times on items', async () => {
+test('History: search box, filter chips, stats strip, no times on the tiles', async () => {
   await page.click('#btn-history');
   await page.waitForSelector('.history .thumb[data-id]');
   assert.equal(await page.isVisible('.history .hsearch'), true);
   assert.deepEqual(await page.$$eval('.hfilters .hchip', (c) => c.map((x) => x.dataset.act)), ['type', 'model', 'date', 'tags']);
   assert.equal(await tiles(), 3);
-  assert.equal(await page.textContent('.history .thumb:not(.is-file) .thumb-time'), '9:41 AM');
+  assert.equal(await page.$('.history .thumb-time'), null, 'batch 10: no times on the tiles');
   // stats strip: totals; tap opens it (top models, tags, tagging line + switch)
   assert.match(await page.textContent('.hstats'), /3outputs.*this month/);
   await page.click('.hstats');

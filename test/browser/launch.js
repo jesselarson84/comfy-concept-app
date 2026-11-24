@@ -15,6 +15,20 @@ export async function launch() {
   return chromium.launch({ channel: 'chrome', headless: true });
 }
 
+/** Batch 10: open the ⋮ menu of a full-screen view (scope '.viewer', '.model-viewer' ...) and tap a row
+ *  (favorite, save, share, reference, reuse, delete). */
+export async function menuAct(page, scope, act) {
+  await page.click(`${scope} [data-act="more"]`);
+  await page.click(`.amenu [data-act="${act}"]`);
+  await page.waitForSelector('.amenu', { state: 'detached' });
+}
+
+/** Batch 10: "Save to this phone instead" (the old Save button) from a view's ⋮ menu. */
+export async function saveToPhone(page, scope) {
+  await menuAct(page, scope, 'save');
+  await page.click('.drive-sheet [data-act="phone"]');
+}
+
 /** Batch 8: pick a ratio in the ratio grid ('1:1', '16:9-landscape', '3:2-portrait' ...). */
 export async function pickAspect(page, key) {
   if (!(await page.isVisible('#aspect-pop'))) await page.click('#aspect-btn');

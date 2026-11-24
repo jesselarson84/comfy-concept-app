@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { startStack, pngBytes, ROOT } from '../unit/helpers.js';
-import { launch, pickAspect } from './launch.js';
+import { launch, pickAspect, menuAct, saveToPhone } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -123,24 +123,24 @@ test('viewer: open, swipe, double-tap zoom, pinch, tap toggles controls, favorit
   assert.equal(await page.$eval('.viewer', (v) => v.classList.contains('chrome-hidden')), false);
   await page.screenshot({ path: path.join(SHOTS, 'phone-viewer.png') });
   // Favorite -> stored on server
-  await page.click('.viewer-top button[aria-label=Favorite]');
-  await page.waitForFunction(() => document.querySelector('.viewer-top button[aria-label=Favorite]').textContent === '★');
+  await menuAct(page, '.viewer', 'favorite');
+  await page.waitForSelector('.viewer-top .viewer-fav:not([hidden])');
   await page.waitForTimeout(200);
   const { sessions } = await (await fetch(s.base + '/api/history?favorites=1')).json();
   assert.equal(sessions.flatMap((x) => x.entries).length, 1);
   // Reuse -> prompt + locked seed
   const seed = await page.evaluate(() => window.conceptApp.viewer.current().meta.seed);
-  await page.click('.viewer-actions button[title="Reuse prompt + seed"]');
+  await menuAct(page, '.viewer', 'reuse');
   await page.waitForSelector('.viewer', { state: 'hidden' });
   assert.equal(await page.inputValue('#prompt'), 'a brass airship over a canyon');
   assert.equal(await page.isChecked('#seed-lock'), true);
   assert.equal(Number(await page.inputValue('#seed')), seed);
 });
 
-test('save button triggers a download (share not testable headless)', async () => {
+test('Save… -> Save to this phone instead triggers a download (share not testable headless)', async () => {
   await page.click('#thumbs .thumb >> nth=1');
   await page.waitForSelector('.viewer:not([hidden])');
-  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), page.click('.viewer-actions button[title="Save to device"]')]);
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), saveToPhone(page, '.viewer')]);
   assert.match(dl.suggestedFilename(), /^concept_\d+_\.png$/);
   await page.keyboard.press('Escape');
   await page.waitForSelector('.viewer', { state: 'hidden' });
@@ -328,8 +328,8 @@ test('Android bridge: Save and Share call the native side with the absolute imag
   await page.waitForSelector('.viewer:not([hidden])');
   const img = await page.evaluate(() => window.conceptApp.viewer.current().image);
   await page.evaluate(() => { window.__bridgeCalls = []; });
-  await page.click('.viewer-actions button[title="Save to device"]');
-  await page.click('.viewer-actions button[title="Share"]');
+  await saveToPhone(page, '.viewer');
+  await menuAct(page, '.viewer', 'share');
   await page.waitForTimeout(300);
   const calls = await bridgeCalls();
   assert.equal(calls.length, 2, JSON.stringify(calls));
@@ -353,7 +353,7 @@ test('without the bridge: Save is a browser download again and keepAwake is neve
   await page.evaluate(() => { delete window.AndroidBridge; window.__bridgeCalls = []; });
   await page.click('#thumbs .thumb.s-done >> nth=0');
   await page.waitForSelector('.viewer:not([hidden])');
-  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), page.click('.viewer-actions button[title="Save to device"]')]);
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), saveToPhone(page, '.viewer')]);
   assert.match(dl.suggestedFilename(), /\.png$/);
   await page.keyboard.press('Escape');
   await page.waitForSelector('.viewer', { state: 'hidden' });
