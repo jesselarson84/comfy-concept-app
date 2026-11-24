@@ -5,6 +5,7 @@
 // kind of file (images, 3D, audio, video), else Comfy UI/<kind folder>.
 import { h, toast } from './dom.js';
 import * as api from '../api.js';
+import { driveLogo } from './action-menu.js';
 
 const LAST = 'driveFolder.v1'; // { image: 'Comfy UI/Images', '3d': 'Projects/Props', ... }
 const lastFolders = () => { try { return JSON.parse(localStorage.getItem(LAST)) || {}; } catch { return {}; } };
@@ -12,10 +13,13 @@ export function rememberFolder(kind, path) {
   try { localStorage.setItem(LAST, JSON.stringify({ ...lastFolders(), [kind]: path })); } catch {}
 }
 export const lastFolder = (kind) => lastFolders()[kind];
+/** choose() resolves with this when "Save to this phone instead" is tapped (batch 10). */
+export const PHONE = Symbol('phone');
 
 export class DriveFolderSheet {
-  /** Resolves with the chosen folder ("Comfy UI/Images", '' = My Drive) or null when cancelled. */
-  choose(kind = 'image') {
+  /** Resolves with the chosen folder ("Comfy UI/Images", '' = My Drive), null when cancelled,
+   *  or PHONE (with { phone: true }: the "Save to this phone instead" link at the bottom). */
+  choose(kind = 'image', { phone = false } = {}) {
     this.close();
     return new Promise((resolve) => {
       this.resolve = resolve;
@@ -23,9 +27,11 @@ export class DriveFolderSheet {
       this.list = h('div.df-list');
       this.crumbs = h('div.df-crumbs');
       this.saveBtn = h('button.btn.primary', { type: 'button', dataset: { act: 'save-here' }, onclick: () => this.finish(this.path) }, h('i.i.i-cloud-upload'), 'Save here');
+      this.phone = phone;
       this.el = h('div.sheet.drive-sheet', { role: 'dialog', 'aria-label': 'Save to Drive' },
-        h('div.sheet-title', {}, 'Save to Drive'), this.crumbs, this.list,
-        h('div.sp-actions', {}, h('button.btn', { type: 'button', dataset: { act: 'cancel' }, onclick: () => this.finish(null) }, 'Cancel'), this.saveBtn));
+        h('div.sheet-title', {}, driveLogo(20), 'Save to Drive'), this.crumbs, this.list,
+        h('div.sp-actions', {}, h('button.btn', { type: 'button', dataset: { act: 'cancel' }, onclick: () => this.finish(null) }, 'Cancel'), this.saveBtn),
+        phone ? h('button.link.df-phone', { type: 'button', dataset: { act: 'phone' }, onclick: () => this.finish(PHONE) }, h('i.i.i-smartphone'), 'Save to this phone instead') : null);
       document.body.append(this.scrim, this.el);
       this.keydown = (e) => { if (e.key === 'Escape') this.finish(null); };
       document.addEventListener('keydown', this.keydown);
@@ -37,7 +43,12 @@ export class DriveFolderSheet {
     this.list.replaceChildren(h('div.muted.df-msg', {}, 'Loading…'));
     let r;
     // Drive not there (Drive for desktop not running ...): say so and close.
-    try { r = await api.getDriveFolders(path ?? ''); } catch (e) { toast(e.message, 8000); this.finish(null); return; }
+    try { r = await api.getDriveFolders(path ?? ''); } catch (e) {
+      toast(e.message, 8000);
+      // With the phone option the sheet stays: saving to the phone still works.
+      if (this.phone) { this.saveBtn.disabled = true; this.list.replaceChildren(h('div.muted.df-msg', {}, e.message)); return; }
+      this.finish(null); return;
+    }
     // First time for this kind: start in its default folder (Comfy UI/Images ...).
     if (path === undefined && kind && r.defaults?.[kind]) return this.load(r.defaults[kind]);
     this.root = r.root; this.path = r.path; this.saveBtn.disabled = false;

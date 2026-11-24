@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { startStack, ROOT, pngBytes } from '../unit/helpers.js';
 import { makeGlb, makeWav, makeVideo } from '../fixtures/media.js';
-import { launch } from './launch.js';
+import { launch, menuAct } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -109,9 +109,8 @@ test('Use as reference (current preset has no image input): short list of 3D + I
   await page.locator('#thumbs .thumb.s-done').last().click();
   await page.waitForSelector('.viewer:not([hidden])');
   const shown = await app(() => window.conceptApp.viewer.current().image);
-  // every action label fits its button on a phone-width screen (no "Use as refer…")
-  assert.deepEqual(await page.$$eval('.viewer-actions .icon-btn', (b) => b.filter((x) => x.scrollWidth > x.clientWidth + 1 || x.scrollHeight > x.clientHeight + 1).map((x) => x.textContent)), []);
-  await page.click('.viewer button[title="Use as reference"]');
+  // batch 10: from the ⋮ menu (Make more)
+  await menuAct(page, '.viewer', 'reference');
   await page.waitForSelector('.preset-chooser:not([hidden]) .ent');
   const ids = await page.$$eval('.preset-chooser .ent', (els) => els.map((e) => e.dataset.preset));
   assert.deepEqual(ids, ['ai:hunyuan3d-21', 'ai:pixal3d-trellis2', 'ai:klein-4b-edit', 'ai:qwen-edit-2509', 'ai:qwen-edit-2511']);
@@ -169,10 +168,10 @@ test('Save to Drive from the image viewer: copied into Comfy UI/Images, second s
   await page.locator('#thumbs .thumb.s-done').first().click();
   await page.waitForSelector('.viewer:not([hidden])');
   const shown = await app(() => window.conceptApp.viewer.current().image.filename);
-  await page.click('.viewer button[title="Save to Drive"]');
+  await menuAct(page, '.viewer', 'save');
   await page.click('.drive-sheet [data-act="save-here"]'); // batch 8: asks where (starts in Comfy UI/<kind>)
   await waitToast(`Saved to Drive: Comfy UI/Images/${shown}`);
-  await page.click('.viewer button[title="Save to Drive"]');
+  await menuAct(page, '.viewer', 'save');
   await page.click('.drive-sheet [data-act="save-here"]'); // batch 8: asks where (starts in Comfy UI/<kind>)
   const second = shown.replace(/(\.[^.]+)$/, ' (2)$1');
   await waitToast(`Saved to Drive: Comfy UI/Images/${second}`);
@@ -232,8 +231,8 @@ test('3D viewer: Hunyuan run -> tap the 3D tile -> clay model, counts, Shaded / 
   await page.click('.model-viewer [data-act="reset"]'); // straight after a drag: no leftover drift
   await page.waitForTimeout(400);
   assert.deepEqual(await cam(), home);
-  assert.equal(await page.isVisible('.model-viewer [data-act="download"]'), true);
-  await page.click('.model-viewer [data-act="drive"]');
+  await menuAct(page, '.model-viewer', 'save'); // batch 10: ⋮ -> Save… (Drive, or this phone)
+  assert.equal(await page.isVisible('.drive-sheet [data-act="phone"]'), true);
   await page.click('.drive-sheet [data-act="save-here"]'); // batch 8: asks where (starts in Comfy UI/<kind>)
   await waitToast(/Saved to Drive: Comfy UI\/3D\/.+\.glb/);
   assert.equal(fs.readdirSync(path.join(s.driveDir, '3D')).length, 1);
@@ -261,14 +260,13 @@ test('audio player: duration, waveform, play/pause, scrub; Save to Drive -> Comf
   assert.ok(Math.abs((await app(() => window.conceptApp.audioPlayer.audio.currentTime)) - 1) < 0.05);
   assert.match(await page.textContent('.audio-player .ap-time'), /^0:01 \/ 0:02$/);
   await shot('audio');
-  await page.click('.audio-player [data-act="drive"]');
+  await menuAct(page, '.audio-player', 'save');
   await page.click('.drive-sheet [data-act="save-here"]'); // batch 8: asks where (starts in Comfy UI/<kind>)
   await waitToast('Saved to Drive: Comfy UI/Audio/tone_00001.flac');
-  assert.equal(await page.isVisible('.audio-player [data-act="download"]'), true);
   await closeOverlay('.audio-player');
 });
 
-test('video player: plays in-app with play/pause, scrub, duration, loop toggle; Download + Save to Drive -> Comfy UI/Video', async () => {
+test('video player: plays in-app with play/pause, scrub, duration, loop toggle; ⋮ Save… -> Comfy UI/Video', async () => {
   await app(() => window.conceptApp.openFile({ filename: 'clip_00001_.webm', subfolder: 'concept-app', type: 'output' }, {}));
   await page.waitForSelector('.video-player:not([hidden])');
   await page.waitForFunction(() => window.conceptApp.videoPlayer.state !== 'loading', null, { timeout: 10000 });
@@ -294,15 +292,14 @@ test('video player: plays in-app with play/pause, scrub, duration, loop toggle; 
   assert.notEqual(await page.$eval('.video-player .ap-play', (b) => getComputedStyle(b).backgroundColor), 'rgb(11, 140, 233)');
   assert.ok((await page.locator('.video-player .ov-top').boundingBox()).y < 10);
   await shot('video');
-  assert.equal(await page.isVisible('.video-player [data-act="download"]'), true);
-  await page.click('.video-player [data-act="drive"]');
+  await menuAct(page, '.video-player', 'save');
   await page.click('.drive-sheet [data-act="save-here"]'); // batch 8: asks where (starts in Comfy UI/<kind>)
   await waitToast('Saved to Drive: Comfy UI/Video/clip_00001_.webm');
   assert.deepEqual(fs.readFileSync(path.join(s.driveDir, 'Video', 'clip_00001_.webm')), makeVideo());
   await page.goBack();
   await page.waitForSelector('.video-player', { state: 'hidden' });
   assert.equal(await app(() => [window.conceptApp.videoPlayer.state, window.conceptApp.videoPlayer.video.paused]).then((x) => x.join()), 'closed,true');
-  // an animated GIF is not a <video>: it gets the file sheet (Download / Save to Drive)
+  // an animated GIF is not a <video>: it gets the file sheet (⋮ Save… / Share)
   await app(() => window.conceptApp.openFile({ filename: 'anim_00001_.gif', subfolder: 'concept-app', type: 'output' }, {}));
   await page.waitForSelector('.file-sheet:not([hidden])');
   assert.equal(await page.isVisible('.video-player'), false);

@@ -13,7 +13,7 @@
 //   - 3D tiles get real preview stills (ui/model-thumbs.js), rendered lazily.
 import { h, toast } from './dom.js';
 import { getHistory, deleteHistory, getFolders, createFolder, addToFolder, removeFromFolder, patchHistory, getTagger, setTagger, uploadPreview } from '../api.js';
-import { TYPES, DATES, entryType, entryTags, matches, isFiltering, statsOf, timeLabel } from '../lib/history-filter.js';
+import { TYPES, DATES, entryType, entryTags, matches, isFiltering, statsOf } from '../lib/history-filter.js';
 import { viewUrl } from '../comfy-client.js';
 import { deleteThumb, thumbKey } from '../lib/thumb-cache.js';
 import { fileLabel } from '../lib/outputs.js';
@@ -430,7 +430,7 @@ export class HistoryView {
       // Turn history entries into the same item shape the viewer uses.
       const items = s.entries.filter((e) => e.images.length).map((e) => ({
         key: e.id, historyId: e.id, image: e.images[0], favorite: e.favorite, status: 'done', tags: [...new Set(entryTags(e))], at: e.createdAt,
-        meta: { prompt: e.prompt, negative: e.negative, seed: e.seed, workflow: e.workflow, legacyWorkflow: e.legacyWorkflow, width: e.width, height: e.height, strength: e.strength, reference: e.reference, action: e.action, parent: e.parent },
+        meta: { prompt: e.prompt, negative: e.negative, seed: e.seed, workflow: e.workflow, legacyWorkflow: e.legacyWorkflow, width: e.width, height: e.height, steps: e.steps, strength: e.strength, reference: e.reference, action: e.action, parent: e.parent },
       }));
       // Non-image results (3D .glb, audio, video) open the 3D viewer / audio player / file sheet.
       const files = s.entries.filter((e) => !e.images.length && e.files?.length);
@@ -439,13 +439,13 @@ export class HistoryView {
       const tiles = [
         ...items.map((it, i) => {
           const b = h('button.thumb.s-done', { type: 'button', dataset: { id: it.historyId }, title: it.meta.prompt },
-            h('img', { src: viewUrl(it.image, { thumb: true }), loading: 'lazy', alt: '' }), h('span.thumb-label', {}, it.favorite ? '★' : ''), h('span.thumb-time', {}, timeLabel(it.at)), check());
+            h('img', { src: viewUrl(it.image, { thumb: true }), loading: 'lazy', alt: '' }), h('span.thumb-label', {}, it.favorite ? '★' : ''), check());
           this.#press(b, it.historyId, () => this.openViewer(() => items, i));
           return b;
         }),
         ...files.map((e) => {
           const img = h('img', { alt: '', loading: 'lazy' });
-          const b = h('button.thumb.s-done.is-file', { type: 'button', dataset: { id: e.id }, title: e.prompt }, img, h('span.thumb-label', {}, fileLabel(e.files[0])), h('span.thumb-time', {}, timeLabel(e.createdAt)), check());
+          const b = h('button.thumb.s-done.is-file', { type: 'button', dataset: { id: e.id }, title: e.prompt }, img, h('span.thumb-label', {}, fileLabel(e.files[0])), check());
           if (this.modelThumbs && /\.(glb|gltf)$/i.test(e.files[0].filename || '')) this.modelThumbs.attach(b, img, e.files[0], e.parent?.image || sourceImage(e));
           else if (e.parent?.image) img.src = viewUrl(e.parent.image, { thumb: true });
           else img.hidden = true;

@@ -18,7 +18,7 @@ import { renderThumbs } from './ui/thumbs.js';
 import { ModelThumbs } from './ui/model-thumbs.js';
 import { Viewer } from './ui/viewer.js';
 import { HistoryView } from './ui/history-view.js';
-import { setKeepAwake, setRunStatus } from './native.js';
+import { setKeepAwake, setRunStatus, bridge as nativeBridge, has as hasNative, absoluteUrl } from './native.js';
 import { PromptVersions } from './ui/prompt-versions.js';
 import { ChatPanel } from './ui/chat-panel.js';
 import { prepareComfyQueue } from './ollama-client.js';
@@ -39,7 +39,7 @@ import { OutputPicker } from './ui/output-picker.js';
 import { PresetChooser } from './ui/preset-chooser.js';
 import { ImportSheet, presetsFor } from './ui/import-sheet.js';
 import { afterBack } from './ui/overlay.js';
-import { DriveFolderSheet, rememberFolder } from './ui/drive-folder.js';
+import { DriveFolderSheet, rememberFolder, PHONE } from './ui/drive-folder.js';
 import { RunLock, runProgress } from './lib/run-lock.js';
 import { lockControls } from './ui/form-lock.js';
 import { ConnectionBanner } from './lib/conn-banner.js';
@@ -119,9 +119,10 @@ const viewer = new Viewer({
     panel.reuse(it.meta || {});
     toast(`Prompt + seed ${it.meta?.seed ?? ''} loaded`);
   },
-  onDiscuss: (it) => chat.discuss(it),
   onUseAsReference: (it) => useAsReference(it.image),
-  onSaveToDrive: (it) => saveToDrive(it.image, 'image'),
+  // Batch 10: one Save - the Drive folder sheet, with "Save to this phone instead".
+  onSave: (it) => saveToDrive(it.image, 'image', { phone: () => viewer.save() }),
+  labelOf: (id) => labelOf(id),
   // Batch 9: a tag under the picture -> History searched for it.
   onTag: (tag) => { if (!historyView.on) $('#btn-history').click(); historyView.searchTag(tag); },
   // Trash in the viewer: this one picture, from the PC (History entries hold one picture each).
@@ -143,7 +144,7 @@ const historyView = new HistoryView((getItems, i) => viewer.open(getItems, i), (
   modelThumbs, host: $('#history-host'), button: $('#btn-history'),
   onChange: () => { picker.close(); paintThumbs(); },
   // Batch 9: model names for History search / filters / stats (old ids map to today's presets).
-  labelOf: (id) => { const w = workflows.find((x) => x.id === resolvePresetId(id)) || workflows.find((x) => x.id === id); return w ? (w.short || w.label) : String(id || '').replace(/^(ai|user|graph):/, ''); },
+  labelOf: (id) => labelOf(id),
 });
 $('#btn-history').addEventListener('click', () => {
   if (historyView.on) return historyView.close();
@@ -154,7 +155,10 @@ $('#btn-history').addEventListener('click', () => {
 });
 
 // ---- non-image results: 3D viewer, audio player, file sheet ------------------
-const fileHooks = { onDownload: (f) => downloadFile(f), onSaveToDrive: (f) => saveToDrive(f, fileKind(f)) };
+/** Model name for a preset id (old ids map to today's presets). */
+function labelOf(id) { const w = workflows.find((x) => x.id === resolvePresetId(id)) || workflows.find((x) => x.id === id); return w ? (w.short || w.label) : String(id || '').replace(/^(ai|user|graph):/, ''); }
+// Batch 10: the 3D / video / audio / file viewers' ⋮ menu: Save… (Drive or this phone) and Share.
+const fileHooks = { onSave: (f) => saveToDrive(f, fileKind(f), { phone: () => downloadFile(f) }), onShare: (f) => shareFile(f) };
 const modelViewer = new ModelViewer(fileHooks);
 const audioPlayer = new AudioPlayer(fileHooks);
 const videoPlayer = new VideoPlayer(fileHooks);
@@ -172,10 +176,12 @@ function openFile(f, meta = {}) {
 // Batch 8: asks where every time (ui/drive-folder.js), starting in the folder
 // last used for that kind of file.
 const driveSheet = new DriveFolderSheet();
-async function saveToDrive(f, kind) {
+/** phone(): batch 10 - "Save to this phone instead" at the bottom of the sheet. */
+async function saveToDrive(f, kind, { phone } = {}) {
   const k = kind || fileKind(f);
   const driveKind = ['3d', 'audio', 'video'].includes(k) ? k : 'image';
-  const folder = await driveSheet.choose(driveKind);
+  const folder = await driveSheet.choose(driveKind, { phone: !!phone });
+  if (folder === PHONE) { phone(); return null; }
   if (folder === null) return null;
   try {
     const r = await api.saveToDrive(f, kind, folder);
@@ -524,6 +530,21 @@ queue.addEventListener('change', () => {
 function downloadFile(f) {
   const a = document.createElement('a');
   a.href = viewUrl(f); a.download = f.filename; document.body.append(a); a.click(); a.remove();
+}
+
+/** Share a 3D / video / audio result: the Android share sheet in the app, else the Web Share API. */
+async function shareFile(f) {
+  if (hasNative('shareImage')) {
+    try { nativeBridge().shareImage(absoluteUrl(viewUrl(f)), f.filename); } catch (e) { toast('Share failed: ' + e.message); }
+    return;
+  }
+  try {
+    const blob = await (await fetch(viewUrl(f))).blob();
+    const file = new File([blob], f.filename, { type: blob.type || 'application/octet-stream' });
+    if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file] });
+    else if (navigator.share) await navigator.share({ url: new URL(viewUrl(f), location.href).href });
+    else toast('Sharing is not supported in this browser');
+  } catch (e) { if (e.name !== 'AbortError') toast('Share failed: ' + e.message); }
 }
 
 // ---- prompt versions + Prompt assistant (Ollama chat) -----------------------

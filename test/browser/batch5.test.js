@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startStack, ROOT } from '../unit/helpers.js';
-import { launch, pickAspect } from './launch.js';
+import { launch, pickAspect, menuAct } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -232,15 +232,14 @@ test('viewer: strip, drag moves the next picture in, flick, rubber band, strip t
   assert.equal(await page.isVisible('.history'), true, 'back in History');
 });
 
-test('viewer delete: trash + confirm removes only that picture from the PC and shows the next one', async () => {
+test('viewer delete: ⋮ Delete + confirm removes only that picture from the PC and shows the next one', async () => {
   const before = (await (await fetch(s.base + '/api/history')).json()).sessions.flatMap((x) => x.entries).length;
   await page.click('.history .thumb[data-id] >> nth=0');
   await page.waitForSelector('.viewer:not([hidden])');
   const total = Number((await page.textContent('.viewer-counter')).split('/')[1]);
   const id = await app(() => window.conceptApp.viewer.current().historyId);
   const nextId = await app(() => window.conceptApp.viewer.items()[1].historyId);
-  assert.equal(await page.isVisible('.viewer-top .viewer-del'), true);
-  await page.click('.viewer-top .viewer-del');
+  await menuAct(page, '.viewer', 'delete'); // batch 10: Delete is in the ⋮ menu
   await page.waitForSelector('.confirm');
   assert.match(await page.textContent('.confirm p'), /Delete this image from the PC\?/);
   await page.click('.confirm [data-act="confirm"]');

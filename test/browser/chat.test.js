@@ -120,12 +120,10 @@ test('Generate unloads Ollama first (keep_alive 0 before ComfyUI /prompt)', asyn
   assert.equal(s.ollama.loaded.size, 0);
 });
 
-test('viewer Discuss: image attached as base64 JPEG with its prompt + seed; Apply + same seed re-runs that seed', async () => {
+// Batch 10: the viewer's Discuss button is gone; the chat still takes a picture (chat.discuss).
+test('chat with a picture: attached as base64 JPEG with its prompt + seed; Apply + same seed re-runs that seed', async () => {
   const item = await page.evaluate(() => window.conceptApp.queue.items.at(-1).meta);
-  await page.click('#thumbs .thumb >> nth=-1');
-  await page.waitForSelector('.viewer:not([hidden])');
-  await page.click('.viewer button:has-text("Discuss")');
-  await page.waitForSelector('.viewer', { state: 'hidden' });
+  await page.evaluate(() => window.conceptApp.chat.discuss(window.conceptApp.queue.items.at(-1)));
   const chip = await page.textContent('.chat-attach');
   assert.match(chip, new RegExp(`img1 · seed ${item.seed}`));
   await page.screenshot({ path: path.join(SHOTS, 'chat-discuss.png') });
@@ -153,7 +151,7 @@ test('action: "upscale" -> confirm chip with clamp note; Run wires the image int
   const parent = await page.evaluate(() => window.conceptApp.queue.items.at(-1));
   await page.click('#thumbs .thumb >> nth=-1');
   await page.waitForSelector('.viewer:not([hidden])');
-  await page.click('.viewer button:has-text("Discuss")');
+  await page.evaluate(() => { const v = window.conceptApp.viewer, it = v.current(); v.close(); window.conceptApp.chat.discuss(it); }); // batch 10: no Discuss button; same handoff
   const promptsBefore = (await comfyReqs()).filter((r) => r.path === '/prompt').length;
   await send('upscale this please');
   const card = lastAssistant().locator('.chat-action');
@@ -202,7 +200,7 @@ test('non-vision model: discussing an image sends only its prompt + seed', async
   await page.waitForFunction(() => !/sees images/.test(document.querySelector('.chat-status').textContent));
   await page.click('#thumbs .thumb >> nth=0');
   await page.waitForSelector('.viewer:not([hidden])');
-  await page.click('.viewer button:has-text("Discuss")');
+  await page.evaluate(() => { const v = window.conceptApp.viewer, it = v.current(); v.close(); window.conceptApp.chat.discuss(it); }); // batch 10: no Discuss button; same handoff
   assert.match(await page.textContent('.chat-attach'), /cannot see images/);
   await send('what about this one');
   const req = (await chats()).at(-1).body;

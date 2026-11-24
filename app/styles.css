@@ -105,17 +105,24 @@ input[type=range] { width: 100%; height: var(--tap); accent-color: var(--accent)
 @media (max-height: 500px) and (orientation: landscape) { #prompt { min-height: 90px; } .thumb { width: 60px; height: 60px; } }
 
 /* ---- viewer ---- */
-.viewer { position: fixed; inset: 0; z-index: 50; background: #000; touch-action: none; user-select: none; -webkit-user-select: none; }
-.viewer-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; }
+/* Batch 10: a column - top bar, the picture (fills the space between), info + thumbnails at the bottom. */
+.viewer { position: fixed; inset: 0; z-index: 50; background: #000; touch-action: none; user-select: none; -webkit-user-select: none; display: flex; flex-direction: column; }
+.viewer-stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; }
 .viewer-img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; will-change: transform; }
-.viewer-top, .viewer-bottom { position: absolute; left: 0; right: 0; display: flex; gap: 8px; align-items: center; transition: opacity .2s; padding-left: calc(10px + var(--sal)); padding-right: calc(10px + var(--sar)); }
-.viewer-top { top: 0; padding-top: calc(8px + var(--sat)); padding-bottom: 20px; background: linear-gradient(#000a, #0000); }
-.viewer-bottom { bottom: 0; flex-direction: column; align-items: stretch; padding-bottom: calc(10px + var(--sab)); padding-top: 24px; background: linear-gradient(#0000, #000b); }
+.viewer-top, .viewer-bottom { position: relative; z-index: 1; flex: none; transition: opacity .2s; padding-left: calc(8px + var(--sal)); padding-right: calc(8px + var(--sar)); }
+.viewer-top { display: flex; gap: 4px; align-items: center; padding-top: calc(4px + var(--sat)); padding-bottom: 4px; }
+.viewer-top .icon-btn { background: transparent; border: 0; width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+.viewer-top .icon-btn .i { width: 22px; height: 22px; }
+.viewer-top .icon-btn:hover, .viewer-top .icon-btn[aria-expanded="true"] { background: #ffffff1f; }
+.viewer-counter { font-size: 15px; color: #cfd1d6; margin-left: 2px; font-variant-numeric: tabular-nums; }
+.viewer-fav { width: 14px; height: 14px; margin-left: 6px; color: #f5c542; }
+.viewer-bottom { display: flex; flex-direction: column; align-items: stretch; padding-bottom: var(--sab); }
 .viewer.chrome-hidden .viewer-top, .viewer.chrome-hidden .viewer-bottom { opacity: 0; pointer-events: none; }
-.viewer-caption { font-size: 14px; color: #ddd; max-height: 4.2em; overflow: hidden; }
-.viewer-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.viewer-actions .icon-btn { font-size: 14px; line-height: 1.15; padding: 2px 6px; white-space: normal; overflow: hidden; text-align: center; } /* long labels (Use as reference) wrap instead of being cut off on a phone */
-.viewer-counter { font-size: 14px; color: #ddd; }
+.viewer-info { display: grid; gap: 6px; padding: 10px 8px 12px; }
+.viewer-caption { all: unset; font-size: 14px; line-height: 1.45; color: #e8e9ec; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; overflow-wrap: anywhere; }
+.viewer-meta { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #9a9ea8; min-height: 24px; }
+.viewer-when { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-details-link { min-height: 32px; padding: 4px 2px 4px 8px; font-size: 13px; color: #8ab4ff; }
 .icon-btn { min-height: var(--tap); min-width: var(--tap); border-radius: var(--radius); border: 1px solid #ffffff22; background: #0007; color: white; font-size: 18px; cursor: pointer; padding: 0 12px; }
 .icon-btn.on { color: var(--accent); }
 
@@ -606,10 +613,10 @@ body.history-on #panel, body.history-on #results, body.history-on .actionbar, bo
 .viewer-slide { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; will-change: transform; }
 .viewer-slide img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; }
 .viewer-slide img.viewer-img { will-change: transform; }
-.viewer-del .i { width: 20px; height: 20px; }
-.viewer-strip { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 4px; margin: 0 calc(-10px - var(--sal)) 0 calc(-10px - var(--sar)); padding-left: calc(10px + var(--sal)); padding-right: calc(10px + var(--sar)); touch-action: pan-x; overscroll-behavior: contain; }
+/* Batch 10: the thumbnails sit at the very bottom, under the info, on their own band. */
+.viewer-strip { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 10px 0; margin: 0 calc(-8px - var(--sar)) 0 calc(-8px - var(--sal)); padding-left: calc(12px + var(--sal)); padding-right: calc(12px + var(--sar)); border-top: 1px solid #1d1f23; background: #0a0a0b; touch-action: pan-x; overscroll-behavior: contain; }
 .viewer-strip::-webkit-scrollbar { display: none; }
-.viewer-strip-item { flex: none; width: 44px; height: 44px; padding: 0; border: 2px solid transparent; border-radius: 6px; overflow: hidden; background: #222; cursor: pointer; opacity: .55; transition: opacity .15s, border-color .15s; }
+.viewer-strip-item { flex: none; width: 52px; height: 52px; padding: 0; border: 2px solid transparent; border-radius: 8px; overflow: hidden; background: #222; cursor: pointer; opacity: .55; transition: opacity .15s, border-color .15s; }
 .viewer-strip-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .viewer-strip-item.on { opacity: 1; border-color: #fff; }
 
@@ -751,8 +758,6 @@ body.node-view-on #btn-import-media { display: none; }
 .hresults .link { margin-left: auto; min-height: 32px; }
 .history-session h3 { display: flex; align-items: baseline; gap: 8px; }
 .history-session h3 .day-n { color: var(--c-muted); font-weight: 400; font-size: 12px; }
-.thumb-time { position: absolute; left: 4px; bottom: 4px; font-size: 10.5px; line-height: 1.5; padding: 0 5px; border-radius: 4px; background: #000a; color: #ddd; pointer-events: none; font-variant-numeric: tabular-nums; }
-.results .thumb-time { display: none; }
 .filter-sheet { max-height: 80vh; }
 .filter-sheet .hf-sec { padding: 0 4px; }
 .hdates { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
@@ -761,4 +766,43 @@ body.node-view-on #btn-import-media { display: none; }
 .hf-actions .btn.primary { background: var(--c-primary); color: #fff; }
 .viewer-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .viewer-tags[hidden] { display: none; }
+/* Batch 10: under the picture the tags are one scrolling row; Details shows them all. */
+.viewer-info .viewer-tags { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; margin: 0 -8px; padding: 0 8px; }
+.viewer-info .viewer-tags::-webkit-scrollbar { display: none; }
+.viewer-info .vtag { flex: none; }
+
+/* ==== batch 10: the ⋮ menu (ui/action-menu.js) ==== */
+.amenu-scrim { position: fixed; inset: 0; z-index: 80; background: #0006; }
+.amenu { position: fixed; z-index: 81; width: min(270px, calc(100vw - 16px)); max-height: calc(100dvh - 80px); overflow-y: auto; background: #222428; color: #eceef1; border-radius: 14px; padding: 6px 0; box-shadow: 0 12px 32px #000a; }
+.amenu-row { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 46px; padding: 8px 16px; border: 0; background: transparent; color: inherit; font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.amenu-row:hover, .amenu-row:focus-visible { background: #ffffff12; outline: none; }
+.amenu-ic { width: 24px; flex: none; display: grid; place-items: center; color: #c9ccd2; }
+.amenu-ic .i { width: 20px; height: 20px; }
+.amenu-row.on .amenu-ic { color: #f5c542; }
+.amenu-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.amenu-txt small { color: #8d919a; font-size: 12px; }
+.amenu-row.danger, .amenu-row.danger .amenu-ic { color: #ff6b6b; }
+.amenu-sep { height: 1px; background: #34373d; margin: 5px 0; }
+.amenu-title { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #7d818a; padding: 8px 16px 2px; }
+.ov-top .more-btn .i, .ov-top .icon-btn .i-x { width: 20px; height: 20px; }
+
+/* ==== batch 10: the picture's details sheet (viewer.js) ==== */
+.vd-scrim { z-index: 70; }
+.viewer-details { gap: 8px; max-height: 80vh; padding-left: calc(18px + var(--sal)); padding-right: calc(18px + var(--sar)); }
+.vd-grab { justify-self: center; width: 40px; height: 18px; border: 0; padding: 0; background: transparent; cursor: pointer; position: relative; }
+.vd-grab::after { content: ''; position: absolute; left: 0; right: 0; top: 7px; height: 4px; border-radius: 2px; background: #4a4d54; }
+.viewer-details .sheet-title { padding: 0 0 4px; }
+.vd-prompt { font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.vd-neg { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.vd-copy { justify-self: start; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 0; color: #8ab4ff; }
+.vd-grid { display: grid; grid-template-columns: 84px 1fr; row-gap: 8px; column-gap: 8px; font-size: 13.5px; margin-top: 6px; }
+.vd-k { color: var(--c-muted, #8d919a); }
+.vd-v { overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.vd-tags { margin-top: 6px; }
+.viewer-details .vtag { background: transparent; }
+
+/* ==== batch 10: Save sheet - Drive logo, "Save to this phone instead" ==== */
+.drive-sheet .sheet-title { display: flex; align-items: center; gap: 10px; }
+.df-phone { justify-self: center; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; color: var(--c-fg); }
+.drive-logo { flex: none; }
 .vtag { height: 26px; padding: 0 9px; border-radius: 13px; border: 1px solid #ffffff40; background: #0006; color: #ddd; font: inherit; font-size: 12px; cursor: pointer; }

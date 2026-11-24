@@ -20,7 +20,7 @@ const ACTIVE = ['submitting', 'queued', 'running'];
 /** What is saved per active job: enough to find its result again. */
 export function persistable(items) {
   return items.filter((i) => ACTIVE.includes(i.status) && i.promptId)
-    .map((i) => ({ key: i.key, promptId: i.promptId, historyId: i.historyId || null, meta: i.meta, run: i.run || null }));
+    .map((i) => ({ key: i.key, promptId: i.promptId, historyId: i.historyId || null, meta: i.meta, run: i.run || null, at: i.at || null }));
 }
 
 export class JobQueue extends EventTarget {
@@ -49,7 +49,7 @@ export class JobQueue extends EventTarget {
     const have = new Set(this.items.map((i) => i.promptId));
     const back = saved.filter((x) => x?.promptId && !have.has(x.promptId)).map((x) => ({
       key: x.key || 'r' + Math.random().toString(36).slice(2, 10), promptId: x.promptId, status: 'queued', progress: 0,
-      image: null, extraImages: [], files: [], meta: x.meta || {}, historyId: x.historyId, favorite: false, error: null, restored: true,
+      image: null, extraImages: [], files: [], meta: x.meta || {}, historyId: x.historyId, favorite: false, error: null, restored: true, at: x.at || null,
     }));
     for (const it of back) { this.items.push(it); this.byPrompt.set(it.promptId, it); }
     if (back.length) { this.lastRun = back; this.#changed(); }
@@ -163,7 +163,7 @@ export class JobQueue extends EventTarget {
   async submit(jobs) {
     const created = jobs.map(({ workflow, meta }) => ({
       key: 'j' + Math.random().toString(36).slice(2, 10), promptId: null, status: 'submitting', progress: 0,
-      image: null, extraImages: [], files: [], meta, historyId: null, favorite: false, error: null, workflow,
+      image: null, extraImages: [], files: [], meta, historyId: null, favorite: false, error: null, workflow, at: Date.now(),
     }));
     this.items.push(...created);
     this.lastRun = created; // set before the first await: main.js locks Run on these

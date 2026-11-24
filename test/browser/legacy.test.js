@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { startStack, ROOT } from '../unit/helpers.js';
-import { launch, pickAspect } from './launch.js';
+import { launch, pickAspect, menuAct } from './launch.js';
 import { oldHistory, oldChats, oldLocalStorage } from '../fixtures/legacy-state.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
@@ -71,7 +71,7 @@ test('old history: Reuse on a From reference image result -> Klein 4B Image Edit
     // newest first: upscale, reference, fast
     await page.click('.history-session .thumb >> nth=1');
     await page.waitForSelector('.viewer:not([hidden])');
-    await page.click('.viewer-actions button[title="Reuse prompt + seed"]');
+    await menuAct(page, '.viewer', 'reuse');
     await page.waitForFunction(() => window.conceptApp.current?.id === 'ai:klein-4b-edit');
     await page.waitForFunction(() => window.conceptApp.refs.values['76'] === 'old-ref.png');
     assert.equal(await page.inputValue('#prompt'), 'same castle, winter');
@@ -81,11 +81,11 @@ test('old history: Reuse on a From reference image result -> Klein 4B Image Edit
     if (await page.locator('.history:not([hidden])').count()) await page.click('#btn-history').catch(() => {});
     await page.evaluate(() => window.conceptApp.viewer.open(() => [{ image: { filename: 'concept_00001_.png', subfolder: 'concept-app', type: 'output' }, meta: { workflow: 'ai:klein-4b-t2i', legacyWorkflow: 'fast-concept', prompt: 'a brass airship over a canyon', seed: 4242 } }], 0));
     await page.waitForSelector('.viewer:not([hidden])');
-    await page.click('.viewer-actions button[title="Reuse prompt + seed"]');
+    await menuAct(page, '.viewer', 'reuse');
     await page.waitForFunction(() => window.conceptApp.current?.id === 'ai:klein-4b-t2i');
     // A result recorded with the raw old id (no server mapping) also works.
     await page.evaluate(() => window.conceptApp.viewer.open(() => [{ image: { filename: 'reference_00001_.png', subfolder: 'concept-app', type: 'output' }, meta: { workflow: 'from-reference-image', reference: { 10: 'raw.png' }, prompt: 'x', seed: 1 } }], 0));
-    await page.click('.viewer-actions button[title="Reuse prompt + seed"]');
+    await menuAct(page, '.viewer', 'reuse');
     await page.waitForFunction(() => window.conceptApp.current?.id === 'ai:klein-4b-edit' && window.conceptApp.refs.values['76'] === 'raw.png');
   } finally { await ctx.close(); }
 });
