@@ -118,6 +118,22 @@ export function createPcSync({ history, dataDir, getComfyUrl, outputDirOf = asyn
     return { added };
   }
 
+  /**
+   * Live progress of a running job from the app's ComfyUI add-on (GET /concept/progress,
+   * comfyui/ComfyUI-AIWorkflowMenu): ComfyUI itself only tells the window that queued it.
+   * { value, max, fraction, node, nodesDone, nodesTotal } or null (add-on not installed /
+   * ComfyUI not restarted since: the card then shows the time only).
+   */
+  async function progressOf(id, graph) {
+    let p;
+    try { const r = await fetchImpl(`${getComfyUrl()}/concept/progress`, { signal: AbortSignal.timeout(3000) }); if (!r.ok) return null; p = await r.json(); } catch { return null; }
+    if (!p || p.prompt_id !== id) return null;
+    const nodesTotal = Math.max(1, Object.keys(graph || {}).length - (p.cached || 0));
+    const nodesDone = Math.min(nodesTotal, p.nodes_done || 0);
+    const step = p.max > 0 ? Math.min(1, (p.value || 0) / p.max) : null;
+    return { value: p.value || 0, max: p.max || 0, node: p.node || null, nodesDone, nodesTotal, fraction: step ?? nodesDone / nodesTotal };
+  }
+
   /** What the PC is running now, unless the app queued it itself (it shows that one already). */
   async function now_() {
     let q;
@@ -128,11 +144,12 @@ export function createPcSync({ history, dataDir, getComfyUrl, outputDirOf = asyn
     const [, id, graph, extra] = run;
     if (!seenRunning.has(id)) seenRunning.set(id, now());
     const have = known();
-    const mine = have.has(id) || isScheduled(id);
+    const scheduled = isScheduled(id);
+    const mine = have.has(id) && !scheduled; // a batch job is shown on the card too
     const d = describeGraph(graph);
     return {
       reachable: true, pending,
-      running: { promptId: id, app: mine, label: modelKey(d.model), prompt: d.prompt.slice(0, 200), since: seenRunning.get(id), client: extra?.client_id || null },
+      running: { promptId: id, app: mine, scheduled, label: modelKey(d.model), prompt: d.prompt.slice(0, 200), since: seenRunning.get(id), client: extra?.client_id || null, progress: await progressOf(id, graph) },
     };
   }
 

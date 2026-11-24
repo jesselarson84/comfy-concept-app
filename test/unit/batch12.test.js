@@ -87,6 +87,7 @@ function comfyFake() {
     if (u.pathname === '/history') return new Response(JSON.stringify(env.history));
     if (u.pathname.startsWith('/history/')) { const id = decodeURIComponent(u.pathname.slice(9)); return new Response(JSON.stringify(env.history[id] ? { [id]: env.history[id] } : {})); }
     if (u.pathname === '/queue') return new Response(JSON.stringify({ queue_running: [...env.running, ...(env.mine || []).filter((x) => !env.history[x[1]])], queue_pending: env.pending }));
+    if (u.pathname === '/concept/progress') return env.progress ? new Response(JSON.stringify(env.progress)) : new Response('{"error":"no"}', { status: 404 });
     if (u.pathname === '/prompt' && o.method === 'POST') { const id = 'sched-' + Object.keys(env.history).length + '-' + Math.random().toString(36).slice(2, 6); env.lastPrompt = JSON.parse(o.body); env.queued = id; env.mine = [[9, id, env.lastPrompt.prompt, {}, []]]; return new Response(JSON.stringify({ prompt_id: id })); }
     return new Response('{}', { status: 404 });
   };
@@ -140,9 +141,38 @@ test('pc-sync: what the PC runs now (not the app\'s own job) and a job\'s workfl
   assert.deepEqual({ id: n.running.promptId, app: n.running.app, label: n.running.label, pending: n.pending }, { id: 'desk1', app: false, label: 'z_image_turbo_bf16', pending: 1 });
   const j = await sync.job('desk1');
   assert.deepEqual(j.graph, GRAPH); assert.deepEqual(j.workflow, { nodes: [1] }); assert.equal(j.meta.seed, 1234);
+  assert.equal(n.running.progress, null, 'no add-on (or ComfyUI not restarted): time only');
+  // the app's ComfyUI add-on reports the job's live progress
+  c.env.progress = { prompt_id: 'desk1', node: '3', value: 12, max: 30, nodes_done: 2, cached: 1 };
+  let p = (await sync.now()).running.progress;
+  assert.equal(p.fraction, 0.4); assert.equal(p.value, 12); assert.equal(p.nodesTotal, 5);
+  c.env.progress = { prompt_id: 'desk1', node: '9', value: 0, max: 0, nodes_done: 4, cached: 1 };
+  p = (await sync.now()).running.progress;
+  assert.equal(p.fraction, 0.8, 'no step progress: nodes done of nodes to run');
+  c.env.progress = { prompt_id: 'other', value: 1, max: 2 };
+  assert.equal((await sync.now()).running.progress, null, 'progress of another job is ignored');
   c.env.running = [[1, 'appjob', GRAPH, {}, []]];
   assert.equal((await sync.now()).running.app, true, 'the app shows its own job already');
   assert.equal(await sync.job('nope'), null);
+});
+
+test('pc-sync: a batch job running on the PC shows on the card (not hidden as an app job)', async () => {
+  const dataDir = tmp('cc-pc-');
+  const history = new HistoryStore(dataDir);
+  await history.add({ prompt: 'batch', promptId: 'b1' });
+  const c = comfyFake();
+  c.env.running = [[1, 'b1', GRAPH, {}, []]];
+  const sync = createPcSync({ history, dataDir, getComfyUrl: () => 'http://comfy', fetchImpl: c.fetchImpl, isScheduled: (id) => id === 'b1' });
+  const r = (await sync.now()).running;
+  assert.equal(r.app, false); assert.equal(r.scheduled, true);
+});
+
+test('ComfyUI add-on: keeps the progress of the running job at /concept/progress, ComfyUI messages unchanged', () => {
+  const py = read('comfyui/ComfyUI-AIWorkflowMenu/__init__.py');
+  assert.match(py, /@inst\.routes\.get\("\/concept\/progress"\)/);
+  assert.match(py, /return original\(event, data, sid\)/, 'every message still goes where ComfyUI sends it');
+  assert.match(py, /_concept_progress/, 'installed once');
+  assert.match(read('app/js/ui/pc-card.js'), /step \$\{p\.value\} of \$\{p\.max\}/);
 });
 
 test('delete: a desktop job\'s files may be deleted anywhere in ComfyUI\'s output folder; app jobs still only in the app folder', async () => {

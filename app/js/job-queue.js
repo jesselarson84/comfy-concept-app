@@ -215,6 +215,13 @@ export class JobQueue extends EventTarget {
     this.#changed(it);
     return it;
   }
+  /** Batch 12: live progress of a followed PC job (read by the server from the ComfyUI add-on). */
+  progressOf(promptId, fraction) {
+    const it = this.byPrompt.get(promptId);
+    if (!it?.external || !['queued', 'running'].includes(it.status)) return;
+    it.status = 'running'; it.progress = Math.max(0, Math.min(1, fraction));
+    this.#changed(it);
+  }
   get following() { return this.items.some((i) => i.external && ['queued', 'running'].includes(i.status)); }
 
   /** Cancel everything unfinished: delete pending from ComfyUI's queue, interrupt the running one. */

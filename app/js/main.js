@@ -222,7 +222,7 @@ async function openPcJob(promptId, { follow = true } = {}) {
   if (follow) { queue.follow(promptId, { prompt: j.meta.prompt, seed: j.meta.seed, workflow: id }); paintThumbs(); }
   toast(follow ? 'The PC job is here: change it and Run, or wait for its result below' : 'Workflow loaded: change it and Run');
 }
-const pcCard = new PcCard($('#pc-card'), { onOpen: (promptId) => openPcJob(promptId) });
+const pcCard = new PcCard($('#pc-card'), { onOpen: (promptId) => openPcJob(promptId), onProgress: (promptId, f) => queue.progressOf(promptId, f) });
 // A followed PC job sends its progress only to the desktop page: look in /history every few seconds.
 setInterval(() => { if (queue.following && !document.hidden) queue.resync().then(paintThumbs); }, 5000);
 const batchSheet = new BatchSheet({ button: $('#btn-batch'), badge: $('#batch-count') });
