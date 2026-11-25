@@ -26,6 +26,8 @@
       <button id="btn-canvas" class="btn icon toggle-btn" type="button" aria-pressed="false" aria-controls="node-view" aria-label="Node view (ComfyUI canvas)" title="Node view (ComfyUI canvas)"><i class="i i-nodes"></i></button>
       <!-- Files toggle (batch 5 History; batch 13 renamed it Files): like the node view, it swaps what is under the top bar -->
       <button id="btn-history" class="btn icon toggle-btn" type="button" aria-pressed="false" aria-controls="history-host" aria-label="Files" title="Files"><i class="i i-folder"></i></button>
+      <!-- Batch 16: Settings (Claude: on/off, API key on the PC, monthly limit, default model; ui/settings-sheet.js) -->
+      <button id="btn-settings" class="btn icon" type="button" aria-label="Settings" title="Settings"><i class="i i-settings"></i></button>
     </header>
     <section id="history-host" class="history-host" aria-label="Files" hidden></section>
     <div id="picker" class="picker-pop" role="listbox" aria-label="Workflow presets" hidden></div>
@@ -54,6 +56,8 @@
         <label class="switch"><input type="checkbox" id="neg-toggle"> <span>Negative prompt</span></label>
       </div>
       <textarea id="negative" rows="2" placeholder="What to avoid&hellip;" hidden></textarea>
+      <!-- Batch 16: the Claude box (ui/claude.js), only when Use Claude is on in Settings -->
+      <div id="claude-host" class="claude-host" hidden></div>
 
       <div id="refs" class="refs" hidden></div>
       <div id="file-inputs" class="refs" hidden></div>

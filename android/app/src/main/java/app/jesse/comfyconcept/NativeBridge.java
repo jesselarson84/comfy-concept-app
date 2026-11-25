@@ -111,4 +111,58 @@ public final class NativeBridge {
             }
         });
     }
+
+    // ---- batch 16: speech for the Claude box (Android SpeechRecognizer; the WebView has no Web Speech) ----
+
+    /** True when the phone has a speech recognizer (otherwise the page hides the mic). */
+    @JavascriptInterface
+    public boolean speechAvailable() {
+        if (!allowed) return false;
+        final boolean[] out = {false};
+        final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try { out[0] = activity.speechAvailable(); } finally { done.countDown(); }
+            }
+        });
+        try { done.await(1, java.util.concurrent.TimeUnit.SECONDS); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+        return out[0];
+    }
+
+    /** Start listening; words come back as window.__comfySpeech({type, text}). */
+    @JavascriptInterface
+    public void startSpeech(final String lang) {
+        if (!allowed) return;
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                activity.startSpeech(lang);
+            }
+        });
+    }
+
+    /** Stop now and send what was heard. */
+    @JavascriptInterface
+    public void stopSpeech() {
+        if (!allowed) return;
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                activity.stopSpeech();
+            }
+        });
+    }
+
+    /** Throw it away. */
+    @JavascriptInterface
+    public void cancelSpeech() {
+        if (!allowed) return;
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                activity.cancelSpeech();
+            }
+        });
+    }
 }

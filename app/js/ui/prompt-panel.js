@@ -415,6 +415,34 @@ export class PromptPanel {
 
   setPrompt(text) { this.state.prompt = text; this.#paint(); this.save(); }
 
+  /**
+   * Batch 16: what Claude changed (already checked on the PC). changes: { prompt,
+   * negative, aspect, res, batch, seed: number | 'random' }; settings: { key: value }
+   * for the current preset. -> the keys that really changed.
+   */
+  applyChanges(changes = {}, settings = null) {
+    const s = this.state, done = [];
+    const set = (k, v) => { if (JSON.stringify(s[k]) !== JSON.stringify(v)) { s[k] = v; return true; } return false; };
+    if (changes.prompt !== undefined && set('prompt', changes.prompt)) done.push('prompt');
+    if (changes.negative !== undefined) { const a = set('negative', changes.negative), b = set('negOn', !!changes.negative); if (a || b) done.push('negative'); }
+    if (changes.aspect !== undefined && set('aspect', aspectKey(parseAspect(changes.aspect)))) done.push('aspect');
+    if (changes.res !== undefined && set('res', normRes(changes.res))) done.push('res');
+    if (changes.batch !== undefined && set('batch', Math.max(1, Math.min(this.maxBatch(), Number(changes.batch) || 1)))) done.push('batch');
+    if (changes.seed !== undefined) {
+      const before = `${s.seedMode}:${s.seed}`;
+      if (changes.seed === 'random') s.seedMode = 'random'; else { s.seed = Number(changes.seed); s.seedMode = 'locked'; }
+      if (`${s.seedMode}:${s.seed}` !== before) done.push('seed');
+    }
+    if (settings && this.wf?.ai) {
+      const bag = (s.params[this.wf.id] ||= {});
+      const cur = this.paramValues();
+      for (const [k, v] of Object.entries(settings)) if (k in this.wf.ai.params && cur[k] !== v) { bag[k] = v; done.push(`param:${k}`); }
+    }
+    this.#paint(); this.save();
+    if (this.wf) this.setWorkflow(this.wf);
+    return done;
+  }
+
   /** Batch 13 (Edit a batch job): how many runs, and a copy of / back to the whole form state. */
   setBatch(n) { this.state.batch = Math.max(1, Math.min(this.maxBatch(), Number(n) || 1)); this.#paint(); this.save(); if (this.wf) this.setWorkflow(this.wf); }
   snapshot() { return JSON.parse(JSON.stringify(this.state)); }

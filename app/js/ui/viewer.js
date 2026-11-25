@@ -38,6 +38,7 @@ function projectCrumb(id) {
   return [p.group.length ? h('span.muted', {}, `${p.group.join(' › ')} ›`) : null, h('b', {}, p.name)].filter(Boolean);
 }
 import { ActionMenu, driveLogo, moreButton } from './action-menu.js';
+import { claudeLogo } from './claude.js';
 
 const dayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 const yearFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -265,6 +266,8 @@ export class Viewer {
         { act: 'reference', icon: 'i-image-plus', label: 'Use as reference', sub: 'This picture into an image slot', hidden: !this.hooks.onUseAsReference, fn: run((cur) => this.hooks.onUseAsReference(cur)) },
         // Reuse: its prompt, seed and settings back into the form.
         { act: 'reuse', icon: 'i-rotate-ccw', label: 'Reuse settings', sub: 'Its prompt, seed and model', hidden: !this.hooks.onReuse, fn: run((cur) => { this.close(); this.hooks.onReuse(cur); }) },
+        // Batch 16: only while Use Claude is on (Settings).
+        { act: 'ask-claude', icon: claudeLogo(18), label: 'Ask Claude about this', sub: 'Fix it on the form', hidden: !this.hooks.onAskClaude || !this.hooks.claudeOn?.(), fn: run((cur) => this.hooks.onAskClaude(cur)) },
       ] },
       { items: [{ act: 'delete', icon: 'i-trash-2', label: 'Delete', danger: true, hidden: !(it.historyId && this.hooks.onDelete), fn: () => this.remove() }] },
     ]);

@@ -42,6 +42,57 @@ export function canvasIds(workflow) {
   return out;
 }
 
+/**
+ * Batch 16: every node in view. Found on a Pixel 10 Pro (2026-11-24): with
+ * Z-Image Turbo the canvas looked empty - ComfyUI's stats said "N: 10 [0]"
+ * (10 nodes, none in view) at 90 % zoom - until ComfyUI's own fit-view button
+ * was tapped. So after a graph is loaded or the node view is shown, do what
+ * that button does (the Comfy.Canvas.FitView command); on frontends without the
+ * command, fit the nodes' bounds into the canvas by hand (LiteGraph's
+ * DragAndScale: screen = (pos + offset) * scale).
+ */
+export async function fitGraph(app) {
+  const c = app?.canvas, nodes = app?.graph?._nodes || app?.graph?.nodes || [];
+  if (!c || !nodes.length) return false;
+  // let the canvas take its size first (it was hidden until now)
+  await new Promise((r) => setTimeout(r, 60));
+  try {
+    const cmd = app.extensionManager?.command;
+    if (cmd?.commands?.some?.((x) => x.id === 'Comfy.Canvas.FitView') || typeof cmd?.execute === 'function') {
+      await cmd.execute('Comfy.Canvas.FitView');
+      if (!c.ds || graphVisible(app)) return true;
+    }
+  } catch { /* fall back to doing it by hand */ }
+  const ds = c.ds;
+  if (!ds?.offset) return false;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const n of nodes) {
+    const [x, y] = n.pos || [0, 0], [w, h] = n.size || [200, 100], title = 30; // title bar above pos
+    x0 = Math.min(x0, x); y0 = Math.min(y0, y - title); x1 = Math.max(x1, x + w); y1 = Math.max(y1, y + h);
+  }
+  const el = c.canvas || c.el;
+  const cw = el?.clientWidth || el?.width || 800, ch = el?.clientHeight || el?.height || 600;
+  const pad = 24, bw = Math.max(1, x1 - x0), bh = Math.max(1, y1 - y0);
+  const scale = Math.max(0.1, Math.min(1, Math.min((cw - pad * 2) / bw, (ch - pad * 2) / bh)));
+  ds.scale = scale;
+  ds.offset[0] = cw / (2 * scale) - (x0 + bw / 2);
+  ds.offset[1] = ch / (2 * scale) - (y0 + bh / 2);
+  c.setDirty?.(true, true);
+  app.graph.setDirtyCanvas?.(true, true);
+  return true;
+}
+
+/** True when every node lies inside the visible canvas. */
+export function graphVisible(app) {
+  const c = app?.canvas, ds = c?.ds, el = c?.canvas || c?.el, nodes = app?.graph?._nodes || app?.graph?.nodes || [];
+  if (!ds?.offset || !el) return true;
+  const cw = el.clientWidth || el.width, ch = el.clientHeight || el.height;
+  return nodes.every((n) => {
+    const sx = (n.pos[0] + ds.offset[0]) * ds.scale, sy = (n.pos[1] + ds.offset[1]) * ds.scale;
+    return sx >= 0 && sy >= 0 && sx + n.size[0] * ds.scale <= cw + 1 && sy + n.size[1] * ds.scale <= ch + 1;
+  });
+}
+
 export class NodeView {
   /**
    * @param o.button  the top bar toggle  @param o.host  where the iframe goes  @param o.onChange(on)
@@ -108,7 +159,7 @@ export class NodeView {
     const esc = g.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const same = new RegExp(`(^|/)${esc}( \\(\\d+\\))?\\.json$`);
     const showing = () => same.test(String(store?.activeWorkflow?.path || ''));
-    if (g.id === this.loadedId && (!store || showing())) return;
+    if (g.id === this.loadedId && (!store || showing())) { await fitGraph(app); return; }
     try {
       const wf = canvasIds(g.workflow);
       // Build the object inside the iframe: ComfyUI tells links from values with
@@ -128,6 +179,7 @@ export class NodeView {
         await load();
       }
       this.loadedId = g.id;
+      await fitGraph(app);
     } catch (e) { toast('Could not open the preset graph: ' + e.message, 6000); }
   }
 

@@ -46,7 +46,10 @@ import { textEncoderOnCpu, tiledVaeDecode, hasVaeDecode, wantTiledDecode, isOom 
 import { withUpscale, pickUpscaleModel, RESOLUTIONS } from './lib/resolution.js';
 import { ProjectChip, ProjectSheet, loadProjects, projectLabel, getCurrentProject } from './ui/projects.js';
 import { PcCard } from './ui/pc-card.js';
-import { BatchSheet } from './ui/batch-sheet.js';
+import { BatchSheet, rowsOf } from './ui/batch-sheet.js';
+import { ClaudeBox, AskSheet, VariationsSheet, downscale, wantsVariations, claudeLogo } from './ui/claude.js';
+import { SettingsSheet } from './ui/settings-sheet.js';
+import { aspectLabel } from './lib/aspect.js';
 
 const comfy = new ComfyClient();
 const queue = new JobQueue(comfy);
@@ -146,6 +149,9 @@ const viewer = new Viewer({
   onSave: (it) => saveToDrive(it.image, 'image', { phone: () => viewer.save() }),
   labelOf: (id) => labelOf(id),
   // Batch 9: a tag under the picture -> History searched for it.
+  // Batch 16: ⋮ Ask Claude about this (only while Use Claude is on).
+  onAskClaude: (it) => openAsk('fix', [{ image: it.image, historyId: it.historyId, meta: it.meta || {} }]),
+  claudeOn: () => claudeOn(),
   onTag: (tag) => { if (!historyView.on) $('#btn-history').click(); historyView.searchTag(tag); },
   // Trash in the viewer: this one picture, from the PC (History entries hold one picture each).
   onDelete: async (it) => {
@@ -169,6 +175,9 @@ const historyView = new HistoryView((getItems, i) => viewer.open(getItems, i), (
   labelOf: (id) => labelOf(id),
   // Batch 11: selection bar "Move to project".
   onMove: (ids) => moveToProject(ids),
+  // Batch 16: the selection bar's Claude button (pictures numbered in tap order).
+  onAskClaude: (entries) => openAsk('files', entries.map((e) => ({ image: e.images[0], historyId: e.id, meta: { prompt: e.prompt, seed: e.seed, workflow: e.workflow, width: e.width, height: e.height, steps: e.steps } }))),
+  claudeOn: () => claudeOn(),
 });
 $('#btn-history').addEventListener('click', () => {
   if (historyView.on) return historyView.close();
@@ -321,7 +330,8 @@ const usable = isUsable;
 // Otherwise nothing is written: the remembered pick stays what the user last
 // picked, and a fresh client keeps getting the default (lib/preset-choice.js).
 async function loadWorkflows(keepId, { fresh = false, remember = false } = {}) {
-  try { workflows = await api.getWorkflows({ fresh }); } catch (e) { toast('Could not load presets: ' + e.message); return; }
+  // Batch 16: one-off presets Claude built stay until the app closes.
+  try { workflows = [...(await api.getWorkflows({ fresh })), ...workflows.filter((w) => w.claude)]; } catch (e) { toast('Could not load presets: ' + e.message); return; }
   picker.setItems(workflows);
   // Last pick (old "fast-concept" etc. map to Klein) -> else Klein 4B T2I -> else first available AI Workflow entry.
   const pick = choosePreset(workflows, { keep: keepId, saved: localStorage.getItem('preset') });
@@ -706,11 +716,247 @@ function resume() {
   queue.resync().then(() => paintThumbs());
 }
 
+// ---- Batch 16: Claude ----------------------------------------------------------
+// Off by default (Settings). Claude fills in the form and stops; the user presses
+// Run or + Batch. Changed fields get an orange dot; one Undo reverts everything a
+// reply changed. The chat is kept in memory until the app closes.
+let claudeStatus = null;
+let claudeBox = null;
+const claudeOn = () => !!claudeStatus?.enabled;
+const settingsSheet = new SettingsSheet({ button: $('#btn-settings'), onChange: (st) => { claudeStatus = st; paintClaude(); } });
+const askSheet = new AskSheet();
+const variationsSheet = new VariationsSheet();
+function paintClaude() {
+  const host = $('#claude-host');
+  host.hidden = !claudeOn();
+  if (claudeOn() && !claudeBox) claudeBox = new ClaudeBox(host, { ask: askFromBox, apply: applyClaude, defaultModel: () => claudeStatus?.defaultModel || 'haiku' });
+}
+async function loadClaude() { try { claudeStatus = await api.getClaude(); } catch { claudeStatus = null; } paintClaude(); }
+
+/** The form as Claude sees it (get_form). */
+function formForClaude() {
+  const v = panel.values();
+  return {
+    preset: current?.id, presetName: current?.label, prompt: v.prompt, negative: v.negative, aspect: v.aspect, resolution: v.res, batch: v.batch,
+    seed: v.seedMode === 'locked' ? v.seed : 'random', settings: current?.ai ? v.params : undefined,
+    pictureSlots: refs.slots.map((sl) => (refs.values[sl.node] ? 'filled' : 'empty')),
+  };
+}
+
+/** /api/claude/ask, with the next step for the known refusals (no key -> Settings). */
+async function claudeAsk(body) {
+  try { return await api.askClaude(body); } catch (e) {
+    if (e.code === 'no-key') settingsSheet.open({ askKey: true });
+    if (e.code === 'off') loadClaude();
+    throw e;
+  }
+}
+function askFromBox({ text, model, memory }) {
+  if (isLocked()) throw new Error('Wait for the run to finish first');
+  // "6 takes, vary the light": variations into the batch (always Opus)
+  return claudeAsk({ mode: wantsVariations(text) ? 'variations' : 'prompt', model, text, memory, form: formForClaude() });
+}
+
+/** Viewer "Fix this result" (one picture) and Files (several, in tap order). */
+function openAsk(mode, items) {
+  if (!claudeOn()) return;
+  const line = (m) => [labelOf(m.workflow), m.seed !== undefined && m.seed !== null ? `seed ${m.seed}` : null, m.width && m.height ? `${m.width}×${m.height}` : null, m.steps ? `${m.steps} steps` : null].filter(Boolean).join(' · ');
+  const list = items.map((it) => ({ ...it, line: line(it.meta || {}) }));
+  askSheet.open({
+    mode, items: list,
+    title: mode === 'fix' ? 'Fix this result' : `Ask Claude about ${list.length} ${list.length === 1 ? 'picture' : 'pictures'}`,
+    onAsk: async (text) => {
+      if (isLocked()) throw new Error('Wait for the run to finish first');
+      // long side about 1024 px: enough to judge hands and texture, small enough to be cheap
+      const pictures = await Promise.all(list.map(async (it) => ({ ...(await downscale(it.image)), image: it.image, meta: { ...it.meta, historyId: it.historyId } })));
+      return claudeAsk({ mode, text, form: formForClaude(), pictures, memory: claudeBox?.memory.slice() || [] });
+    },
+    // Claude changed the form: back to the form, the reply (with Undo) in the Claude box.
+    onDone: async (text, r) => {
+      if (!viewer.root.hidden) { viewer.close(); await afterBack(); }
+      if (historyView.on) { await leaveHistory(); await afterBack(); }
+      if (nodeView.on) nodeView.hide();
+      paintClaude();
+      await claudeBox.show(text, r);
+      claudeBox.root.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+    },
+  });
+}
+
+/** Orange dot / outline on what the last reply changed (cleared by Undo or the next reply). */
+function markChanged(keys) {
+  for (const el of document.querySelectorAll('.claude-changed')) el.classList.remove('claude-changed');
+  const sel = { preset: '#preset-btn', prompt: '.prompt-field', negative: '#neg-row', aspect: '#aspect-field', res: '#aspect-field', batch: '#batch-field', seed: '#seed-field', refs: '#refs' };
+  for (const k of keys) {
+    const q = k.startsWith('param:') ? `#params [data-key="${k.slice(6)}"], #params-open [data-key="${k.slice(6)}"]` : sel[k];
+    for (const el of q ? document.querySelectorAll(q) : []) el.classList.add('claude-changed');
+    if (k === 'negative') $('#negative').classList.add('claude-changed');
+    if (k.startsWith('param:')) $('#settings').open = true;
+  }
+}
+
+/** A graph Claude built -> a one-off preset ("Claude › name") in the picker. */
+function claudePreset(a) {
+  const g = structuredClone(a.graph);
+  const pictureNodes = [];
+  for (const [id, n] of Object.entries(g)) {
+    const m = n.class_type === 'LoadImage' && typeof n.inputs?.image === 'string' && /^picture:(\d+)$/.exec(n.inputs.image);
+    if (m) { pictureNodes.push({ node: id, n: Number(m[1]) }); n.inputs.image = 'example.png'; }
+  }
+  const controls = detectControls(g);
+  if (!controls.ok) { toast(`Claude's workflow could not be loaded: ${controls.error}`, 8000); return null; }
+  const slug = String(a.name || 'one-off').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'one-off';
+  const preset = { id: `claude:${slug}-${Date.now().toString(36)}`, ok: true, file: null, label: a.name, short: a.name, group: 'Claude', workflow: g, controls, output: 'image', claude: true, oneOff: true };
+  workflows = [...workflows, preset];
+  picker.setItems(workflows);
+  return { preset, pictureNodes };
+}
+// Save a Claude one-off as a real preset (node view's Save as preset, with this graph).
+const saveClaudePreset = new SavePresetSheet({
+  getGraph: async () => {
+    const g = structuredClone(current?.workflow || {});
+    for (const [id, n] of Object.entries(g)) if (n.class_type === 'LoadImage' && refs.values[id]) n.inputs.image = refs.values[id];
+    return g;
+  },
+  target: () => (current ? { ...current, label: current.label, group: 'My presets' } : null),
+  save: async ({ name, group, subgroup, workflow }) => {
+    const g = await api.saveGraphPreset({ name, group, subgroup, workflow, from: current?.id });
+    await loadWorkflows(g.id, { remember: true });
+    return g;
+  },
+});
+
+/** Labels for what panel.applyChanges changed. */
+function changeLabels(keys, ch = {}, values = {}) {
+  const s = panel.state;
+  return keys.map((k) => {
+    if (k === 'prompt') return 'prompt rewritten';
+    if (k === 'negative') return s.negative ? `negative: “${s.negative.length > 40 ? s.negative.slice(0, 40) + '…' : s.negative}”` : 'negative off';
+    if (k === 'aspect') return `aspect ${aspectLabel(s.aspect)}`;
+    if (k === 'res') return String(s.res).toUpperCase();
+    if (k === 'batch') return `batch ${s.batch}`;
+    if (k === 'seed') return s.seedMode === 'locked' ? `seed ${s.seed}` : 'random seed';
+    if (k.startsWith('param:')) { const key = k.slice(6); return `${current?.ai?.params?.[key]?.label || key} ${values[key]}`; }
+    return k;
+  });
+}
+
+/** Apply a reply's actions to the form (and batch). -> { changed, undo, extra } */
+async function applyClaude(r) {
+  const acts = r.actions || [];
+  if (!acts.length) { markChanged([]); return { changed: [] }; }
+  if (isLocked()) { toast('A run is going: Claude\'s changes were not applied', 6000); return { changed: [] }; }
+  if (editing) endEdit(true);
+  const prev = { preset: current?.id, panel: panel.snapshot(), refs: { ...refs.values } };
+  const changed = [], marks = new Set(), extra = [];
+  let addedJobs = [], built = null;
+  for (const a of acts) {
+    if (a.type === 'graph') {
+      built = claudePreset(a);
+      if (!built) continue;
+      selectPreset(built.preset.id, { remember: false });
+      marks.add('preset');
+      changed.push(`built “${a.name}”`);
+      for (const { node, n } of built.pictureNodes) { const pic = a.pictures?.find((p) => p.n === n); if (pic) await refs.useImage(node, pic.image); }
+      if (built.pictureNodes.length) marks.add('refs');
+      if (a.prompt) { const k = panel.applyChanges({ prompt: a.prompt }); k.forEach((x) => marks.add(x)); }
+      extra.push(h('div.cl-built', {},
+        h('span.cl-reply-head', {}, claudeLogo(14), 'Built a one-off workflow'),
+        a.roles?.length ? h('span.cl-changes', {}, a.roles.map((role, i) => `${i + 1} · ${role}`).join('   ')) : null,
+        h('span.cl-ok', {}, h('i.i.i-check'), 'Checked against your ComfyUI: every node and model is installed'),
+        h('div.cl-built-btns', {},
+          h('button.btn', { type: 'button', dataset: { act: 'save-claude-preset' }, onclick: () => saveClaudePreset.open() }, 'Save as preset…'),
+          h('button.btn', { type: 'button', dataset: { act: 'open-node-view' }, onclick: () => nodeView.show() }, 'Open in node view'))));
+    }
+    if (a.type === 'form') {
+      const ch = a.changes || {};
+      if (ch.preset && ch.preset !== current?.id && workflows.some((w) => w.id === ch.preset)) {
+        selectPreset(ch.preset, { remember: false });
+        changed.push(`Preset → ${current.short || current.label}`); marks.add('preset');
+      }
+      const keys = panel.applyChanges(ch);
+      keys.forEach((k) => marks.add(k));
+      changed.push(...changeLabels(keys, ch));
+    }
+    if (a.type === 'settings' && a.preset === current?.id) {
+      const keys = panel.applyChanges({}, a.values);
+      keys.forEach((k) => marks.add(k));
+      changed.push(...changeLabels(keys, {}, a.values));
+    }
+    if (a.type === 'pictures') {
+      let n = 0;
+      for (const [i, pic] of (a.pictures || []).entries()) {
+        const slot = refs.slots[i]; if (!slot) break;
+        const ref = await refs.useImage(slot.node, pic.image);
+        if (ref) { n++; if (pic.historyId) refSources.set(ref, pic.historyId); }
+      }
+      if (n) { changed.push(`${n} ${n === 1 ? 'picture' : 'pictures'} loaded`); marks.add('refs'); }
+    }
+    if (a.type === 'variations') {
+      addedJobs = await addVariations(a, r);
+      if (addedJobs.length) changed.push(`${addedJobs.length} jobs added to the batch (not started)`);
+    }
+  }
+  markChanged(marks);
+  const undo = async () => {
+    if (isLocked()) return busy();
+    for (const j of addedJobs) { try { await api.removeScheduled(j.id); } catch { /* already started: it stays */ } }
+    if (addedJobs.length) { batchSheet.refresh(); variationsSheet.close(); }
+    if (prev.preset && prev.preset !== current?.id && workflows.some((w) => w.id === prev.preset)) selectPreset(prev.preset, { remember: false });
+    panel.restore(prev.panel);
+    refs.values = Object.fromEntries(Object.entries(prev.refs).filter(([, v]) => v));
+    refs.render(refs.slots); paintMask();
+    if (built) { workflows = workflows.filter((w) => w.id !== built.preset.id); picker.setItems(workflows); }
+    markChanged([]);
+    toast('Undone');
+  };
+  return { changed, undo, extra };
+}
+
+/** N variations -> N batch jobs (built like + Batch), added NOT started; the Variations sheet. */
+async function addVariations(a, r) {
+  const keep = { preset: current?.id, panel: panel.snapshot() };
+  if (a.preset && a.preset !== current?.id && workflows.some((w) => w.id === a.preset)) selectPreset(a.preset, { remember: false });
+  const base = panel.snapshot();
+  const all = [];
+  try {
+    for (const j of a.jobs) {
+      panel.restore(base);
+      panel.applyChanges({ ...j.changes, batch: 1 }, j.settings);
+      const jobs = await batchJobs();
+      if (!jobs) return [];
+      all.push(...jobs.map((x) => ({ ...x, label: `${x.label} · ${j.label}`, meta: { ...x.meta, claudeLabel: j.label } })));
+    }
+  } finally {
+    if (keep.preset && keep.preset !== current?.id && workflows.some((w) => w.id === keep.preset)) selectPreset(keep.preset, { remember: false });
+    panel.restore(keep.panel);
+  }
+  let before, data;
+  try { before = new Set((await api.getSchedule()).jobs.map((j) => j.id)); data = await api.addToSchedule(all); } catch (e) { toast(e.message, 6000); return []; }
+  await batchSheet.refresh();
+  const added = data.jobs.filter((j) => !before.has(j.id));
+  const rows = added.map((j) => ({ ids: [j.id], jobs: [j], label: j.meta?.claudeLabel || j.label, sub: String(j.meta?.prompt || '').slice(0, 80) }));
+  variationsSheet.open({
+    rows, cost: r.costUsd,
+    onEdit: async (row) => {
+      const d = await api.getSchedule();
+      const waiting = rowsOf(d.jobs).filter((x) => x.status === 'waiting');
+      const index = waiting.findIndex((x) => x.jobs[0].id === row.ids[0]);
+      if (index < 0) return toast('That job already started');
+      startEdit({ ids: row.ids, jobs: waiting[index].jobs, index, label: waiting[index].jobs[0].label });
+    },
+    onRemoveAll: async () => { for (const j of added) { try { await api.removeScheduled(j.id); } catch {} } await batchSheet.refresh(); toast(`Removed ${added.length} jobs`); },
+    onOpenBatch: () => batchSheet.open(),
+  });
+  return added;
+}
+
 // ---- start ---------------------------------------------------------------
 async function start() {
   try { config = await api.getConfig(); if (!config.comfyReachable) banner(`ComfyUI not reachable at ${config.comfyUrl}`); } catch { banner('App server not reachable'); }
   await loadWorkflows();
   loadMemorySettings();
+  await loadClaude();
   await handleLaunchParams();
   // Jobs still active when the page was dropped (Android background): back in
   // the strip and locked, results caught up from /history.
@@ -733,4 +979,4 @@ async function start() {
 start();
 // For tests and poking around from DevTools.
 window.conceptApp = { savePreset, maskSlot, modelThumbs, historyView, isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, picker, selectPreset, loadWorkflows,
-  lock, resume, connBanner, nodeView, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, importSheet, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };
+  lock, resume, connBanner, claude: { get box() { return claudeBox; }, get status() { return claudeStatus; }, settingsSheet, askSheet, variationsSheet, applyClaude, loadClaude }, nodeView, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, importSheet, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };

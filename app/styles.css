@@ -916,3 +916,117 @@ body.node-view-on #btn-import-media { display: none; }
 .dd-scrim { position: fixed; inset: 0; z-index: 129; background: transparent; touch-action: none; }
 .dd-scrim.ar-scrim { z-index: 31; }
 .aspect-pop { z-index: 32; }
+
+/* ---- Batch 16: Claude (ui/claude.js, ui/settings-sheet.js) ------------------
+   Dark ComfyUI look; Claude's clay colour (#D97757) marks Claude things and what
+   Claude changed. Run stays the only blue element. */
+.i-mic{--svg:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%20stroke-width%3D%272%27%3E%3Cpath%20d%3D%27M12%2019v3M19%2010v2a7%207%200%200%201-14%200v-2%27/%3E%3Crect%20x%3D%279%27%20y%3D%272%27%20width%3D%276%27%20height%3D%2713%27%20rx%3D%273%27/%3E%3C/g%3E%3C/svg%3E")}
+.claude-logo { flex: none; }
+.claude-box { border: 1px solid #3a3b3f; background: #1f1f21; border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.claude-box:has(.cl-talk.listening) { border-color: #d97757; padding: 14px; }
+.claude-box:has(.cl-talk.listening) > .cl-head, .claude-box:has(.cl-talk.listening) > .cl-hint, .claude-box:has(.cl-talk.listening) > .cl-log { display: none; }
+.cl-head, .cl-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cl-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.claude-sheet .cl-title { font-size: 14px; }
+.cl-seg { display: flex; background: #262729; border-radius: 9px; padding: 2px; }
+.cl-seg button { border: 0; background: transparent; color: #9a9aa0; font: 600 11px Inter, system-ui, sans-serif; padding: 0 9px; height: 26px; border-radius: 7px; cursor: pointer; }
+.cl-seg button.on { background: #3c3d42; color: #fff; }
+.cl-seg.wide button { flex: 1; height: 34px; font-size: 13px; }
+.cl-badge { font-size: 11px; color: #9a9aa0; background: #262729; border-radius: 7px; padding: 5px 9px; font-weight: 600; white-space: nowrap; }
+.cl-row { display: flex; gap: 8px; align-items: flex-end; }
+.cl-field { flex: 1; min-width: 0; }
+.cl-input { width: 100%; box-sizing: border-box; resize: none; border: 0; border-radius: 10px; background: #2c2d31; color: #fff; font: 14px Inter, system-ui, sans-serif; padding: 10px; line-height: 1.4; }
+.cl-mic { width: 48px; height: 48px; border-radius: 24px; border: 0; background: #3c3d42; color: #fff; display: flex; align-items: center; justify-content: center; flex: none; cursor: pointer; }
+.cl-mic[hidden] { display: none; }
+.cl-mic.small { width: 40px; height: 40px; }
+.cl-mic .i { width: 20px; height: 20px; }
+.cl-mic.send { background: #d97757; color: #171718; }
+.cl-mic:disabled { opacity: .5; }
+.cl-talk.busy .cl-input { opacity: .6; }
+.cl-hint { font-size: 11px; color: #9a9aa0; line-height: 1.4; }
+.cl-listen { display: flex; flex-direction: column; gap: 14px; }
+.cl-listen[hidden], .cl-row[hidden] { display: none; }
+.cl-listen-head { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.cl-bars { display: flex; align-items: center; justify-content: center; gap: 5px; height: 44px; }
+.cl-bars i { width: 4px; height: 12px; border-radius: 2px; background: #d97757; animation: cl-bar .9s ease-in-out infinite alternate; }
+@keyframes cl-bar { to { height: 40px; } }
+@media (prefers-reduced-motion: reduce) { .cl-bars i { animation: none; height: 24px; } }
+.cl-words { margin: 0; font-size: 15px; line-height: 1.45; color: #fff; }
+.cl-listen-btns { display: flex; gap: 10px; align-items: center; }
+.cl-listen-btns > * { flex: 1; }
+.cl-listen-btns .cl-stop { flex: none; }
+.cl-cancel { height: 44px; border: 1px solid #3a3b3f; background: transparent; }
+.cl-stop { width: 64px; height: 64px; border-radius: 32px; border: 0; background: #d97757; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.cl-square { width: 20px; height: 20px; border-radius: 3px; background: #171718; display: block; }
+.cl-log:empty { display: none; }
+.cl-log { display: flex; flex-direction: column; gap: 8px; }
+.cl-you { align-self: flex-end; max-width: 85%; background: #3c3d42; border-radius: 12px 12px 4px 12px; padding: 8px 10px; font-size: 13px; line-height: 1.4; white-space: pre-wrap; }
+.cl-reply, .cl-built { display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; }
+.cl-built { border-top: 1px solid #2c2d31; padding-top: 8px; }
+.cl-reply-head { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.cl-changes { color: #c9c9cd; }
+.cl-text { color: #e8e8ea; white-space: pre-wrap; }
+.cl-ok { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #c9c9cd; }
+.cl-ok .i { color: #8fd19e; }
+.cl-reply-foot, .cl-built-btns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cl-undo, .cl-built-btns .btn { min-height: 34px; height: 34px; border: 1px solid #3a3b3f; background: transparent; font-size: 13px; padding: 0 12px; }
+.cl-cost { font-size: 11px; color: #9a9aa0; margin-left: auto; }
+.cl-cost.right { text-align: right; }
+.cl-wait { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #c9c9cd; }
+.cl-wait .claude-logo { animation: cl-spin 2.4s linear infinite; }
+@keyframes cl-spin { to { transform: rotate(360deg); } }
+.cl-error { font-size: 13px; color: #f2b8a6; background: #3a2620; border-radius: 10px; padding: 8px 10px; }
+.cl-mem .link { color: #c9c9cd; padding: 0; min-height: 0; text-decoration: underline; }
+/* what Claude changed: an orange dot by the label, an orange outline on the control */
+.claude-changed > .label::after, #neg-row.claude-changed .switch::after { content: ''; width: 7px; height: 7px; border-radius: 4px; background: #d97757; display: inline-block; margin-left: 6px; vertical-align: middle; }
+.claude-changed textarea, textarea.claude-changed, .claude-changed .aspect-btn, .claude-changed .dd-btn, .claude-changed .stepper, .claude-changed .seed, .claude-changed .slider-box, .claude-changed .seg, #preset-btn.claude-changed, #refs.claude-changed .ref { box-shadow: inset 0 0 0 1px #d97757; }
+/* sheets: Fix this result, Files, Variations */
+.claude-sheet { gap: 12px; padding: 14px 14px calc(20px + var(--sab, 0px)); border-radius: 20px 20px 0 0; border-top-color: #3a3b3f; max-height: 85vh; grid-template-columns: minmax(0, 1fr); }
+.settings-sheet { grid-template-columns: minmax(0, 1fr); }
+/* a workflow Claude built: "Claude › name" with a small one-off tag */
+#preset-btn.one-off .name::after { content: 'one-off'; margin-left: 8px; font-size: 11px; font-weight: 400; color: #9a9aa0; }
+.cl-attach { display: flex; gap: 10px; align-items: center; background: #1f1f21; border-radius: 12px; padding: 8px; }
+.cl-attach img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; background: #2a2b2e; flex: none; }
+.cl-attach-t { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 12px; }
+.cl-attach-t small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+.cl-picked { display: flex; gap: 8px; flex-wrap: wrap; }
+.cl-pick { position: relative; width: 56px; height: 56px; }
+.cl-pick img { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: #2a2b2e; display: block; }
+.cl-pick b { position: absolute; bottom: 3px; left: 3px; width: 18px; height: 18px; border-radius: 9px; background: #fff; color: #171718; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.cl-answer { background: #1f1f21; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.cl-answer[hidden] { display: none; }
+.cl-jobs { display: flex; flex-direction: column; gap: 6px; }
+.cl-job { display: flex; align-items: center; gap: 10px; background: #1f1f21; border: 1px solid #2c2d31; border-radius: 12px; padding: 10px; }
+.cl-n { width: 26px; height: 26px; border-radius: 13px; background: #262729; color: #fff; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; }
+.cl-job-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.cl-job-t small { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cl-job .icon-btn { min-height: 36px; min-width: 36px; width: 36px; padding: 0; border: 0; background: #262729; border-radius: 9px; color: #c9c9cd; display: flex; align-items: center; justify-content: center; }
+.cl-sheet-btns { display: flex; gap: 8px; }
+.cl-sheet-btns .btn { flex: 1; height: 44px; border: 1px solid #3a3b3f; background: transparent; }
+.btn.cl-strong, .cl-sheet-btns .btn.cl-strong { background: #3c3d42; border: 0; font-weight: 600; }
+.sel-claude { display: inline-flex; align-items: center; justify-content: center; }
+.sel-claude[hidden] { display: none; }
+/* Settings */
+.settings-sheet { gap: 18px; padding: 14px 16px calc(22px + var(--sab, 0px)); border-radius: 20px 20px 0 0; max-height: 90vh; }
+.st-head { display: flex; align-items: center; justify-content: space-between; font-size: 18px; font-weight: 600; }
+.st-body { display: flex; flex-direction: column; gap: 18px; }
+.st-section { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #c9c9cd; margin-bottom: -8px; }
+.st-switch { display: flex; align-items: center; gap: 12px; background: #1f1f21; border-radius: 12px; padding: 12px; cursor: pointer; }
+.st-sw-t { flex: 1; display: flex; flex-direction: column; gap: 3px; font-size: 15px; }
+.st-sw-t small { font-size: 12px; color: #9a9aa0; line-height: 1.35; }
+.st-switch input { width: 44px; height: 26px; accent-color: #d97757; flex: none; }
+.st-row { display: flex; flex-direction: column; gap: 8px; }
+.st-row small { font-size: 12px; line-height: 1.35; }
+.st-lbl { font-size: 12px; color: #9a9aa0; }
+.st-bar { height: 10px; border-radius: 5px; background: #262729; overflow: hidden; }
+.st-bar i { display: block; height: 100%; background: #d97757; }
+.st-spend { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.st-limit { display: flex; align-items: center; gap: 8px; }
+.st-num, .st-key { height: 42px; box-sizing: border-box; border: 0; border-radius: 10px; background: #2c2d31; color: #fff; font: 500 16px Inter, system-ui, sans-serif; padding: 0 12px; }
+.st-num { width: 90px; }
+.st-key { flex: 1; min-width: 0; font-size: 14px; }
+.st-keyrow { display: flex; align-items: center; gap: 8px; }
+.st-keyrow .btn { height: 42px; border: 1px solid #3a3b3f; background: transparent; }
+.st-saved { flex: 1; height: 42px; border-radius: 10px; background: #1f1f21; display: flex; align-items: center; padding: 0 12px; gap: 8px; font-size: 14px; color: #c9c9cd; }
+.st-saved .i { color: #8fd19e; }
+.st-ask { margin: -8px 0 0; font-size: 12px; color: #f2b8a6; }
