@@ -139,7 +139,7 @@ export function createApp(cfg, opts = {}) {
     const info = await comfyInfo.get({ fresh });
     const hw = await hardware.detect();
     let profileId; try { profileId = (await memory.status()).profile.id; } catch {}
-    const hwOpts = { gpuTotalMB: hw.gpu?.totalMB, ramFreeMB: hw.ram?.freeMB };
+    const hwOpts = { gpuTotalMB: hw.gpu?.totalMB, ramFreeMB: hw.ram?.freeMB, gpuName: hw.gpu?.name }; // batch 14: name -> bf16 check
     const ai = presets.list(info, hwOpts, { profileId });
     const mine = await Promise.all(userPresets.list().map(async (u) => {
       const base = { id: `user:${u.id}`, file: null, label: u.name, group: 'My presets', user: { id: u.id, name: u.name, blocks: u.blocks, output: u.output } };

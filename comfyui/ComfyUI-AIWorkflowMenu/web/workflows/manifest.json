@@ -277,6 +277,13 @@
     },
     {
       "menu": "workflows",
+      "path": "Concept/Concept Looks (Qwen-Image)",
+      "file": "api/wf-concept-qwen.json",
+      "format": "api",
+      "preset": "ai:wf-concept-qwen"
+    },
+    {
+      "menu": "workflows",
       "path": "VFX/Flipbook Sheet",
       "file": "api/wf-flipbook.json",
       "format": "api",

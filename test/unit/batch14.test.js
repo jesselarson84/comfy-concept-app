@@ -1,5 +1,5 @@
 // Batch 14: the helper models in the app - FLUX.1 Fill (inpaint + outpaint), Concept
-// Looks with the FLUX.1 Dev ControlNet ("Guide by" sets several switches),
+// Looks with FLUX.1 Dev / Qwen-Image ControlNets ("Guide by" sets several switches),
 // Concept Looks (Pose) with DWPose, Depth Anything 3 in Concept Looks (Depth), and
 // SAM 2 "Select" in the mask editor.
 import { test } from 'node:test';
@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from './helpers.js';
-import { validatePreset, applyPresetParams } from '../../app/js/lib/presets.js';
+import { validatePreset, applyPresetParams, gpuHasBf16, presetAvailability } from '../../app/js/lib/presets.js';
 import { samGraph, createSam } from '../../server/sam.js';
 
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
@@ -43,10 +43,8 @@ test('FLUX.1 Fill: inpaint (crop & stitch, mask) and outpaint (pad) presets', ()
   for (const p of [ip, op]) assert.doesNotMatch(JSON.stringify(p.manifest), /colour/i, 'US spelling');
 });
 
-test('Concept Looks with FLUX.1 Dev: Guide by Edges / Depth / Depth pass / Pose', () => {
-  // (Concept Looks with Qwen-Image + InstantX was left out: black pictures on the 2080 Ti, no bf16)
-  assert.ok(!fs.existsSync(path.join(ROOT, 'workflows/ai/wf-concept-qwen.json')));
-  for (const [id, cn] of [['wf-concept-flux', 'FLUX.1-dev-ControlNet-Union-Pro-2.0.safetensors']]) {
+test('Concept Looks with FLUX.1 Dev / Qwen-Image: Guide by Edges / Depth / Depth pass / Pose', () => {
+  for (const [id, cn] of [['wf-concept-flux', 'FLUX.1-dev-ControlNet-Union-Pro-2.0.safetensors'], ['wf-concept-qwen', 'Qwen-Image-InstantX-ControlNet-Union.safetensors']]) {
     const p = load(id);
     assert.equal(p.manifest.group, 'Concept');
     assert.equal(of(p.workflow, 'ControlNetLoader')[0][1].inputs.control_net_name, cn);
@@ -103,4 +101,19 @@ test('SAM 2 Select: graph, server route, mask editor tool', async () => {
   assert.match(me, /tool\('select', 'Select'\)/);
   assert.match(me, /await samSelect\(this\.source, \[\{ x: p\.x, y: p\.y \}\]\)/);
   assert.match(me, /this\.pushUndo\(\);\n\s+this\.ctx\.globalCompositeOperation = 'source-over';\n\s+this\.ctx\.drawImage\(tmp, 0, 0\);/, 'a selection can be undone');
+});
+
+test('Concept Looks (Qwen-Image) needs bf16: unavailable on an RTX 2080 Ti, fine on a 5080', () => {
+  for (const [n, v] of [['NVIDIA GeForce RTX 2080 Ti', false], ['NVIDIA GeForce RTX 5080', true], ['NVIDIA GeForce RTX 3060', true], ['NVIDIA GeForce RTX 4090', true],
+    ['NVIDIA GeForce GTX 1080 Ti', false], ['NVIDIA RTX A4000', true], ['NVIDIA RTX 4000 Ada Generation', true], ['Quadro RTX 4000', false], ['Tesla T4', false], ['NVIDIA A100-SXM4-40GB', true], ['', null], ['AMD Radeon RX 7900', null]]) {
+    assert.equal(gpuHasBf16(n), v, n);
+  }
+  const q = load('wf-concept-qwen');
+  assert.equal(q.manifest.needs.bf16, true);
+  const info = { objectInfo: JSON.parse(read('test/fixtures/object-info.json')), models: JSON.parse(read('test/fixtures/models.json')) };
+  const old = presetAvailability(q, info, { gpuName: 'NVIDIA GeForce RTX 2080 Ti', gpuTotalMB: 11264, ramFreeMB: 64000 });
+  assert.equal(old.status, 'unavailable'); assert.equal(old.label, 'needs a newer GPU'); assert.match(old.reason, /RTX 30 series or newer/);
+  assert.notEqual(presetAvailability(q, info, { gpuName: 'NVIDIA GeForce RTX 5080', gpuTotalMB: 16303, ramFreeMB: 64000 }).label, 'needs a newer GPU');
+  assert.notEqual(presetAvailability(load('wf-concept-flux'), info, { gpuName: 'NVIDIA GeForce RTX 2080 Ti', gpuTotalMB: 11264, ramFreeMB: 64000 }).label, 'needs a newer GPU', 'only presets that say so');
+  assert.match(read('server/index.js'), /gpuName: hw\.gpu\?\.name/);
 });

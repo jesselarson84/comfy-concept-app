@@ -42,7 +42,7 @@ export function createBuilder({ cfg, comfyInfo, presets, memory, hardware, fetch
     const audio = r.blocks.find((b) => b.type === 'audio');
     if (audio) {
       const p = presets.get(`tts-${audio.params.engine}`);
-      const a = p && presets.list(info, { gpuTotalMB: hw.gpu?.totalMB, ramFreeMB: hw.ram?.freeMB }, { profileId }).find((x) => x.id === `ai:${p.id}`)?.availability;
+      const a = p && presets.list(info, { gpuTotalMB: hw.gpu?.totalMB, ramFreeMB: hw.ram?.freeMB, gpuName: hw.gpu?.name }, { profileId }).find((x) => x.id === `ai:${p.id}`)?.availability;
       if (!p || a?.status === 'unavailable') return { ...r, ok: false, stage: 'models', errors: [`${audio.params.engine}: ${a?.reason || 'preset missing'}`] };
     }
     const fit = vramFit({ estMB: r.estMB, gpuTotalMB: hw.gpu?.totalMB, ramFreeMB: hw.ram?.freeMB, profileId });
