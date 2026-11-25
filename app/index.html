@@ -54,9 +54,6 @@
         <label class="switch"><input type="checkbox" id="neg-toggle"> <span>Negative prompt</span></label>
       </div>
       <textarea id="negative" rows="2" placeholder="What to avoid&hellip;" hidden></textarea>
-      <!-- Undo / Versions for the prompt box, and the Prompt assistant (Ollama chat) -->
-      <div id="prompt-tools"></div>
-      <div id="chat-mount"></div>
 
       <div id="refs" class="refs" hidden></div>
       <div id="file-inputs" class="refs" hidden></div>
@@ -81,15 +78,9 @@
               </button>
               <div id="aspect-pop" class="aspect-pop" role="dialog" aria-label="Aspect ratio" hidden></div>
             </div>
-            <!-- Resolution (batch 5): long side 1K / 2K; 4K = 2K render + 2x upscale. Hidden where it does not apply. -->
-            <label id="res-select" class="ratio-select res-select" hidden>
-              <select id="aspect-res" aria-label="Resolution">
-                <option value="1k">1K</option>
-                <option value="2k">2K</option>
-                <option value="4k">4K</option>
-              </select>
-              <i class="i i-chevron-down" aria-hidden="true"></i>
-            </label>
+            <!-- Resolution (batch 5): long side 1K / 2K; 4K = 2K render + 2x upscale. Hidden where it does not apply.
+                 Batch 15: the app's own dropdown (ui/dropdown.js), filled by ui/prompt-panel.js. -->
+            <div id="res-select" class="res-select" hidden></div>
           </div>
         </div>
         <div id="batch-field" class="ctl">

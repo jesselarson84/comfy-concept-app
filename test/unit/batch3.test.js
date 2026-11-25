@@ -57,7 +57,7 @@ import { ROOT, startStack, GPU_5080 } from './helpers.js';
 import { textEncoderOnCpu, tiledVaeDecode, wantTiledDecode, isOom, isHeavy, ggufPath, TILED_INPUTS } from '../../app/js/lib/memory-options.js';
 import { decideBeforeQueue, DEFAULT_MEMORY_CONFIG } from '../../app/js/lib/memory-profiles.js';
 import { validatePreset, checkInstalled } from '../../app/js/lib/presets.js';
-import { validateGraph } from '../../app/js/lib/builder.js';
+import { validateGraph } from '../../app/js/lib/graph-validate.js';
 
 const readJson = (p) => JSON.parse(fs.readFileSync(path.join(ROOT, p), 'utf8'));
 const objectInfo = readJson('test/fixtures/object-info.json');
@@ -145,16 +145,15 @@ test('Qwen Image Edit 2511: Q5_K_M GGUF + 2511 Lightning LoRA (not the 2509 one)
   assert.equal(checkInstalled(g, { objectInfo, models }).ok, true);
 });
 
-test('memory settings: GET/POST /api/memory/settings persist; Ollama CPU mode adds num_gpu 0 to chat; heavy before-queue unloads', async () => {
+test('memory settings: GET/POST /api/memory/settings persist (batch 15: no Ollama CPU switch); heavy before-queue unloads', async () => {
   const s = await startStack({ gpu: GPU_5080 });
   try {
     const j = (r) => r.json();
-    assert.deepEqual(await j(await fetch(s.base + '/api/memory/settings')), { textEncoderCpu: false, ollamaCpu: false });
+    assert.deepEqual(await j(await fetch(s.base + '/api/memory/settings')), { textEncoderCpu: false });
     const r = await j(await fetch(s.base + '/api/memory/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ textEncoderCpu: true, ollamaCpu: true, junk: 1 }) }));
-    assert.deepEqual(r, { textEncoderCpu: true, ollamaCpu: true });
+    assert.deepEqual(r, { textEncoderCpu: true });
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(s.dataDir, 'memory-settings.json'), 'utf8')), r);
-    const bc = await j(await fetch(s.base + '/api/memory/before-chat', { method: 'POST', body: JSON.stringify({ model: 'gemma3:4b' }) }));
-    assert.deepEqual(bc.chatOptions, { num_gpu: 0 });
+    assert.equal((await fetch(s.base + '/api/memory/before-chat', { method: 'POST', body: '{}' })).status, 404, 'batch 15: the chat routes are gone');
     const bq = await j(await fetch(s.base + '/api/memory/before-queue', { method: 'POST', body: JSON.stringify({ workflow: 'ai:pixal3d-trellis2' }) }));
     assert.equal(bq.heavy, true);
     const light = await j(await fetch(s.base + '/api/memory/before-queue', { method: 'POST', body: JSON.stringify({ workflow: 'ai:klein-4b-t2i' }) }));
@@ -181,14 +180,13 @@ export function inventedInputs(g, oi) {
   }
   return bad;
 }
-test('no invented inputs: every AI preset and action graph only sends inputs /object_info defines', () => {
+test('no invented inputs: every AI preset graph only sends inputs /object_info defines', () => {
   const ids = fs.readdirSync(path.join(ROOT, 'workflows/ai')).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5));
   for (const id of ids) {
     const p = preset(id);
     assert.deepEqual(inventedInputs(p.workflow, objectInfo), [], id);
     if (p.manifest.gguf) assert.deepEqual(inventedInputs(ggufPath(p.workflow, p.manifest, { objectInfo, profileId: 'small' }).workflow, objectInfo), [], id + ' gguf');
   }
-  for (const f of fs.readdirSync(path.join(ROOT, 'workflows/actions'))) assert.deepEqual(inventedInputs(readJson(`workflows/actions/${f}`).workflow, objectInfo), [], f);
 });
 
 // ---- item 6: Klein 4B mask-paint inpaint ---------------------------------------------

@@ -2,7 +2,7 @@
 // picker grid) and "Save to Drive".
 // -----------------------------------------------------------------------------
 // Which files count as the app's: everything ComfyUI saved under
-// output/<outputSubfolder>/ (all presets, actions and builder setups write there,
+// output/<outputSubfolder>/ (all presets write there,
 // "concept-app" by default) plus any output image recorded in data/history.json.
 // Nothing else in ComfyUI's output folder is listed or copied.
 //

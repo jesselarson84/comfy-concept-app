@@ -13,6 +13,7 @@ import { h, toast } from './dom.js';
 import { detectControls } from '../lib/workflow-detect.js';
 import { SUBGROUPS } from '../lib/presets.js';
 import { SECTIONS } from './workflow-picker.js';
+import { dropdown } from './dropdown.js';
 
 /** Human list of what the form will show for a graph. */
 export function controlSummary(c) {
@@ -45,13 +46,13 @@ export class SavePresetSheet {
     const t = this.target() || {};
     const mine = !!t.graph; // one of the user's saved presets -> Update is possible
     const name = h('input.sheet-input', { type: 'text', maxlength: 60, value: mine ? t.label : t.label ? `${t.label} copy` : 'My preset', 'aria-label': 'Preset name' });
-    const section = h('select.sheet-input', { 'aria-label': 'Section' }, ...SECTIONS.map((s) => h('option', { value: s.key }, s.label)));
-    section.value = SECTIONS.some((s) => s.key === t.group) ? t.group : 'My presets';
-    const sub = h('select.sheet-input', { 'aria-label': 'Sub section' });
-    const subRow = h('label.sp-row', {}, h('span.sp-label', {}, 'Sub section'), sub);
+    // Batch 15: the app's own dropdowns (ui/dropdown.js); they stay open after a pick.
+    const section = dropdown({ options: SECTIONS.map((s) => [s.key, s.label]), value: SECTIONS.some((s) => s.key === t.group) ? t.group : 'My presets', label: 'Section' });
+    const sub = dropdown({ label: 'Sub section' });
+    const subRow = h('div.sp-row', {}, h('span.sp-label', {}, 'Sub section'), sub);
     const paintSub = () => {
       const subs = SUBGROUPS[section.value] || [];
-      sub.replaceChildren(...subs.map((n) => h('option', { value: n }, n)));
+      sub.setOptions(subs);
       subRow.hidden = !subs.length;
       if (subs.length) sub.value = subs.includes(t.subgroup) ? t.subgroup : subs[0];
     };
@@ -84,7 +85,7 @@ export class SavePresetSheet {
       h('div.sheet-title', {}, mine ? `Save "${t.label}"` : 'Save as preset'),
       mine ? null : t.ai ? h('p.sp-note.muted', {}, `${t.label} itself stays as it is; this saves a new preset.`) : null,
       h('label.sp-row', {}, h('span.sp-label', {}, 'Name'), name),
-      h('label.sp-row', {}, h('span.sp-label', {}, 'Section'), section),
+      h('div.sp-row', {}, h('span.sp-label', {}, 'Section'), section),
       subRow, controls,
       h('div.sp-actions', {}, btn('Cancel', 'cancel', '', () => this.close()), ...actions));
     this.el.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') this.close(); if (e.key === 'Enter' && e.target === name) actions.at(-1).click(); });

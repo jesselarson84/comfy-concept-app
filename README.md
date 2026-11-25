@@ -70,11 +70,11 @@ Chrome only offers the share target for an installed PWA served over HTTPS, whic
 
 ## Using it
 
-- **Preset picker** (top): **Models | Workflows** tabs, the same as ComfyUI's right-click *AI Models* / *AI Workflows* menus. **Workflows** holds the task pipelines: Textures / Concept / VFX (see *Models and Workflows*). **Models** has the sections 3D / Image / Video / Audio, with Image split into **Text to Image, Image Edit, Inpainting, Upscale** (from each preset's `menuPath`, e.g. `Image/Text to Image/Z-Image Turbo`; the last part is the short name the row shows, `menuOrder` sorts the rows; the button reads *Image › Text to Image › Z-Image Turbo* and drops *Image ›* on a narrow phone), and **My presets** at the bottom: setups saved from the chat builder, plus any workflow you import or drop into `workflows/`. The default preset is **FLUX.2 Klein 4B Text to Image**. A fresh client opens on it whenever it is available; if it is not, on the first available AI Workflow entry, never on My presets. After you pick a preset, the app reopens on your pick (`app/js/lib/preset-choice.js`; `/api/workflows` also returns this `default`).
-  - The old built-in presets *Fast concept* and *From reference image* (the "App presets" section) are retired. Anything saved with them still works: the chosen preset in the browser, history entries (Reuse) and chat images map *Fast concept* to **FLUX.2 Klein 4B Text to Image** and *From reference image* to **FLUX.2 Klein 4B Image Edit**, and an old reference image lands in the Image Edit slot. The mapping happens when the app reads the data (`app/js/lib/legacy-presets.js`); `data/history.json`, `data/chats.json` and settings are not rewritten. Each row shows its live availability. **needs download** and **missing node** rows are greyed out; tap one to see why. **slow · RAM offload** and **tight on 11 GB** are hints. See *AI Workflow presets*.
+- **Preset picker** (top): **Models | Workflows** tabs, the same as ComfyUI's right-click *AI Models* / *AI Workflows* menus. **Workflows** holds the task pipelines: Textures / Concept / VFX (see *Models and Workflows*). **Models** has the sections 3D / Image / Video / Audio, with Image split into **Text to Image, Image Edit, Inpainting, Upscale** (from each preset's `menuPath`, e.g. `Image/Text to Image/Z-Image Turbo`; the last part is the short name the row shows, `menuOrder` sorts the rows; the button reads *Image › Text to Image › Z-Image Turbo* and drops *Image ›* on a narrow phone), and **My presets** at the bottom: presets saved from the node view, plus any workflow you import or drop into `workflows/`. The default preset is **FLUX.2 Klein 4B Text to Image**. A fresh client opens on it whenever it is available; if it is not, on the first available AI Workflow entry, never on My presets. After you pick a preset, the app reopens on your pick (`app/js/lib/preset-choice.js`; `/api/workflows` also returns this `default`).
+  - The old built-in presets *Fast concept* and *From reference image* (the "App presets" section) are retired. Anything saved with them still works: the chosen preset in the browser, history entries (Reuse) map *Fast concept* to **FLUX.2 Klein 4B Text to Image** and *From reference image* to **FLUX.2 Klein 4B Image Edit**, and an old reference image lands in the Image Edit slot. The mapping happens when the app reads the data (`app/js/lib/legacy-presets.js`); `data/history.json`, `data/chats.json` and settings are not rewritten. Each row shows its live availability. **needs download** and **missing node** rows are greyed out; tap one to see why. **slow · RAM offload** and **tight on 11 GB** are hints. See *AI Workflow presets*.
 - **Prompt, Aspect** (1:1 / 4:3 / 3:2 / 16:9 chips plus a portrait/landscape flip; the size is shown and kept inside the preset's range), **Batch (1-20), Seed** (Lock = fixed; the dice button picks a new one). The negative prompt toggle appears only if the workflow has a real negative text node. The klein presets do not: their negative is a zeroed copy.
 - **Run** (the blue button; blue is used only here) queues *N separate jobs*. Thumbnails in the bottom strip (phone) or the right-hand grid (tablet) show progress, and each fills in as its job finishes.
-- **While a run is going the form is locked** (prompt, aspect, batch, seed, Settings, reference slots, the Prompt assistant, the menu switches and Import): nothing can change until every job of the run has finished, failed or been cancelled. Cancel queue, the thumbnails and viewer, History, the canvas toggle and scrolling keep working (`app/js/ui/form-lock.js`).
+- **While a run is going the form is locked** (prompt, aspect, batch, seed, Settings and reference slots): nothing can change until every job of the run has finished, failed or been cancelled. Cancel queue, the thumbnails and viewer, History, the canvas toggle and scrolling keep working (`app/js/ui/form-lock.js`).
 - **Reconnecting**: coming back from another app reconnects the ComfyUI websocket at once (on visibility, focus, pageshow, online and the Android app's onResume; after more than 10 s away the socket is replaced even if it still looks open) and catches results up from `/history`. *Not connected to ComfyUI - retrying…* only appears when the connection has been down for 4 s (`app/js/lib/conn-banner.js`).
 - **(i) next to every setting** opens a short plain-language explanation (tap outside or Escape closes it). The texts live in `app/js/lib/setting-info.js` (a glossary by setting name) and can be changed or added per preset in its JSON: `preset.params.<key>.info`, or `preset.info.<key>` for the other controls (`prompt`, `negative`, `aspect`, `batch`, `seed`, `image`, `image.<node>`, `mask`, `video`, `audio`). A unit test fails if any control of a bundled workflow has no text.
 - **Cancel queue** removes your pending jobs from ComfyUI's queue and interrupts the one that is running.
@@ -91,36 +91,11 @@ Chrome only offers the share target for an installed PWA served over HTTPS, whic
 - **Canvas button** (top bar) toggles the **node view**: ComfyUI's own UI (`/comfy/`) fills the screen under the app's top bar, and the button stays highlighted. Tap it again (or press Back) for the normal view. It opens the **selected preset's graph** (loaded when you enter after picking a different preset; going in and out with the same preset keeps your canvas edits). The ComfyUI page is loaded once and then only hidden and shown, so your graph, its undo history and its websocket survive switching back and forth, and ComfyUI's *Changes you made may not be saved* prompt does not appear. The workflow dropdown is hidden while the node view is shown, and History and the node view switch straight across. (`app/js/ui/node-view.js`)
 - **Save preset** (top bar, node view only): saves the graph on the canvas as a preset. The sheet asks for a name, a section (3D / Image / Video / Audio / My presets) and, for Image, a sub section, and lists the controls the form will show (prompt, negative, pictures, aspect, seed, steps, strength: detected like a dropped-in workflow; anything else runs as built). Saving from a built-in preset always makes a new one; from one of your saved presets you get **Update** or **Save as new**. The ⚙ on a saved preset's row in the picker renames it, moves it to another section, or deletes it. Stored in `data/graph-presets.json` (git-ignored). (`app/js/ui/save-preset.js`, `server/graph-presets.js`)
 - **Aspect / resolution**: the ratio dropdown, the orientation buttons (they only swap the numbers, 16:9 ↔ 9:16; hidden on 1:1) and, on text-to-image presets, **1K / 2K / 4K** (long side 1024 / 2048; 4K renders at 2K and upscales 2× with an installed 4x model in the same graph). Batch and Seed share the next row. (`app/js/lib/resolution.js`)
-- There is no ⋮ menu any more (batch 5): workflows arrive by exporting into `workflows/`, the builder model is set in `data/builder.json`, and a saved CPU switch in `data/memory-settings.json` is still honoured.
-- **Prompt assistant** (under the prompt box) and **💬 Discuss** in the viewer: see below.
+- **Dropdowns** (batch 15): the ratio grid, 1K / 2K / 4K, every dropdown under Settings and the Section pickers use the app's own pop-up instead of the phone's menu. It **stays open after a pick**, so you can try a few values; a tap outside (which does nothing else) or Escape closes it. The preset picker at the top still closes when you pick. (`app/js/ui/dropdown.js`)
+- There is no ⋮ menu any more (batch 5): workflows arrive by exporting into `workflows/`, and a saved CPU text-encoder switch in `data/memory-settings.json` is still honoured.
+## Prompt assistant, workflow actions and setup builder: removed (batch 15)
 
-## Prompt assistant (Ollama chat, tied to the prompt box)
-
-The prompt box is the single source of truth. The assistant sits right under it and every turn sends the **current prompt box** (and the negative prompt if this preset has one and it is on) to a local Ollama model, together with the conversation and the images you discussed (their prompt and seed).
-
-- **Create**: "a purple duck at a misty pond" gives a full Flux.2 [klein] style natural-language prompt.
-- **Revise**: "make it moodier, dusk light". The model returns the complete new prompt.
-- **Fix an image**: open it in the viewer and tap **💬 Discuss**. The image is attached (resized to 896 px, JPEG, base64) to your next message for vision models (gemma3:4b "sees images"); non-vision models get only its prompt and seed. Say what is wrong ("looks like a swan, not a duck").
-- Every proposal shows a **word diff** against the box and **Apply**, **Apply + Run (new seed)** and, after Discuss, **Apply + same seed N** (re-runs the discussed seed so only the prompt change shows). Nothing is written into the box automatically.
-- **Undo** (under the prompt box) and **Versions (n)** keep the last 30 prompt versions (this device, localStorage).
-- Replies are structured (Ollama `format` = JSON schema: `reply`, `prompt` or null, `negative`, `action`). If a model ignores the schema the app still finds JSON inside prose, a ```prompt block or a "Prompt:" line; truncated output never touches the box.
-- Conversations are saved on the PC in `data/chats.json` (next to `history.json`) and are shared by all devices. The model picker lists `/api/tags`; if Ollama is not running the panel says so and offers Retry.
-- Ollama stays on 127.0.0.1:11434. The app proxies only `GET /api/tags|version|ps` and `POST /api/show|chat` under `/ollama/`; pull, delete, create and so on answer 403.
-
-**Why one-tap Apply and not automatic**: you may have edited the box while the model was thinking; small models sometimes drop details from a long prompt (the diff makes that visible before it costs a render); and the box stays the one source of truth that Run uses. Apply is one tap, and Undo/Versions make it reversible.
-
-## Workflow actions ("upscale this", "make it 3D")
-
-Actions are API-format workflows in `workflows/actions/*.json` with a small manifest (`action`: name, description, keywords, the `#image` LoadImage node, and `params` that point at `#expose` nodes with min/max/options). The model sees the list and may answer with `{action, params, image_ref}`; it never sends node graphs. The app:
-- ignores an action the user did not ask for (your words must name it), and lets your words win when the model picks the wrong one;
-- clamps numbers into range and resets unknown enum values to the default (shown as notes);
-- uses the image you named (`img2`) or the last discussed one; output images are wired as `"concept-app/x.png [output]"`, which LoadImage accepts without re-uploading;
-- shows a confirm chip ("Upscale (scale 3, …) on img2. Run?"). Nothing is queued before you tap **Run**.
-Results go to the strip and History, linked to the parent image.
-
-Shipped actions (both verified on the PC):
-- **Upscale** (`upscale.json`): UpscaleModelLoader (4x-UltraSharp default; RealESRGAN x4plus, 4x-ClearReality, 4x Remacri) + ImageScaleBy, scale 1.5-4.
-- **Image to 3D** (`image-to-3d.json`): Hunyuan3D 2.1 with core ComfyUI nodes (`hunyuan_3d_v2.1.safetensors`, already installed), steps 10-50, octree detail 128-384. The `.glb` shows as a **3D ↓** tile that downloads the file (no 3D viewer, to stay dependency-free). Open it in Blender/Houdini or Windows 3D Viewer.
+The Ollama chat under the prompt box (with its Undo / Versions), the chat's workflow actions (upscale, image to 3D) and the chat's setup builder are gone, to make room for a Claude integration. Ollama stays for the History tagger. An old `data/chats.json`, `data/user-presets.json` or `data/builder.json` is left on disk and no longer read.
 
 ## GPU & memory profiles (2080 Ti now, RTX 5080 later)
 
@@ -128,13 +103,10 @@ The app reads the GPU's name, total and free VRAM (`nvidia-smi`, falling back to
 
 | | small (< 12 GB, RTX 2080 Ti 11 GB) | large (16 GB+, RTX 5080 16 GB) |
 |---|---|---|
-| Before every ComfyUI queue (batch or action) | unload the chat model (`keep_alive: 0`, checked with `/api/ps`) | keep it, unless free VRAM - headroom < the workflow's `workflowVramNeedMB` |
-| Chat model keep_alive | 5m | 10m |
-| Before a chat turn | ComfyUI `/free` (unload models) if free VRAM is too low for the model | nothing; ComfyUI keeps its models; Ollama may spill part of the model to RAM |
-| Chat models in the picker | up to ~6.5 GB loaded | up to ~26 GB (12B class fits; bigger ones run partly in RAM) |
+| Before every ComfyUI queue | unload Ollama's model (the tagger's; `keep_alive: 0`, checked with `/api/ps`) | keep it, unless free VRAM - headroom < the workflow's `workflowVramNeedMB` |
 | Out-of-memory fallback | ComfyUI `/free` {unload_models, free_memory}, retry once | ComfyUI `/free` {free_memory}, retry once |
 
-- **RAM (96 GB) is spill and cache room.** Models that do not fit in free VRAM are labelled "slower, partly in RAM"; when a loaded model's `/api/ps size_vram < size` the chat shows the badge "slower, runs partly in RAM (N% on GPU)". A model that would not fit in free VRAM + (free RAM - 8 GB reserve) is refused instead of pushing Windows into the page file.
+- **RAM (96 GB) is spill and cache room.** `/api/memory` reports a badge "slower, runs partly in RAM (N% on GPU)" when a loaded Ollama model's `/api/ps size_vram < size`.
 - **Override**: Menu (⋮) > GPU & memory > Profile (saved in `data/memory-profile.json`), or `"profile"` in the config file, or env `MEMORY_PROFILE`. Precedence: env > app setting > config file > auto.
 - The app never closes or restarts ComfyUI; `/free` is an API call.
 - **After the 5080 swap**: nothing to change here (auto-detect). ComfyUI's bundled PyTorch already supports it: torch 2.10.0+cu130, arch list sm_75 … sm_120 (checked 2026-11-21).
@@ -226,7 +198,7 @@ The picker has a **Models | Workflows** tab for each kind. It opens on the tab o
 | Textures › Remove Lighting | Removes baked-in shadows and highlights so a photo texture works as albedo. Uses the Qwen Image Edit 2511 graph with a built-in instruction. | as Qwen Edit 2511 |
 | Textures › Make Seamless | Shifts the image by half so the old edges meet as a cross in the middle, fixes the cross, then shifts back. Only the cross changes. **AI repaint** (default): Z-Image Turbo plus the Fun ControlNet in inpaint mode redraws the cross, so shapes like bricks join up. **Blend**: the original is faded over the cross with a wide soft mask. It is instant, uses no AI, and suits noise-like surfaces. | Z-Image Turbo, lite ControlNet |
 | Textures › Grunge Map | Z-Image Turbo makes the pattern. An offset blend makes it tile; in testing, an AI repaint flattened the grain into grey bands. Then grayscale (luma) and a contrast push. | Z-Image Turbo |
-| Textures › Photo to Texture | A phone photo of a surface in, a tiling texture out. Your notes (e.g. "flatten the dented panel underneath, keep the chipped paint and every chip") go into Qwen Image Edit 2511 together with lighting removal. Then it can be made seamless (AI repaint or blend), and is upscaled with a model to 1K / 2K / 4K. The prompt assistant writes keep / remove notes for this preset (manifest `assistant`). | Qwen Edit 2511, Z-Image Turbo, lite ControlNet, an upscale model |
+| Textures › Photo to Texture | A phone photo of a surface in, a tiling texture out. Your notes (e.g. "flatten the dented panel underneath, keep the chipped paint and every chip") go into Qwen Image Edit 2511 together with lighting removal. Then it can be made seamless (AI repaint or blend), and is upscaled with a model to 1K / 2K / 4K. | Qwen Edit 2511, Z-Image Turbo, lite ControlNet, an upscale model |
 | Textures › PBR Maps | Normal, height, roughness, AO and an Unreal ORM map (R AO, G roughness, B metal) from one texture. Classic image math with core nodes only, like Materialize or CrazyBump: height from the picture's own detail, normals from wrap-around slopes (so tiling stays tiling). Options: DirectX or OpenGL green; "raised parts are lighter / darker" (light grout needs darker). Instant, local, fine for client work. | nothing |
 | Textures › PBR Maps (CHORD) | Ubisoft's CHORD: base colour, normal, height, roughness, metalness, plus AO and ORM. **Research-only license.** Install ComfyUI-Chord through ComfyUI Manager and put `chord_v1.safetensors` (Hugging Face, Ubisoft/ubisoft-laforge-chord, accept the terms) in `models/checkpoints`; until then the preset shows *missing node*. | ComfyUI-Chord |
 | Textures › Depth + Normal | Depth and scene normals from a photo or concept art (MoGe-2, core nodes). It shows the shape of a scene, not the fine detail of a flat texture (use PBR Maps for that). | MoGe-2 (installed) |
@@ -270,23 +242,15 @@ node scripts/sync-comfy-menu.mjs --install "<ComfyUI>/custom_nodes"
 
 Then reload the ComfyUI page; no restart is needed. Model presets that came from one of the add-on's hand-laid-out UI files keep that file. Everything else opens from an API-format copy and is laid out automatically. A unit test fails if the committed menu manifest is out of date.
 
-## Setup builder (in the Prompt assistant)
-
-Ask for a setup in the chat, e.g. "make a setup: schnell then upscale 2x", or start with `/build`. The builder model may only pick **tested blocks**: input image, model (FLUX.2 Klein / FLUX.1 schnell / FLUX.1 dev / Z-Image Turbo / Qwen-Image), LoRA, ControlNet (Qwen only), txt2img, img2img, upscale, image to 3D, video, audio (Chatterbox / VibeVoice) and save. Ollama answers with JSON blocks through `format`, and the **server** assembles the graph and validates it against the live `/object_info` and the installed models: class names, required inputs, link types, combo values and ranges. A setup that does not fit is rejected with a plain reason, for example "ControlNet only works with Qwen-Image" or "needs download: wan2.2_ti2v_5B_fp16.safetensors".
-
-The chat shows a summary card with **Test run** (one result at reduced size, never saved), **Save as preset** and **Discard**. A setup becomes a preset only when you tap Save. It then appears under **My presets**, where you can rename or delete it (the ⚙ button on its row). Saved setups are stored as blocks in `data/user-presets.json` (gitignored) and re-validated every time the list loads.
-
-**Builder model:** set in `data/builder.json` (the ⋮ menu picker was removed in batch 5). The default is `gemma3:4b`, which fits next to ComfyUI on the 11 GB card. Any model already pulled in Ollama can be picked; the app never pulls models by itself.
-
 ## Tests
 
 ```
 npm install            # dev only: playwright-core + a bundled Chromium for Linux
-npm test               # detection, injection, history, server, proxy HTTP+WS, share, chat/actions, memory profiles (node:test)
-npm run test:browser   # drives the real UI in headless Chromium against the mocks (app, chat, memory)
+npm test               # detection, injection, history, server, proxy HTTP+WS, share, memory profiles (node:test)
+npm run test:browser   # drives the real UI in headless Chromium against the mocks (app, presets, memory)
 npm run dev:mock       # app + fake ComfyUI, http://127.0.0.1:3100 (no GPU needed)
 ```
-`test/mock-ollama.js` is a fake Ollama (tags, ps, show, chat with JSON `format`, keep_alive 0 unload; trigger words exercise malformed/no-change/action replies). `test/mock-comfy.js` is a fake ComfyUI. It has the same endpoints and websocket messages as the real one, returns placeholder PNGs, and has the same Origin check. On Windows, the browser tests use your installed Chrome through playwright-core's `channel: 'chrome'`, or `CHROME_PATH`.
+`test/mock-ollama.js` is a fake Ollama (tags, ps, generate for the tagger, keep_alive 0 unload). `test/mock-comfy.js` is a fake ComfyUI. It has the same endpoints and websocket messages as the real one, returns placeholder PNGs, and has the same Origin check. On Windows, the browser tests use your installed Chrome through playwright-core's `channel: 'chrome'`, or `CHROME_PATH`.
 
 ## Decisions
 

@@ -8,7 +8,6 @@ import path from 'node:path';
 import { validatePreset, formatPrompt, paramActive } from '../../app/js/lib/presets.js';
 import { kindOf, presetsFor } from '../../app/js/ui/import-sheet.js';
 import { recordingType, extFor } from '../../app/js/lib/recorder.js';
-import { buildMessages, styleFor } from '../../app/js/lib/chat-context.js';
 import { ROOT, startStack } from './helpers.js';
 
 const load = (id) => validatePreset(id, JSON.parse(fs.readFileSync(path.join(ROOT, 'workflows/ai', `${id}.json`), 'utf8')));
@@ -41,7 +40,7 @@ test('recorder: best container the browser has; file extension follows it', () =
   assert.match(read('app/js/lib/recorder.js'), /echoCancellation: false, noiseSuppression: false, autoGainControl: false/);
 });
 
-test('Photo to Texture: your notes go into the edit with lighting removal; tiling + size; the assistant writes notes', () => {
+test('Photo to Texture: your notes go into the edit with lighting removal; tiling + size', () => {
   const p = load('wf-photo-texture');
   assert.ok(p.ok, p.error);
   const m = p.manifest;
@@ -57,12 +56,6 @@ test('Photo to Texture: your notes go into the edit with lighting removal; tilin
   assert.equal(paramActive(m.params.method, { tile: false }, m.params), false, 'seam method dims with Tiling off');
   assert.deepEqual(m.params.size.options, [1024, 2048, 4096]);
   assert.equal(nodes(p, 'SaveImage').length, 1);
-  // prompt assistant: edit notes, not a picture description
-  assert.match(m.assistant, /edit notes/);
-  assert.equal(styleFor({ ai: m }), m.assistant);
-  const sys = buildMessages({ current: { prompt: '', preset: m.label, workflow: { ai: m } }, userText: 'remove the dents' })[0].content;
-  assert.match(sys, /keep and what to remove/);
-  assert.match(styleFor({ workflow: { 1: { class_type: 'X', inputs: {} } } }), /natural-language/, 'other presets unchanged');
 });
 
 test('PBR Maps (image math): six maps, wrap-around slopes, DirectX by default, ORM packed, no model', () => {

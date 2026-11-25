@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { startStack, ROOT } from '../unit/helpers.js';
-import { launch } from './launch.js';
+import { launch, pickOption } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -48,16 +48,16 @@ test('saving from a built-in preset makes a new preset in the chosen sub section
   await page.waitForSelector('.save-preset');
   assert.match(await page.textContent('.save-preset'), /stays as it is/);
   assert.equal(await page.inputValue('.save-preset input'), 'FLUX.2 Klein 4B Text to Image copy');
-  assert.equal(await page.inputValue('.save-preset select[aria-label=Section]'), 'Image');
-  assert.equal(await page.inputValue('.save-preset select[aria-label="Sub section"]'), 'Text to Image');
+  assert.equal(await page.$eval('.save-preset .dd[data-label=Section]', (d) => d.value), 'Image');
+  assert.equal(await page.$eval('.save-preset .dd[data-label="Sub section"]', (d) => d.value), 'Text to Image');
   const chips = await page.$$eval('.save-preset .sp-chip', (c) => c.map((x) => x.textContent));
   assert.ok(chips.includes('Prompt') && chips.includes('Aspect') && chips.includes('Seed'), JSON.stringify(chips));
   assert.deepEqual(await page.$$eval('.save-preset .sp-actions button', (b) => b.map((x) => x.dataset.act)), ['cancel', 'save']);
   // switching to Video hides the sub section
-  await page.selectOption('.save-preset select[aria-label=Section]', 'Video');
-  assert.equal(await page.isVisible('.save-preset select[aria-label="Sub section"]'), false);
-  await page.selectOption('.save-preset select[aria-label=Section]', 'Image');
-  await page.selectOption('.save-preset select[aria-label="Sub section"]', 'Text to Image');
+  await pickOption(page, '.save-preset .dd[data-label=Section]', 'Video');
+  assert.equal(await page.isVisible('.save-preset .dd[data-label="Sub section"]'), false);
+  await pickOption(page, '.save-preset .dd[data-label=Section]', 'Image');
+  await pickOption(page, '.save-preset .dd[data-label="Sub section"]', 'Text to Image');
   await page.fill('.save-preset input', 'Tall poster');
   await shot('sheet');
   await page.click('.save-preset [data-act="save"]');
@@ -107,9 +107,9 @@ test('picker gear: rename + move to another section, and delete', async () => {
   await page.click('#preset-btn');
   const entSel = (name) => `#picker .ent:has(.nm:text-is("${name}"))`;
   await page.click(`${entSel('Wide poster')} .edit`);
-  await page.waitForSelector('#picker .place-row select');
+  await page.waitForSelector('#picker .place-row .dd');
   await page.fill('#picker .ent.editing input', 'Wide poster (video)');
-  await page.selectOption('#picker .place-row select', 'Video|');
+  await pickOption(page, '#picker .place-row .dd', 'Video|');
   await page.click('#picker .ent.editing button:has-text("Save")');
   await page.waitForFunction(() => window.conceptApp.workflows.some((w) => w.graph?.name === 'Wide poster (video)' && w.group === 'Video'));
   // delete (two taps)

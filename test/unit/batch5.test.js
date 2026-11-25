@@ -77,5 +77,7 @@ test('index.html: no ⋮ menu or import input; folder History toggle; gear Setti
   for (const re of [/details class="menu"/, /id="btn-import"/, /id="import-file"/, /id="builder-model"/, /id="mem-te-cpu"/, /id="mem-ollama-cpu"/, /i-history/, /i-sliders-horizontal/, /<span>Lock<\/span>/]) assert.doesNotMatch(html, re);
   assert.match(html, /id="btn-history"[^>]*aria-pressed="false"[^>]*><i class="i i-folder">/);
   assert.match(html, /<i class="i i-settings" aria-hidden="true"><\/i><span>Settings<\/span>/);
-  assert.match(html, /id="aspect-res"[\s\S]*value="1k"[\s\S]*value="2k"[\s\S]*value="4k"/);
+  // batch 15: the app's own dropdown (ui/dropdown.js), filled by the prompt panel
+  assert.match(html, /<div id="res-select" class="res-select" hidden><\/div>/);
+  assert.match(read('app/js/ui/prompt-panel.js'), /dropdown\(\{ options: \[\['1k', '1K'\], \['2k', '2K'\], \['4k', '4K'\]\]/);
 });

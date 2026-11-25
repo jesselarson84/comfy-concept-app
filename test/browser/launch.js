@@ -33,5 +33,24 @@ export async function saveToPhone(page, scope) {
 export async function pickAspect(page, key) {
   if (!(await page.isVisible('#aspect-pop'))) await page.click('#aspect-btn');
   await page.click(`#aspect-pop .ar-opt[data-aspect="${key}"]`);
+  await page.keyboard.press('Escape'); // the grid stays open after a pick
   await page.waitForSelector('#aspect-pop', { state: 'hidden' });
+}
+
+/** Batch 15: pick a value in one of the app's own dropdowns (ui/dropdown.js) and close it
+ *  (it stays open after a pick). sel = the .dd element (or something inside it). */
+export async function pickOption(page, sel, value) {
+  await page.click(`${sel} .dd-btn`);
+  await page.click(`.dd-pop .dd-opt[data-value="${value}"]`);
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.dd-pop', { state: 'detached' });
+}
+
+/** Batch 15: the options a dropdown offers ([value, label] pairs), read by opening it. */
+export async function dropdownOptions(page, sel) {
+  await page.click(`${sel} .dd-btn`);
+  const out = await page.$$eval('.dd-pop .dd-opt', (b) => b.map((x) => [x.dataset.value, x.textContent]));
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.dd-pop', { state: 'detached' });
+  return out;
 }

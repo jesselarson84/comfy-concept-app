@@ -9,7 +9,7 @@ import { startStack, GPU_5080, ROOT } from './helpers.js';
 import { validatePreset, clampPresetValues, applyPresetParams, formatPrompt, checkInstalled, vramFit, dropEmptyOptional } from '../../app/js/lib/presets.js';
 import { decideFreeBeforeQueue, workflowNeedMB, DEFAULT_MEMORY_CONFIG } from '../../app/js/lib/memory-profiles.js';
 import { splitOutputs, fileKind } from '../../app/js/lib/outputs.js';
-import { validateGraph } from '../../app/js/lib/builder.js';
+import { validateGraph } from '../../app/js/lib/graph-validate.js';
 
 const AI_DIR = path.join(ROOT, 'workflows', 'ai');
 const load = (id) => validatePreset(id, JSON.parse(fs.readFileSync(path.join(AI_DIR, id + '.json'), 'utf8')));
@@ -43,7 +43,7 @@ test('every shipped AI preset validates: 17 manifest entries (MoGe out, Qwen Edi
   }
 });
 
-test('every installed preset graph passes the builder validator against object_info (Wan/ACE only miss model files)', () => {
+test('every installed preset graph passes the graph validator against object_info (Wan/ACE only miss model files)', () => {
   for (const id of [...MANIFEST_17, 'tts-chatterbox', 'tts-vibevoice']) {
     const p = load(id);
     // optional slots (Wan start frame, Chatterbox voice sample) are dropped when left empty

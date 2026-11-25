@@ -15,7 +15,7 @@
 // already disabled), so unlocking puts back exactly the previous state, e.g.
 // Batch stays greyed for one-result presets. lockControls is called on every
 // repaint while a run is going, so controls re-rendered during the run are
-// locked too. Elements with data-keep-live (the chat's Stop) are left alone.
+// locked too. Elements with data-keep-live are left alone.
 // -----------------------------------------------------------------------------
 const SEL = 'input, select, textarea, button';
 const isText = (el) => el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && /^(text|search|)$/.test(el.type));

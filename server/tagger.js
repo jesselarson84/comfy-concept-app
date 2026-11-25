@@ -6,7 +6,7 @@
 // stutter. The rules, checked every `intervalMs` (20 s) BETWEEN items:
 //   - ComfyUI has anything running or queued       -> paused
 //   - GPU utilisation above `busyPercent` (30 %)   -> paused, and the model is
-//     unloaded at once (a game, the chat ...); the quiet clock restarts. (This PC's
+//     unloaded at once (a game ...); the quiet clock restarts. (This PC's
 //     desktop alone sits around 10 %; games run far above 30 %.)
 //   - only after `quietMs` (3 min) of a quiet GPU is ONE item tagged, then the
 //     loop waits for the next tick and checks again.

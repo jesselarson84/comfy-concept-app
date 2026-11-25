@@ -1,32 +1,26 @@
-// memory-profiles.js - how the GPU is shared between ComfyUI and Ollama.
-// Pure functions (no I/O), used by the server (server/memory.js) and tests.
+// memory-profiles.js - how the GPU is shared between ComfyUI and Ollama (the
+// History tagger's model). Pure functions (no I/O), used by the server
+// (server/memory.js) and tests.
 //
 // The profile is chosen from the GPU's TOTAL VRAM (detected, not hardcoded):
-//   small (< 12 GB, the 2080 Ti): unload Ollama before EVERY ComfyUI queue;
-//         before a chat turn ask ComfyUI to /free if free VRAM is too low.
-//   large (>= ~16 GB, the 5080): keep the chat model loaded next to ComfyUI
-//         (keep_alive 10m); before a queue unload it only if free VRAM is below
-//         what that workflow needs; bigger chat models allowed, partly in RAM.
+//   small (< 12 GB, the 2080 Ti): unload Ollama before EVERY ComfyUI queue.
+//   large (>= ~16 GB, the 5080): before a queue unload Ollama only if free VRAM
+//         is below what that workflow needs.
 // All numbers live in config/memory-profiles.json; DEFAULT_MEMORY_CONFIG is the
 // fallback when that file is missing or broken.
 
 export const DEFAULT_MEMORY_CONFIG = {
   profile: 'auto',
   headroomMB: 768,
-  desktopReserveMB: 1200,
-  modelOverheadFactor: 1.2,
-  ram: { reserveMB: 8192 },
   profiles: [
-    { id: 'small', label: 'Under 12 GB VRAM (e.g. RTX 2080 Ti 11 GB)', minVramMB: 0, unloadOllamaBeforeQueue: 'always', ollamaKeepAlive: '5m', freeComfyBeforeChat: 'if-low', freeComfyBeforeQueue: 'on-switch', comfyFree: { unload_models: true, free_memory: true }, maxChatModelMB: 6500 },
-    { id: 'large', label: '16 GB+ VRAM (e.g. RTX 5080 16 GB)', minVramMB: 15000, unloadOllamaBeforeQueue: 'if-needed', ollamaKeepAlive: '10m', freeComfyBeforeChat: 'never', freeComfyBeforeQueue: 'never', comfyFree: { unload_models: false, free_memory: true }, maxChatModelMB: 26000 },
+    { id: 'small', label: 'Under 12 GB VRAM (e.g. RTX 2080 Ti 11 GB)', minVramMB: 0, unloadOllamaBeforeQueue: 'always', freeComfyBeforeQueue: 'on-switch', comfyFree: { unload_models: true, free_memory: true } },
+    { id: 'large', label: '16 GB+ VRAM (e.g. RTX 5080 16 GB)', minVramMB: 15000, unloadOllamaBeforeQueue: 'if-needed', freeComfyBeforeQueue: 'never', comfyFree: { unload_models: false, free_memory: true } },
   ],
-  workflowVramNeedMB: { default: 3000, 'fast-concept': 2500, 'from-reference-image': 3000, 'action:upscale': 2500, 'action:image-to-3d': 8000 },
+  workflowVramNeedMB: { default: 3000, 'fast-concept': 2500, 'from-reference-image': 3000 },
 };
 
 const UNLOAD_MODES = ['always', 'if-needed', 'never'];
-const FREE_MODES = ['if-low', 'never'];
 const num = (v, d, min = 0) => (typeof v === 'number' && Number.isFinite(v) && v >= min ? v : d);
-const MiB = 1024 * 1024;
 
 /** Merge a (possibly partial / broken) config object over the defaults. */
 export function normalizeMemoryConfig(raw) {
@@ -43,9 +37,6 @@ export function normalizeMemoryConfig(raw) {
   const cfg = {
     profile: typeof raw.profile === 'string' ? raw.profile : D.profile,
     headroomMB: pick('headroomMB'),
-    desktopReserveMB: pick('desktopReserveMB'),
-    modelOverheadFactor: pick('modelOverheadFactor', 1),
-    ram: { reserveMB: num(raw.ram?.reserveMB, D.ram.reserveMB) },
     profiles: [],
     workflowVramNeedMB: { ...D.workflowVramNeedMB },
   };
@@ -58,11 +49,8 @@ export function normalizeMemoryConfig(raw) {
       id: p.id, label: typeof p.label === 'string' ? p.label : base.label,
       minVramMB: num(p.minVramMB, base.minVramMB),
       unloadOllamaBeforeQueue: UNLOAD_MODES.includes(p.unloadOllamaBeforeQueue) ? p.unloadOllamaBeforeQueue : base.unloadOllamaBeforeQueue,
-      ollamaKeepAlive: typeof p.ollamaKeepAlive === 'string' || typeof p.ollamaKeepAlive === 'number' ? p.ollamaKeepAlive : base.ollamaKeepAlive,
-      freeComfyBeforeChat: FREE_MODES.includes(p.freeComfyBeforeChat) ? p.freeComfyBeforeChat : base.freeComfyBeforeChat,
       freeComfyBeforeQueue: ['never', 'on-switch'].includes(p.freeComfyBeforeQueue) ? p.freeComfyBeforeQueue : (base.freeComfyBeforeQueue || 'never'),
       comfyFree: { unload_models: !!(p.comfyFree?.unload_models ?? base.comfyFree.unload_models), free_memory: p.comfyFree?.free_memory ?? base.comfyFree.free_memory ?? true },
-      maxChatModelMB: num(p.maxChatModelMB, base.maxChatModelMB),
     };
     if (p.unloadOllamaBeforeQueue !== undefined && prof.unloadOllamaBeforeQueue !== p.unloadOllamaBeforeQueue) warnings.push(`${p.id}.unloadOllamaBeforeQueue: must be one of ${UNLOAD_MODES.join('/')}`);
     if (cfg.profiles.some((x) => x.id === prof.id)) { warnings.push(`profiles: duplicate id ${prof.id}`); continue; }
@@ -128,36 +116,18 @@ export function decideFreeBeforeQueue({ profile, freeMB, ollamaFreedMB = 0, need
  */
 export function decideBeforeQueue({ profile, freeMB, ollamaModels = [], needMB, headroomMB = 0, heavy = false }) {
   const onGpu = ollamaModels.filter((m) => (m.size_vram ?? m.size ?? 0) > 0);
-  if (!ollamaModels.length) return { unload: false, reason: 'no chat model loaded' };
+  if (!ollamaModels.length) return { unload: false, reason: 'no Ollama model loaded' };
   // Heavy jobs (Pixal3D, >= 12 GB) need the VRAM and the RAM: always keep_alive 0 first.
-  if (heavy) return { unload: true, reason: 'heavy job: unloading the chat model (keep_alive 0)' };
+  if (heavy) return { unload: true, reason: 'heavy job: unloading the Ollama model (keep_alive 0)' };
   const mode = profile.unloadOllamaBeforeQueue;
   if (mode === 'always') return { unload: true, reason: `profile ${profile.id}: always unload before ComfyUI` };
   if (mode === 'never') return { unload: false, reason: `profile ${profile.id}: never unload` };
-  if (!onGpu.length) return { unload: false, reason: 'chat model is in RAM only, not using VRAM' };
+  if (!onGpu.length) return { unload: false, reason: 'Ollama model is in RAM only, not using VRAM' };
   if (typeof freeMB !== 'number') return { unload: true, reason: 'free VRAM unknown - unloading to be safe' };
   const avail = freeMB - headroomMB;
   return avail >= needMB
-    ? { unload: false, reason: `free VRAM ${freeMB} MB - headroom ${headroomMB} >= need ${needMB} MB: chat model stays loaded` }
-    : { unload: true, reason: `free VRAM ${freeMB} MB - headroom ${headroomMB} < need ${needMB} MB: unloading chat model` };
-}
-
-/**
- * Will a chat model fit? sizeBytes = model file size (/api/tags); loadedVramBytes
- * = what it already holds (from /api/ps), which is free for itself.
- * -> { estMB, fit: 'fits' | 'partial' | 'too-big' | 'no-fit', message }
- */
-export function modelFit({ sizeBytes, loadedVramBytes = 0, freeVramMB, totalVramMB, freeRamMB, profile, config }) {
-  const estMB = Math.round((sizeBytes / MiB) * config.modelOverheadFactor);
-  if (estMB > profile.maxChatModelMB) return { estMB, fit: 'too-big', message: `~${gb(estMB)} needed - too big for the ${profile.id} GPU profile (max ${gb(profile.maxChatModelMB)})` };
-  let vram = (typeof freeVramMB === 'number' ? freeVramMB : 0) + loadedVramBytes / MiB;
-  // The small profile frees ComfyUI's VRAM before a chat turn when needed.
-  if (profile.freeComfyBeforeChat === 'if-low' && typeof totalVramMB === 'number') vram = Math.max(vram, totalVramMB - config.desktopReserveMB);
-  vram -= config.headroomMB;
-  if (estMB <= vram) return { estMB, fit: 'fits', message: `fits in VRAM (~${gb(estMB)})` };
-  const ram = typeof freeRamMB === 'number' ? freeRamMB - config.ram.reserveMB : 0;
-  if (estMB <= Math.max(0, vram) + Math.max(0, ram)) return { estMB, fit: 'partial', message: `slower, runs partly in RAM (~${gb(estMB)}, ~${gb(Math.max(0, vram))} free VRAM)` };
-  return { estMB, fit: 'no-fit', message: `won't fit in free VRAM + RAM (~${gb(estMB)} needed) - it would swap to disk` };
+    ? { unload: false, reason: `free VRAM ${freeMB} MB - headroom ${headroomMB} >= need ${needMB} MB: Ollama model stays loaded` }
+    : { unload: true, reason: `free VRAM ${freeMB} MB - headroom ${headroomMB} < need ${needMB} MB: unloading Ollama model` };
 }
 
 /** /api/ps entry -> badge when the loaded model is partly (or fully) in system RAM. */
@@ -169,14 +139,3 @@ export function offloadBadge(m) {
   return { partial: true, gpuPct: pct, text: pct === 0 ? 'slow: running in RAM only (CPU)' : `slower, runs partly in RAM (${pct}% on GPU)` };
 }
 
-/** Before a chat turn: ask ComfyUI to /free first? */
-export function decideBeforeChat({ profile, freeMB, estMB, modelLoaded, headroomMB = 0 }) {
-  if (modelLoaded) return { freeComfy: false, reason: 'chat model already loaded' };
-  if (profile.freeComfyBeforeChat !== 'if-low') return { freeComfy: false, reason: `profile ${profile.id}: ComfyUI keeps its models (RAM/VRAM); Ollama may offload part of the model to RAM` };
-  if (typeof freeMB !== 'number') return { freeComfy: false, reason: 'free VRAM unknown' };
-  return freeMB - headroomMB < estMB
-    ? { freeComfy: true, reason: `free VRAM ${freeMB} MB < model ~${estMB} MB + headroom: asking ComfyUI to free VRAM` }
-    : { freeComfy: false, reason: `free VRAM ${freeMB} MB is enough for ~${estMB} MB` };
-}
-
-export const gb = (mb) => `${(mb / 1024).toFixed(1)} GB`;

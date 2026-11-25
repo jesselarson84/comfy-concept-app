@@ -15,6 +15,7 @@ import { resolutionApplies, renderSize, finalSize, normRes } from '../lib/resolu
 import { controlFor, formatParam, paramRange, paramActive } from '../lib/presets.js';
 import { infoFor } from '../lib/setting-info.js';
 import { infoButton } from './info-tip.js';
+import { dropdown, tapOutScrim } from './dropdown.js';
 
 const STORE = 'conceptPanel.v1';
 const OPEN_KEY = 'conceptSettingsOpen';
@@ -23,11 +24,15 @@ const decimals = (st) => (st >= 1 ? 0 : String(st).split('.')[1]?.length || 2);
 
 export class PromptPanel {
   constructor() {
+    // Batch 15: resolution uses the app's own dropdown (stays open after a pick).
+    const res = dropdown({ options: [['1k', '1K'], ['2k', '2K'], ['4k', '4K']], label: 'Resolution' });
+    res.id = 'aspect-res';
+    $('#res-select').append(res);
     this.el = {
       prompt: $('#prompt'), negToggle: $('#neg-toggle'), negRow: $('#neg-row'), negative: $('#negative'),
       msg: $('#preset-msg'), strengthField: $('#strength-field'), strength: $('#strength'), strengthOut: $('#strength-out'),
-      aspectField: $('#aspect-field'), aspectSize: $('#aspect-size'), aspectBtn: $('#aspect-btn'), aspectLabel: $('#aspect-label'), aspectShape: $('#aspect-shape'), aspectPop: $('#aspect-pop'), resSelect: $('#res-select'), res: $('#aspect-res'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
-      seedField: $('#seed-field'), seedLock: $('#seed-lock'), seed: $('#seed'), seedDice: $('#seed-dice'),
+      aspectField: $('#aspect-field'), aspectSize: $('#aspect-size'), aspectBtn: $('#aspect-btn'), aspectLabel: $('#aspect-label'), aspectShape: $('#aspect-shape'), aspectPop: $('#aspect-pop'), resSelect: $('#res-select'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
+      res, seedField: $('#seed-field'), seedLock: $('#seed-lock'), seed: $('#seed'), seedDice: $('#seed-dice'),
       params: $('#params'), paramsOpen: $('#params-open'), settings: $('#settings'), batchField: $('#batch-field'),
     };
     this.state = { prompt: '', negative: '', negOn: false, batch: 4, aspect: '1:1', res: '1k', seedMode: 'random', seed: 0, strength: null, steps: {}, expose: {}, params: {}, ...this.#load() };
@@ -51,9 +56,9 @@ export class PromptPanel {
     // Batch 8: the ratio button opens a grid of every ratio in both orientations
     // (9:16 and 16:9 side by side) with a preview of the shape and its size.
     e.aspectBtn.addEventListener('click', () => (e.aspectPop.hidden ? this.openAspect() : this.closeAspect()));
-    document.addEventListener('pointerdown', (ev) => { if (!e.aspectPop.hidden && !ev.target.closest('.aspect-pick')) this.closeAspect(); });
+    // Batch 15: a tap outside lands on a see-through scrim, so it only closes the grid.
+    this.aspectScrim = tapOutScrim(() => this.closeAspect(), 'dd-scrim.ar-scrim');
     document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !e.aspectPop.hidden) this.closeAspect(); });
-    document.getElementById('panel')?.addEventListener('scroll', () => { if (!e.aspectPop.hidden) this.closeAspect(); }, { passive: true });
     e.res.addEventListener('change', () => { s.res = normRes(e.res.value); this.#paintAspect(); this.save(); });
     const setBatch = (n) => { s.batch = Math.max(1, Math.min(this.maxBatch(), n || 1)); e.batch.value = s.batch; this.save(); };
     this.setBatch = setBatch;
@@ -111,11 +116,13 @@ export class PromptPanel {
       const off = this.aspectOff(key);
       return h('button.ar-opt', { type: 'button', role: 'radio', 'aria-checked': String(key === cur), disabled: off, title: off ? 'This preset can\'t make this shape' : undefined, dataset: { aspect: key },
         onpointerenter: () => !off && show(key), onfocus: () => !off && show(key),
-        onclick: () => { this.setAspect(key); this.closeAspect(); } }, label);
+        // Stays open after a pick (the owner Nov 24): tap outside, Escape or the button closes it.
+        onclick: () => { this.setAspect(key); for (const b of grid.children) b.setAttribute('aria-checked', String(b.dataset.aspect === key)); show(key); } }, label);
     }));
     show(cur);
     e.aspectPop.replaceChildren(h('div.ar-head', {}, h('div.ar-box', {}, shape), h('div.ar-info', {}, name, size)), grid);
     e.aspectPop.hidden = false;
+    document.body.append(this.aspectScrim);
     // Fixed position (the form scrolls and the Run bar covers its bottom): below the
     // button when it fits, else above it.
     const r = e.aspectBtn.getBoundingClientRect(), pop = e.aspectPop, ph = pop.offsetHeight, pw = pop.offsetWidth;
@@ -125,7 +132,7 @@ export class PromptPanel {
     e.aspectBtn.setAttribute('aria-expanded', 'true'); e.aspectBtn.classList.add('open');
   }
 
-  closeAspect() { const e = this.el; e.aspectPop.hidden = true; e.aspectBtn.setAttribute('aria-expanded', 'false'); e.aspectBtn.classList.remove('open'); }
+  closeAspect() { const e = this.el; this.aspectScrim?.remove(); e.aspectPop.hidden = true; e.aspectBtn.setAttribute('aria-expanded', 'false'); e.aspectBtn.classList.remove('open'); }
 
   #paintAspect() {
     const a = parseAspect(this.state.aspect), e = this.el;
@@ -186,7 +193,7 @@ export class PromptPanel {
       const av = wf.availability;
       if (av?.status === 'unavailable') msgs.push(`Unavailable: ${av.reason}`);
       if (c?.message && !wf.ai) msgs.push(c.message);
-      if (c && !wf.ai && !wf.user && !wf.graph) msgs.push(...c.warnings);
+      if (c && !wf.ai && !wf.graph) msgs.push(...c.warnings);
     }
     e.msg.textContent = msgs.join(' ');
     e.msg.hidden = !msgs.length;
@@ -361,11 +368,11 @@ export class PromptPanel {
   }
 
   #select({ label, info, options, labels = {}, value, onChange, param }) {
-    const sel = h('select', { 'aria-label': label }, options.map((o) => new Option(labels[String(o)] ?? String(o).replace(/\.(safetensors|pth|gguf)$/, ''), String(o))));
-    sel.value = String(value);
+    // Batch 15: the app's own dropdown (ui/dropdown.js), not the phone's menu; stays open after a pick.
+    const sel = dropdown({ options: options.map((o) => [String(o), labels[String(o)] ?? String(o).replace(/\.(safetensors|pth|gguf)$/, '')]), value: String(value), label,
+      onChange: (v) => onChange(options.find((o) => String(o) === v) ?? v) });
     if (param) sel.dataset.param = param;
-    sel.addEventListener('change', () => onChange(options.find((o) => String(o) === sel.value) ?? sel.value));
-    return h('div.ctl', {}, this.#label(label, undefined, info), h('label.cselect', {}, sel, h('i.i.i-chevron-down', { 'aria-hidden': 'true' })));
+    return h('div.ctl', {}, this.#label(label, undefined, info), sel);
   }
 
   #seg({ label, info, options, labels = {}, value, onChange, param }) {
@@ -413,10 +420,7 @@ export class PromptPanel {
   snapshot() { return JSON.parse(JSON.stringify(this.state)); }
   restore(state) { if (!state) return; this.state = JSON.parse(JSON.stringify(state)); this.#paint(); this.save(); if (this.wf) this.setWorkflow(this.wf); }
 
-  /** Chat / Versions: set the negative text (shown only if the preset has one). */
-  setNegative(text) { this.state.negative = text ?? ''; this.#paint(); this.save(); }
-
-  /** Chat "Apply + Generate": seed = number locks it, undefined = random. */
+  /** Seed = number locks it, undefined = random (batch jobs loaded into the form). */
   setSeed(seed) {
     if (seed === undefined || seed === null) this.state.seedMode = 'random';
     else { this.state.seed = Number(seed); this.state.seedMode = 'locked'; }

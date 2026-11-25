@@ -2,14 +2,15 @@
 // Two tabs, like ComfyUI's right-click "AI Models" / "AI Workflows" menus:
 // Models (3D / Image / Video / Audio) and Workflows (Textures / Concept / VFX,
 // multi-step pipelines). It opens on the current preset's tab. "My presets" sits
-// at the bottom of Models: setups saved from the chat builder
-// (rename / delete inline) and workflows imported or dropped into workflows/.
+// at the bottom of Models: presets saved from the node view (rename, move or
+// delete inline) and workflows imported or dropped into workflows/.
 // (The old "App presets" section is gone; see lib/legacy-presets.js.) Image is
 // split into sub sections (Text to Image, Image Edit, Inpainting, Upscale), see
 // pickerLayout. Rows show only the preset name. Unavailable rows (missing model file or node) are grayed
 // out with no tag; tapping one says what is missing.
 import { h, toast } from './dom.js';
 import { SUBGROUPS } from '../lib/presets.js';
+import { dropdown } from './dropdown.js';
 
 // tab: the picker tab a section is on. Models = one model as it comes;
 // Workflows = multi-step pipelines grouped by task (lib/presets.js KINDS).
@@ -87,7 +88,7 @@ export function matchPreset(w, q) {
 }
 
 export class WorkflowPicker {
-  /** @param o.onPick(id)  @param o.onRename(w, name)  @param o.onDelete(w) */
+  /** @param o.onPick(id)  @param o.onEditGraph(w, patch)  @param o.onDelete(w) */
   constructor(o) {
     Object.assign(this, o);
     this.btn = document.getElementById('preset-btn');
@@ -163,7 +164,7 @@ export class WorkflowPicker {
       onclick: (e) => { if (e.target.closest('.edit')) return; if (off) { toast(reason || 'Unavailable', 6000); return; } this.close(); this.onPick(w.id); },
       onkeydown: (e) => { if (e.key === 'Enter' && !off) { this.close(); this.onPick(w.id); } },
     }, h('span.nm', {}, rowName(w)), !off && presetHint(w) ? h('span.hint', {}, presetHint(w)) : null, this.current === w.id ? h('i.i.i-check') : null,
-    w.user || w.graph ? h('button.edit.btn.text', { type: 'button', 'aria-label': `${w.graph ? 'Rename, move' : 'Rename'} or delete ${w.label}`, onclick: () => { this.editing = w.id; this.render(); } }, h('i.i.i-settings')) : null);
+    w.graph ? h('button.edit.btn.text', { type: 'button', 'aria-label': `Rename, move or delete ${w.label}`, onclick: () => { this.editing = w.id; this.render(); } }, h('i.i.i-settings')) : null);
     row.classList.toggle('on', this.current === w.id);
     row.classList.toggle('dis', off);
     return row;
@@ -171,24 +172,21 @@ export class WorkflowPicker {
 
   #editRow(w) {
     const input = h('input.input', { type: 'text', value: w.label, maxlength: 60, 'aria-label': 'Preset name' });
-    // Presets saved from the node view can also move to another section / sub section.
-    let place = null;
-    if (w.graph) {
-      const opts = SECTIONS.flatMap((s) => (SUBGROUPS[s.key]?.length ? SUBGROUPS[s.key].map((sub) => [`${s.key}|${sub}`, `${s.label} › ${sub}`]) : [[`${s.key}|`, s.label]]));
-      place = h('select.input.place', { 'aria-label': 'Section' }, ...opts.map(([v, t]) => h('option', { value: v }, t)));
-      place.value = `${sectionOf(w)}|${w.subgroup || ''}`;
-      if (!place.value) place.selectedIndex = opts.findIndex(([v]) => v.startsWith(sectionOf(w) + '|'));
-    }
+    // Presets saved from the node view: rename and move to another section / sub section.
+    const opts = SECTIONS.flatMap((s) => (SUBGROUPS[s.key]?.length ? SUBGROUPS[s.key].map((sub) => [`${s.key}|${sub}`, `${s.label} › ${sub}`]) : [[`${s.key}|`, s.label]]));
+    // Batch 15: the app's own dropdown (ui/dropdown.js); stays open after a pick.
+    const want = `${sectionOf(w)}|${w.subgroup || ''}`;
+    const place = dropdown({ options: opts, value: opts.some(([v]) => v === want) ? want : opts.find(([v]) => v.startsWith(sectionOf(w) + '|'))?.[0], label: 'Section', className: 'place' });
     const save = async () => {
       const n = input.value.trim(); if (!n) return toast('Name cannot be empty');
-      if (w.graph) { const [group, sub] = place.value.split('|'); await this.onEditGraph?.(w, { name: n, group, subgroup: sub || null }); }
-      else await this.onRename(w, n);
+      const [group, sub] = place.value.split('|');
+      await this.onEditGraph?.(w, { name: n, group, subgroup: sub || null });
       this.editing = null; if (!this.pop.hidden) this.render();
     };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { this.editing = null; this.render(); } });
-    // Graph presets: no keyboard on open (found on the phone: it covered the
-    // "Move to" row); just bring both rows into view. Builder setups: rename only.
-    setTimeout(() => { if (w.graph) this.pop.querySelector('.ent-edit-wrap')?.scrollIntoView({ block: 'nearest' }); else input.focus(); }, 0);
+    // No keyboard on open (found on the phone: it covered the "Move to" row);
+    // just bring both rows into view.
+    setTimeout(() => this.pop.querySelector('.ent-edit-wrap')?.scrollIntoView({ block: 'nearest' }), 0);
     let confirmDel = false;
     const del = h('button.btn.text.danger-text', { type: 'button', onclick: async () => {
       if (!confirmDel) { confirmDel = true; del.textContent = 'Tap again to delete'; return; }
@@ -197,6 +195,6 @@ export class WorkflowPicker {
     const row = h('div.ent.editing', { dataset: { preset: w.id } }, input,
       h('button.btn.text', { type: 'button', onclick: save }, h('i.i.i-check'), 'Save'), del,
       h('button.btn.text', { type: 'button', 'aria-label': 'Cancel', onclick: () => { this.editing = null; this.render(); } }, h('i.i.i-x')));
-    return place ? h('div.ent-edit-wrap', { dataset: { preset: w.id } }, row, h('div.ent.editing.place-row', {}, h('span.muted', {}, 'Move to'), place)) : row;
+    return h('div.ent-edit-wrap', { dataset: { preset: w.id } }, row, h('div.ent.editing.place-row', {}, h('span.muted', {}, 'Move to'), place));
   }
 }

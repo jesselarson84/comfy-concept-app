@@ -24,7 +24,6 @@
 // presets; params are clamped to [min, max] (bad enum -> default) with a note
 // for every change. The graph always comes from the file.
 // -----------------------------------------------------------------------------
-import { clampParams } from './actions.js';
 
 export const GROUPS = ['3D', 'Image', 'Video', 'Audio'];
 // Two kinds of preset (picker tabs "Models" / "Workflows", ComfyUI right-click
@@ -385,4 +384,29 @@ export function presetAvailability(p, info, hw = {}, opts = {}) {
   const est = p.manifest.vram?.measuredMB || p.manifest.vram?.estMB || 0;
   const fit = vramFit({ estMB: est, gpuTotalMB: hw.gpuTotalMB, ramFreeMB: hw.ramFreeMB, desktopReserveMB: opts.desktopReserveMB, ramReserveMB: opts.ramReserveMB, profileId: opts.profileId });
   return { ...fit, estMB: est };
+}
+
+/**
+ * Clamp values to a manifest's params ({ key: { type: number|int|enum, min, max, options, default, label } }).
+ * -> { params, notes } (one plain note per adjusted value). Batch 15: moved here from lib/actions.js.
+ */
+export function clampParams(manifest, given = {}) {
+  const params = {}, notes = [];
+  for (const [key, p] of Object.entries(manifest.params)) {
+    let v = given?.[key];
+    if (v === undefined || v === null || v === '') { params[key] = p.default; continue; }
+    if (p.type === 'enum') {
+      const hit = p.options.find((o) => String(o).toLowerCase() === String(v).toLowerCase());
+      if (hit === undefined) { notes.push(`${p.label}: "${v}" is not an option, using ${p.default}`); params[key] = p.default; } else params[key] = hit;
+      continue;
+    }
+    const num = Number(typeof v === 'string' ? v.replace(/x$/i, '') : v);
+    if (!Number.isFinite(num)) { notes.push(`${p.label}: "${v}" is not a number, using ${p.default}`); params[key] = p.default; continue; }
+    let c = Math.min(p.max, Math.max(p.min, num));
+    if (p.type === 'int') c = Math.round(c);
+    if (c !== num) notes.push(`${p.label}: ${num} is outside ${p.min}-${p.max}, using ${c}`);
+    params[key] = c;
+  }
+  for (const k of Object.keys(given || {})) if (!(k in manifest.params)) notes.push(`ignored unknown setting "${k}"`);
+  return { params, notes };
 }
