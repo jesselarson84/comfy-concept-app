@@ -38,7 +38,7 @@ test('picker has no App presets section; aspect is a ratio grid button (batch 8)
   assert.doesNotMatch(html, /id="aspect-ratio"|data-orient=/);
   assert.doesNotMatch(html, /data-ratio=/);
   assert.match(html, /id="aspect-size"/);
-  assert.match(read('app/sw.js'), /const VERSION = 'shell-v30';/); // batch 13: batch sheet, bottom bar, Files
+  assert.match(read('app/sw.js'), /const VERSION = 'shell-v31';/); // batch 14: helper models
   assert.match(read('app/sw.js'), /'\/js\/lib\/resolution\.js'/);
   assert.match(read('app/sw.js'), /'\/js\/lib\/preset-choice\.js'/);
   assert.match(read('app/sw.js'), /'\/js\/lib\/legacy-presets\.js'/);

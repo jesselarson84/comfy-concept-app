@@ -1,0 +1,422 @@
+{
+ "preset": {
+  "group": "Image",
+  "label": "FLUX.1 Fill Inpaint (GGUF)",
+  "menuPath": "Image/Inpainting/FLUX.1 Fill (GGUF)",
+  "menuOrder": 2,
+  "source": "Batch 14: FLUX.1 Fill dev Q5_K_S GGUF inside Inpaint Crop & Stitch, with Differential Diffusion and Color Match (same crop and stitch as Klein 4B Inpaint).",
+  "output": "image",
+  "description": "Repaint only the area you paint, with FLUX.1 Fill: the model made for filling masked areas. Slower than Klein 4B Inpaint (24 steps) but blends new content into the scene more naturally. Non-commercial license.",
+  "mask": {
+   "node": "2",
+   "input": "image",
+   "image": "1"
+  },
+  "params": {
+   "steps": {
+    "node": "20",
+    "input": "steps",
+    "type": "int",
+    "min": 12,
+    "max": 40,
+    "default": 24,
+    "label": "Steps",
+    "control": "stepper",
+    "info": "Refinement passes. FLUX.1 Fill is usually run at 20-30; fewer is faster but softer."
+   },
+   "guidance": {
+    "node": "16",
+    "input": "guidance",
+    "type": "number",
+    "min": 10,
+    "max": 50,
+    "step": 1,
+    "default": 30,
+    "label": "Guidance",
+    "control": "slider",
+    "info": "How closely the filled area follows the prompt. FLUX.1 Fill is made for high values (30 is the usual setting); lower lets it blend more freely with the picture."
+   },
+   "expand": {
+    "node": "4",
+    "input": "mask_expand_pixels",
+    "type": "int",
+    "min": 0,
+    "max": 64,
+    "step": 4,
+    "default": 12,
+    "label": "Expand",
+    "control": "stepper",
+    "format": "px",
+    "group": "Mask",
+    "info": "Grows the painted mask outward by this many pixels before repainting, so the edges of what you painted are included. Raise it if a thin outline of the old content stays."
+   },
+   "blend": {
+    "node": "4",
+    "input": "mask_blend_pixels",
+    "type": "int",
+    "min": 0,
+    "max": 64,
+    "default": 32,
+    "label": "Blend",
+    "control": "slider",
+    "step": 1,
+    "format": "px",
+    "info": "Softens the seam: the repainted area fades into the original over this many pixels. Higher hides the edge better; 0 is a hard edge."
+   },
+   "context": {
+    "node": "4",
+    "input": "context_from_mask_extend_factor",
+    "type": "number",
+    "min": 1,
+    "max": 2,
+    "step": 0.05,
+    "default": 1.35,
+    "label": "Context",
+    "control": "slider",
+    "info": "How much of the picture around the mask the model gets to see, as a multiple of the painted area (1.35 = 35 % extra on each side). More context helps it match the surroundings."
+   },
+   "crop": {
+    "node": "4",
+    "input": "output_target_width",
+    "also": [
+     {
+      "node": "4",
+      "input": "output_target_height"
+     }
+    ],
+    "type": "enum",
+    "options": [
+     768,
+     1024,
+     1280
+    ],
+    "default": 1024,
+    "label": "Crop size",
+    "control": "select",
+    "labels": {
+     "768": "768 px",
+     "1024": "1024 px",
+     "1280": "1280 px"
+    },
+    "info": "The painted area plus its context is cut out and worked on at this size, then scaled back and stitched in. Bigger gives more detail in the repaint but is slower."
+   },
+   "fillHoles": {
+    "node": "4",
+    "input": "mask_fill_holes",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Fill holes",
+    "control": "seg",
+    "labels": {
+     "false": "Off",
+     "true": "On"
+    },
+    "info": "Fills small gaps inside what you painted, so unpainted specks inside the area are repainted too."
+   },
+   "colorMatch": {
+    "node": "26",
+    "input": "strength",
+    "type": "number",
+    "min": 0,
+    "max": 1,
+    "step": 0.05,
+    "default": 0.6,
+    "label": "Color match",
+    "control": "slider",
+    "info": "Pulls the colors of the repainted area towards the original picture around it, so it does not stand out. 0 = off, 1 = full match."
+   }
+  },
+  "maxBatch": 4,
+  "vram": {
+   "estMB": 9800,
+   "basis": "weights: 7.7 GB Q5_K_S GGUF Fill UNet + T5 fp8 (4.9 GB, swapped out after encode) + activations at 1 MP"
+  },
+  "info": {
+   "prompt": "Describe what should appear in the painted area (\"a wooden door\", \"clear blue sky\"). Describing the whole scene also works.",
+   "image": "The picture to repaint part of. Paint the mask on it below, or tap Select in the mask editor to pick an object."
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "image": "example.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Image to edit #image"
+   }
+  },
+  "2": {
+   "inputs": {
+    "image": "mask.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Painted mask"
+   }
+  },
+  "3": {
+   "inputs": {
+    "image": [
+     "2",
+     0
+    ],
+    "channel": "red"
+   },
+   "class_type": "ImageToMask",
+   "_meta": {
+    "title": "Mask (white = repaint)"
+   }
+  },
+  "4": {
+   "inputs": {
+    "image": [
+     "1",
+     0
+    ],
+    "mask": [
+     "3",
+     0
+    ],
+    "downscale_algorithm": "bilinear",
+    "upscale_algorithm": "bicubic",
+    "preresize": false,
+    "preresize_mode": "ensure minimum resolution",
+    "preresize_min_width": 1024,
+    "preresize_min_height": 1024,
+    "preresize_max_width": 16384,
+    "preresize_max_height": 16384,
+    "mask_fill_holes": true,
+    "mask_expand_pixels": 12,
+    "mask_invert": false,
+    "mask_blend_pixels": 32,
+    "mask_hipass_filter": 0.1,
+    "extend_for_outpainting": false,
+    "extend_up_factor": 1,
+    "extend_down_factor": 1,
+    "extend_left_factor": 1,
+    "extend_right_factor": 1,
+    "context_from_mask_extend_factor": 1.35,
+    "output_resize_to_target_size": true,
+    "output_target_width": 1024,
+    "output_target_height": 1024,
+    "output_padding": "16",
+    "device_mode": "gpu (much faster)"
+   },
+   "class_type": "InpaintCropImproved",
+   "_meta": {
+    "title": "Inpaint Crop"
+   }
+  },
+  "10": {
+   "inputs": {
+    "unet_name": "flux1-fill-dev-Q5_K_S.gguf"
+   },
+   "class_type": "UnetLoaderGGUF",
+   "_meta": {
+    "title": "Unet Loader (GGUF)"
+   }
+  },
+  "11": {
+   "inputs": {
+    "clip_name1": "t5xxl_fp8_e4m3fn.safetensors",
+    "clip_name2": "clip_l.safetensors",
+    "type": "flux",
+    "device": "default"
+   },
+   "class_type": "DualCLIPLoader",
+   "_meta": {
+    "title": "Load CLIP (Dual)"
+   }
+  },
+  "12": {
+   "inputs": {
+    "vae_name": "ae.safetensors"
+   },
+   "class_type": "VAELoader",
+   "_meta": {
+    "title": "Load VAE"
+   }
+  },
+  "15": {
+   "inputs": {
+    "text": "Describe what goes in the painted area.",
+    "clip": [
+     "11",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Prompt #prompt"
+   }
+  },
+  "16": {
+   "inputs": {
+    "guidance": 30,
+    "conditioning": [
+     "15",
+     0
+    ]
+   },
+   "class_type": "FluxGuidance",
+   "_meta": {
+    "title": "FluxGuidance"
+   }
+  },
+  "17": {
+   "inputs": {
+    "conditioning": [
+     "15",
+     0
+    ]
+   },
+   "class_type": "ConditioningZeroOut",
+   "_meta": {
+    "title": "Conditioning Zero Out"
+   }
+  },
+  "18": {
+   "inputs": {
+    "positive": [
+     "16",
+     0
+    ],
+    "negative": [
+     "17",
+     0
+    ],
+    "vae": [
+     "12",
+     0
+    ],
+    "pixels": [
+     "4",
+     1
+    ],
+    "mask": [
+     "4",
+     2
+    ],
+    "noise_mask": true
+   },
+   "class_type": "InpaintModelConditioning",
+   "_meta": {
+    "title": "Inpaint Conditioning"
+   }
+  },
+  "19": {
+   "inputs": {
+    "model": [
+     "10",
+     0
+    ],
+    "strength": 1
+   },
+   "class_type": "DifferentialDiffusion",
+   "_meta": {
+    "title": "Differential Diffusion"
+   }
+  },
+  "20": {
+   "inputs": {
+    "seed": 0,
+    "steps": 24,
+    "cfg": 1,
+    "sampler_name": "euler",
+    "scheduler": "simple",
+    "denoise": 1,
+    "model": [
+     "19",
+     0
+    ],
+    "positive": [
+     "18",
+     0
+    ],
+    "negative": [
+     "18",
+     1
+    ],
+    "latent_image": [
+     "18",
+     2
+    ]
+   },
+   "class_type": "KSampler",
+   "_meta": {
+    "title": "KSampler"
+   }
+  },
+  "21": {
+   "inputs": {
+    "samples": [
+     "20",
+     0
+    ],
+    "vae": [
+     "12",
+     0
+    ]
+   },
+   "class_type": "VAEDecode",
+   "_meta": {
+    "title": "VAE Decode"
+   }
+  },
+  "26": {
+   "inputs": {
+    "target": [
+     "21",
+     0
+    ],
+    "reference": [
+     "4",
+     1
+    ],
+    "strength": 0.6,
+    "exclude_mask": [
+     "4",
+     2
+    ]
+   },
+   "class_type": "INPAINT_ColorMatch",
+   "_meta": {
+    "title": "Color Match (Masked)"
+   }
+  },
+  "27": {
+   "inputs": {
+    "stitcher": [
+     "4",
+     0
+    ],
+    "inpainted_image": [
+     "26",
+     0
+    ]
+   },
+   "class_type": "InpaintStitchImproved",
+   "_meta": {
+    "title": "Inpaint Stitch"
+   }
+  },
+  "28": {
+   "inputs": {
+    "filename_prefix": "concept-app/flux1_fill",
+    "images": [
+     "27",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save Image"
+   }
+  }
+ }
+}

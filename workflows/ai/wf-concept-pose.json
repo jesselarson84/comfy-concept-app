@@ -1,0 +1,348 @@
+{
+ "preset": {
+  "kind": "workflow",
+  "group": "Concept",
+  "label": "Concept Looks (Pose)",
+  "menuPath": "Concept/Concept Looks (Pose)",
+  "menuOrder": 3,
+  "source": "Batch 14: Z-Image Turbo + Z-Image-Turbo-Fun-Controlnet-Union 2.1 (alibaba-pai), pose found with DWPose.",
+  "output": "image",
+  "description": "Keeps a person's pose from a photo (or a pose render) and changes everything else from the prompt: who they are, what they wear, where they stand. DWPose finds the body, hands and face.",
+  "params": {
+   "strength": {
+    "node": "16",
+    "input": "strength",
+    "type": "number",
+    "min": 0.3,
+    "max": 1.2,
+    "step": 0.05,
+    "default": 0.85,
+    "label": "Follow layout",
+    "control": "slider",
+    "info": "How strictly the figure follows the pose. 0.8-1.0 keeps the pose exact; lower lets the model loosen it."
+   },
+   "release": {
+    "node": "16",
+    "input": "end_percent",
+    "type": "number",
+    "min": 0.4,
+    "max": 1,
+    "step": 0.05,
+    "default": 1,
+    "label": "Release at",
+    "control": "slider",
+    "info": "When the layout guide lets go, as a share of the steps. 1 = guided to the end. Lower (0.6-0.8) lets the last steps add free detail and texture on top of the fixed layout."
+   },
+   "patch": {
+    "node": "15",
+    "input": "name",
+    "type": "enum",
+    "options": [
+     "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors",
+     "Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors"
+    ],
+    "default": "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors",
+    "label": "ControlNet",
+    "control": "seg",
+    "labels": {
+     "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors": "Full",
+     "Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors": "Lite"
+    },
+    "info": "Full (6.7 GB) follows the layout more closely. Lite (2 GB) is lighter on memory and a bit looser, so it suits higher \"Follow layout\" values."
+   },
+   "steps": {
+    "node": "17",
+    "input": "steps",
+    "type": "int",
+    "min": 6,
+    "max": 12,
+    "default": 8,
+    "label": "Steps",
+    "control": "stepper",
+    "info": "Refinement passes. The model and the ControlNet are made for 8."
+   },
+   "source": {
+    "node": "12",
+    "input": "switch",
+    "type": "enum",
+    "options": [
+     false,
+     true
+    ],
+    "default": true,
+    "label": "Pose from",
+    "control": "seg",
+    "span2": true,
+    "labels": {
+     "false": "Pose image",
+     "true": "Photo (find pose)"
+    },
+    "info": "Photo: DWPose finds the pose (body, hands, face) in the picture. Pose image: the picture already is a pose skeleton (colored sticks on black), e.g. one made earlier or exported from a 3D tool."
+   }
+  },
+  "maxBatch": 8,
+  "vram": {
+   "estMB": 20500,
+   "basis": "Z-Image Turbo bf16 12.3 GB + ControlNet patch 6.7 GB (2 GB lite); ComfyUI keeps what does not fit on the GPU in system RAM"
+  },
+  "info": {
+   "image": "A photo or render of a person (or several), or a ready pose skeleton with \"Pose from\" set to Pose image. Its shape (fitted to about 1 MP) is the shape of the result.",
+   "prompt": "Who and where: \"a knight in battered steel armor on a castle wall at dusk\". The pose comes from the picture."
+  }
+ },
+ "workflow": {
+  "1": {
+   "inputs": {
+    "unet_name": "z_image_turbo_bf16.safetensors",
+    "weight_dtype": "default"
+   },
+   "class_type": "UNETLoader",
+   "_meta": {
+    "title": "Load Diffusion Model"
+   }
+  },
+  "2": {
+   "inputs": {
+    "clip_name": "qwen_3_4b.safetensors",
+    "type": "lumina2",
+    "device": "default"
+   },
+   "class_type": "CLIPLoader",
+   "_meta": {
+    "title": "Load CLIP"
+   }
+  },
+  "3": {
+   "inputs": {
+    "vae_name": "ae.safetensors"
+   },
+   "class_type": "VAELoader",
+   "_meta": {
+    "title": "Load VAE"
+   }
+  },
+  "4": {
+   "inputs": {
+    "shift": 3,
+    "sampling": "flow",
+    "model": [
+     "1",
+     0
+    ]
+   },
+   "class_type": "ModelSamplingAuraFlow",
+   "_meta": {
+    "title": "ModelSamplingAuraFlow"
+   }
+  },
+  "5": {
+   "inputs": {
+    "text": "",
+    "clip": [
+     "2",
+     0
+    ]
+   },
+   "class_type": "CLIPTextEncode",
+   "_meta": {
+    "title": "Look #prompt"
+   }
+  },
+  "6": {
+   "inputs": {
+    "conditioning": [
+     "5",
+     0
+    ]
+   },
+   "class_type": "ConditioningZeroOut",
+   "_meta": {
+    "title": "Conditioning Zero Out"
+   }
+  },
+  "7": {
+   "inputs": {
+    "image": "example.png"
+   },
+   "class_type": "LoadImage",
+   "_meta": {
+    "title": "Photo or pose image #image"
+   }
+  },
+  "8": {
+   "inputs": {
+    "image": [
+     "7",
+     0
+    ],
+    "upscale_method": "lanczos",
+    "megapixels": 1,
+    "resolution_steps": 16
+   },
+   "class_type": "ImageScaleToTotalPixels",
+   "_meta": {
+    "title": "Fit to 1 MP"
+   }
+  },
+  "11": {
+   "inputs": {
+    "image": [
+     "8",
+     0
+    ],
+    "detect_hand": "enable",
+    "detect_body": "enable",
+    "detect_face": "enable",
+    "resolution": 1024,
+    "bbox_detector": "yolox_l.onnx",
+    "pose_estimator": "dw-ll_ucoco_384.onnx",
+    "scale_stick_for_xinsr_cn": "disable"
+   },
+   "class_type": "DWPreprocessor",
+   "_meta": {
+    "title": "Pose (DWPose)"
+   }
+  },
+  "12": {
+   "inputs": {
+    "switch": true,
+    "on_false": [
+     "8",
+     0
+    ],
+    "on_true": [
+     "11",
+     0
+    ]
+   },
+   "class_type": "ComfySwitchNode",
+   "_meta": {
+    "title": "Pose source (found / given)"
+   }
+  },
+  "13": {
+   "inputs": {
+    "image": [
+     "8",
+     0
+    ]
+   },
+   "class_type": "GetImageSize",
+   "_meta": {
+    "title": "Size"
+   }
+  },
+  "14": {
+   "inputs": {
+    "width": [
+     "13",
+     0
+    ],
+    "height": [
+     "13",
+     1
+    ],
+    "batch_size": 1
+   },
+   "class_type": "EmptySD3LatentImage",
+   "_meta": {
+    "title": "Latent (same shape as the render)"
+   }
+  },
+  "15": {
+   "inputs": {
+    "name": "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors"
+   },
+   "class_type": "ModelPatchLoader",
+   "_meta": {
+    "title": "Load ControlNet (model patch)"
+   }
+  },
+  "16": {
+   "inputs": {
+    "model": [
+     "4",
+     0
+    ],
+    "model_patch": [
+     "15",
+     0
+    ],
+    "vae": [
+     "3",
+     0
+    ],
+    "strength": 0.85,
+    "image": [
+     "12",
+     0
+    ],
+    "start_percent": 0,
+    "end_percent": 1
+   },
+   "class_type": "ZImageFunControlnet",
+   "_meta": {
+    "title": "Z-Image Fun ControlNet"
+   }
+  },
+  "17": {
+   "inputs": {
+    "seed": 0,
+    "steps": 8,
+    "cfg": 1,
+    "sampler_name": "res_multistep",
+    "scheduler": "simple",
+    "denoise": 1,
+    "model": [
+     "16",
+     0
+    ],
+    "positive": [
+     "5",
+     0
+    ],
+    "negative": [
+     "6",
+     0
+    ],
+    "latent_image": [
+     "14",
+     0
+    ]
+   },
+   "class_type": "KSampler",
+   "_meta": {
+    "title": "KSampler"
+   }
+  },
+  "18": {
+   "inputs": {
+    "samples": [
+     "17",
+     0
+    ],
+    "vae": [
+     "3",
+     0
+    ]
+   },
+   "class_type": "VAEDecode",
+   "_meta": {
+    "title": "VAE Decode"
+   }
+  },
+  "19": {
+   "inputs": {
+    "filename_prefix": "concept-app/concept_pose",
+    "images": [
+     "18",
+     0
+    ]
+   },
+   "class_type": "SaveImage",
+   "_meta": {
+    "title": "Save Image"
+   }
+  }
+ }
+}

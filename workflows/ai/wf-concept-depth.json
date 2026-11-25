@@ -5,9 +5,9 @@
   "label": "Concept Looks (Depth)",
   "menuPath": "Concept/Concept Looks (Depth)",
   "menuOrder": 2,
-  "source": "Comfy UI Ideas doc, ControlNet Concept Iteration (authored). Z-Image Turbo + Z-Image-Turbo-Fun-Controlnet-Union 2.1 (alibaba-pai).",
+  "source": "Comfy UI Ideas doc, ControlNet Concept Iteration (authored). Z-Image Turbo + Z-Image-Turbo-Fun-Controlnet-Union 2.1 (alibaba-pai). Depth estimated with Depth Anything 3 (batch 14; was MoGe).",
   "output": "image",
-  "description": "Same as Concept Looks (Edges), but guided by depth: a depth pass rendered out of Cinema 4D or Redshift, or depth estimated from a normal render with MoGe. Keeps the spatial layout without copying the greybox surfaces.",
+  "description": "Same as Concept Looks (Edges), but guided by depth: a depth pass rendered out of Cinema 4D or Redshift, or depth estimated from a normal render with Depth Anything 3. Keeps the spatial layout without copying the greybox surfaces.",
   "params": {
    "strength": {
     "node": "16",
@@ -74,10 +74,10 @@
     "control": "seg",
     "labels": {
      "false": "Depth pass",
-     "true": "Estimate (MoGe)"
+     "true": "Estimate"
     },
     "span2": true,
-    "info": "Depth pass: the picture already is a depth pass (white near, black far) rendered out of Cinema 4D or Redshift; most exact. Estimate: the picture is a normal render (greybox or rough lighting) and MoGe works out the depth from it; no extra render needed."
+    "info": "Depth pass: the picture already is a depth pass (white near, black far) rendered out of Cinema 4D or Redshift; most exact. Estimate: the picture is a normal render (greybox or rough lighting) and Depth Anything 3 works out the depth from it; no extra render needed."
    }
   },
   "maxBatch": 8,
@@ -186,16 +186,17 @@
   },
   "9": {
    "inputs": {
-    "model_name": "moge_2_vitl_normal_fp16.safetensors"
+    "model_name": "depth_anything_3_base.safetensors",
+    "weight_dtype": "default"
    },
-   "class_type": "LoadMoGeModel",
+   "class_type": "LoadDA3Model",
    "_meta": {
-    "title": "Load MoGe"
+    "title": "Load Depth Anything 3"
    }
   },
   "10": {
    "inputs": {
-    "moge_model": [
+    "da3_model": [
      "9",
      0
     ],
@@ -203,29 +204,28 @@
      "8",
      0
     ],
-    "resolution_level": 9,
-    "fov_x_degrees": 0,
-    "batch_size": 1,
-    "force_projection": true,
-    "apply_mask": false,
-    "refine_steps": 0
+    "resolution": 1008,
+    "resize_method": "upper_bound_resize",
+    "mode": "mono"
    },
-   "class_type": "MoGeInference",
+   "class_type": "DA3Inference",
    "_meta": {
-    "title": "MoGe: estimate geometry"
+    "title": "Depth Anything 3"
    }
   },
   "11": {
    "inputs": {
-    "moge_geometry": [
+    "da3_geometry": [
      "10",
      0
     ],
-    "output": "depth"
+    "output": "depth",
+    "output.normalization": "v2_style",
+    "output.apply_sky_clip": false
    },
-   "class_type": "MoGeRender",
+   "class_type": "DA3Render",
    "_meta": {
-    "title": "MoGe: depth (white near)"
+    "title": "Depth (white near)"
    }
   },
   "12": {

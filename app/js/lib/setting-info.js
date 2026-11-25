@@ -25,7 +25,7 @@ export const GLOSSARY = {
   strength: 'How much the reference picture may change. Low keeps the result close to the original; 1.0 repaints almost everything. (This is the sampler\'s "denoise".)',
   denoise: 'How much of the starting picture is repainted. 1.0 = start from pure noise (ignore the picture); lower keeps more of the original.',
   image: 'The picture this preset works from. Pick one from the phone, take a photo, paste, or use one of your earlier results ("From Comfy UI").',
-  mask: 'Paint over the part of the picture that should change. Only the painted area is repainted; everything else stays exactly as it was.',
+  mask: 'Paint over the part of the picture that should change, or use Select and tap an object to mask it in one go. Only the masked area is repainted; everything else stays exactly as it was.',
   video: 'The video clip to work on. Short clips are much faster.',
   audio: 'A short recording of a voice (a few seconds of clean speech, no music) for the model to copy.',
   expose: 'A value from the workflow that was marked to show here (#expose). It is written straight into that node when you Run.',

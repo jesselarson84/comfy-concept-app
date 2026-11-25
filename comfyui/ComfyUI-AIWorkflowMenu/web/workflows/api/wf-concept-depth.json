@@ -94,16 +94,17 @@
  },
  "9": {
   "inputs": {
-   "model_name": "moge_2_vitl_normal_fp16.safetensors"
+   "model_name": "depth_anything_3_base.safetensors",
+   "weight_dtype": "default"
   },
-  "class_type": "LoadMoGeModel",
+  "class_type": "LoadDA3Model",
   "_meta": {
-   "title": "Load MoGe"
+   "title": "Load Depth Anything 3"
   }
  },
  "10": {
   "inputs": {
-   "moge_model": [
+   "da3_model": [
     "9",
     0
    ],
@@ -111,29 +112,28 @@
     "8",
     0
    ],
-   "resolution_level": 9,
-   "fov_x_degrees": 0,
-   "batch_size": 1,
-   "force_projection": true,
-   "apply_mask": false,
-   "refine_steps": 0
+   "resolution": 1008,
+   "resize_method": "upper_bound_resize",
+   "mode": "mono"
   },
-  "class_type": "MoGeInference",
+  "class_type": "DA3Inference",
   "_meta": {
-   "title": "MoGe: estimate geometry"
+   "title": "Depth Anything 3"
   }
  },
  "11": {
   "inputs": {
-   "moge_geometry": [
+   "da3_geometry": [
     "10",
     0
    ],
-   "output": "depth"
+   "output": "depth",
+   "output.normalization": "v2_style",
+   "output.apply_sky_clip": false
   },
-  "class_type": "MoGeRender",
+  "class_type": "DA3Render",
   "_meta": {
-   "title": "MoGe: depth (white near)"
+   "title": "Depth (white near)"
   }
  },
  "12": {

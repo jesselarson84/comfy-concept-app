@@ -99,7 +99,7 @@ test('Depth + Normal and Concept Looks (Depth): MoGe, depth estimated from a ren
   const sw = c.workflow[c.manifest.params.source.node];
   assert.equal(sw.class_type, 'ComfySwitchNode');
   assert.equal(c.manifest.params.source.default, false, 'a real depth pass is the default');
-  assert.equal(c.workflow[sw.inputs.on_true[0]].class_type, 'MoGeRender');
+  assert.equal(c.workflow[sw.inputs.on_true[0]].class_type, 'DA3Render'); // batch 14: Depth Anything 3 (was MoGe)
   for (const p of [d, c]) for (const [, n] of nodes(p, 'MoGeInference')) assert.equal(n.inputs.refine_steps, 0, 'required input');
 });
 
