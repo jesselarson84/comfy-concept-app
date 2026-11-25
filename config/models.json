@@ -1,0 +1,694 @@
+{
+ "about": "Every model file the app's presets load. folder = where it goes, relative to ComfyUI's models folder; comfy = how ComfyUI lists it (folder key/path) when that differs. required = the minimum to start (Z-Image Turbo). Check with: node scripts/check-models.mjs",
+ "models": [
+  {
+   "file": "z_image_turbo_bf16.safetensors",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/diffusion_models/z_image_turbo_bf16.safetensors",
+   "presets": [
+    "z-image-turbo",
+    "wf-concept-depth",
+    "wf-concept-edges",
+    "wf-concept-pose",
+    "wf-grunge-map",
+    "wf-make-seamless",
+    "wf-photo-texture"
+   ],
+   "required": true,
+   "group": "Image"
+  },
+  {
+   "file": "qwen_3_4b.safetensors",
+   "folder": "text_encoders",
+   "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors",
+   "presets": [
+    "z-image-turbo",
+    "klein-4b-t2i",
+    "klein-4b-edit",
+    "klein-4b-inpaint",
+    "wf-concept-depth",
+    "wf-concept-edges",
+    "wf-concept-pose",
+    "wf-grunge-map",
+    "wf-make-seamless",
+    "wf-photo-texture"
+   ],
+   "required": true,
+   "group": "Image"
+  },
+  {
+   "file": "ae.safetensors",
+   "folder": "vae",
+   "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors",
+   "presets": [
+    "z-image-turbo",
+    "flux1-dev-gguf",
+    "flux1-schnell-gguf",
+    "flux1-fill-inpaint",
+    "flux1-fill-outpaint",
+    "wf-concept-depth",
+    "wf-concept-edges",
+    "wf-concept-flux",
+    "wf-concept-pose",
+    "wf-grunge-map",
+    "wf-make-seamless",
+    "wf-photo-texture"
+   ],
+   "required": true,
+   "group": "Image"
+  },
+  {
+   "file": "flux-2-klein-base-4b.safetensors",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/Comfy-Org/flux2-klein/resolve/main/split_files/diffusion_models/flux-2-klein-base-4b.safetensors",
+   "presets": [
+    "klein-4b-t2i"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "flux-2-klein-4b.safetensors",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/resolve/main/flux-2-klein-4b.safetensors",
+   "presets": [
+    "klein-4b-edit",
+    "klein-4b-inpaint"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "flux2-vae.safetensors",
+   "folder": "vae",
+   "url": "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors",
+   "presets": [
+    "klein-4b-t2i",
+    "klein-4b-edit",
+    "klein-4b-inpaint"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "flux1-dev-Q5_K_S.gguf",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/city96/FLUX.1-dev-gguf/resolve/main/flux1-dev-Q5_K_S.gguf",
+   "presets": [
+    "flux1-dev-gguf",
+    "wf-concept-flux"
+   ],
+   "required": false,
+   "group": "Image",
+   "license": "FLUX.1 [dev] non-commercial"
+  },
+  {
+   "file": "flux1-schnell-Q5_K_S.gguf",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/city96/FLUX.1-schnell-gguf/resolve/main/flux1-schnell-Q5_K_S.gguf",
+   "presets": [
+    "flux1-schnell-gguf"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "flux1-fill-dev-Q5_K_S.gguf",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/YarvixPA/FLUX.1-Fill-dev-GGUF/resolve/main/flux1-fill-dev-Q5_K_S.gguf",
+   "presets": [
+    "flux1-fill-inpaint",
+    "flux1-fill-outpaint"
+   ],
+   "required": false,
+   "group": "Image",
+   "license": "FLUX.1 [dev] non-commercial"
+  },
+  {
+   "file": "t5xxl_fp8_e4m3fn.safetensors",
+   "folder": "text_encoders",
+   "url": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors",
+   "presets": [
+    "flux1-dev-gguf",
+    "flux1-schnell-gguf",
+    "flux1-fill-inpaint",
+    "flux1-fill-outpaint",
+    "wf-concept-flux"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "clip_l.safetensors",
+   "folder": "text_encoders",
+   "url": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors",
+   "presets": [
+    "flux1-dev-gguf",
+    "flux1-schnell-gguf",
+    "flux1-fill-inpaint",
+    "flux1-fill-outpaint",
+    "wf-concept-flux"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "qwen_image_2512_fp8_e4m3fn.safetensors",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_2512_fp8_e4m3fn.safetensors",
+   "presets": [
+    "qwen-2512-t2i",
+    "wf-concept-qwen"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "qwen-image-2512-Q5_K_M.gguf",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/unsloth/Qwen-Image-2512-GGUF/resolve/main/qwen-image-2512-Q5_K_M.gguf",
+   "presets": [
+    "qwen-2512-t2i"
+   ],
+   "required": false,
+   "group": "Image",
+   "note": "Used instead of the fp8 file on GPUs under 12 GB."
+  },
+  {
+   "file": "Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors",
+   "folder": "loras",
+   "url": "https://huggingface.co/lightx2v/Qwen-Image-2512-Lightning/resolve/main/Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors",
+   "presets": [
+    "qwen-2512-t2i",
+    "wf-concept-qwen"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "qwen_image_edit_2509_fp8_e4m3fn.safetensors",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors",
+   "presets": [
+    "qwen-edit-2509"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "Qwen-Image-Edit-2509-Q5_K_M.gguf",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/QuantStack/Qwen-Image-Edit-2509-GGUF/resolve/main/Qwen-Image-Edit-2509-Q5_K_M.gguf",
+   "presets": [
+    "qwen-edit-2509"
+   ],
+   "required": false,
+   "group": "Image",
+   "note": "Used instead of the fp8 file on GPUs under 12 GB."
+  },
+  {
+   "file": "Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+   "folder": "loras",
+   "url": "https://huggingface.co/lightx2v/Qwen-Image-Lightning/resolve/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+   "presets": [
+    "qwen-edit-2509"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "qwen-image-edit-2511-Q5_K_M.gguf",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/unsloth/Qwen-Image-Edit-2511-GGUF/resolve/main/qwen-image-edit-2511-Q5_K_M.gguf",
+   "presets": [
+    "qwen-edit-2511",
+    "wf-remove-lighting",
+    "wf-photo-texture",
+    "wf-photo-to-3d"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+   "folder": "loras",
+   "url": "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+   "presets": [
+    "qwen-edit-2511",
+    "wf-remove-lighting",
+    "wf-photo-texture",
+    "wf-photo-to-3d"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+   "folder": "text_encoders",
+   "url": "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
+   "presets": [
+    "qwen-2512-t2i",
+    "qwen-edit-2509",
+    "qwen-edit-2511",
+    "wf-concept-qwen",
+    "wf-photo-texture",
+    "wf-photo-to-3d",
+    "wf-remove-lighting"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "qwen_image_vae.safetensors",
+   "folder": "vae",
+   "url": "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors",
+   "presets": [
+    "qwen-2512-t2i",
+    "qwen-edit-2509",
+    "qwen-edit-2511",
+    "wf-concept-qwen",
+    "wf-photo-texture",
+    "wf-photo-to-3d",
+    "wf-remove-lighting"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "seedvr2_7b_int8_convrot.safetensors",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/Comfy-Org/SeedVR2/resolve/main/diffusion_models/seedvr2_7b_int8_convrot.safetensors",
+   "presets": [
+    "seedvr2-7b-image"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "seedvr2_ema_vae_fp16.safetensors",
+   "folder": "vae",
+   "url": "https://huggingface.co/Comfy-Org/SeedVR2/resolve/main/vae/seedvr2_ema_vae_fp16.safetensors",
+   "presets": [
+    "seedvr2-7b-image",
+    "seedvr2-3b-video"
+   ],
+   "required": false,
+   "group": "Image"
+  },
+  {
+   "file": "4x-UltraSharp.safetensors",
+   "folder": "upscale_models",
+   "url": "https://huggingface.co/Kim2091/UltraSharp/resolve/main/4x-UltraSharp.safetensors",
+   "presets": [
+    "upscale-4x-model",
+    "wf-texture-upscale",
+    "wf-photo-texture"
+   ],
+   "required": false,
+   "group": "Image",
+   "note": "Also used by the 4K resolution option."
+  },
+  {
+   "file": "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors",
+   "folder": "model_patches",
+   "url": "https://huggingface.co/alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1/resolve/main/Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors",
+   "presets": [
+    "wf-concept-depth",
+    "wf-concept-edges",
+    "wf-concept-pose"
+   ],
+   "required": false,
+   "group": "Concept and textures"
+  },
+  {
+   "file": "Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors",
+   "folder": "model_patches",
+   "url": "https://huggingface.co/alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1/resolve/main/Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors",
+   "presets": [
+    "wf-make-seamless",
+    "wf-photo-texture"
+   ],
+   "required": false,
+   "group": "Concept and textures"
+  },
+  {
+   "file": "FLUX.1-dev-ControlNet-Union-Pro-2.0.safetensors",
+   "folder": "controlnet",
+   "url": "https://huggingface.co/Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0/resolve/main/diffusion_pytorch_model.safetensors",
+   "presets": [
+    "wf-concept-flux"
+   ],
+   "required": false,
+   "group": "Concept and textures",
+   "note": "Downloads as diffusion_pytorch_model.safetensors: save it under this file name."
+  },
+  {
+   "file": "Qwen-Image-InstantX-ControlNet-Union.safetensors",
+   "folder": "controlnet",
+   "url": "https://huggingface.co/Comfy-Org/Qwen-Image-InstantX-ControlNets/resolve/main/split_files/controlnet/Qwen-Image-InstantX-ControlNet-Union.safetensors",
+   "presets": [
+    "wf-concept-qwen"
+   ],
+   "required": false,
+   "group": "Concept and textures",
+   "note": "Gives black images on GPUs without bf16 (RTX 20-series)."
+  },
+  {
+   "file": "depth_anything_3_base.safetensors",
+   "folder": "geometry_estimation",
+   "url": "https://huggingface.co/Comfy-Org/Depth-Anything-3/resolve/main/geometry_estimation/depth_anything_3_base.safetensors",
+   "presets": [
+    "wf-concept-depth",
+    "wf-concept-flux",
+    "wf-concept-qwen"
+   ],
+   "required": false,
+   "group": "Concept and textures"
+  },
+  {
+   "file": "moge_2_vitl_normal_fp16.safetensors",
+   "folder": "geometry_estimation",
+   "url": "https://huggingface.co/Comfy-Org/MoGe/resolve/main/geometry_estimation/moge_2_vitl_normal_fp16.safetensors",
+   "presets": [
+    "wf-depth-normal",
+    "pixal3d-trellis2"
+   ],
+   "required": false,
+   "group": "Concept and textures"
+  },
+  {
+   "file": "chord_v1.safetensors",
+   "folder": "checkpoints",
+   "url": "https://huggingface.co/Ubisoft/ubisoft-laforge-chord/resolve/main/chord_v1.safetensors",
+   "presets": [
+    "wf-pbr-chord"
+   ],
+   "required": false,
+   "group": "Concept and textures",
+   "gated": true,
+   "license": "Research-only",
+   "note": "Sign in on Hugging Face and accept the terms first; download it in the browser."
+  },
+  {
+   "file": "hunyuan_3d_v2.1.safetensors",
+   "folder": "checkpoints",
+   "url": "https://huggingface.co/Comfy-Org/hunyuan3D_2.1_repackaged/resolve/main/hunyuan_3d_v2.1.safetensors",
+   "presets": [
+    "hunyuan3d-21",
+    "wf-photo-to-3d"
+   ],
+   "required": false,
+   "group": "3D"
+  },
+  {
+   "file": "birefnet.safetensors",
+   "folder": "background_removal",
+   "url": "https://huggingface.co/Comfy-Org/BiRefNet/resolve/main/background_removal/birefnet.safetensors",
+   "presets": [
+    "hunyuan3d-21",
+    "pixal3d-trellis2",
+    "wf-photo-to-3d"
+   ],
+   "required": false,
+   "group": "3D"
+  },
+  {
+   "file": "pixal3d_int8_convrot.safetensors",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/Comfy-Org/Pixal3D/resolve/main/diffusion_models/pixal3d_int8_convrot.safetensors",
+   "presets": [
+    "pixal3d-trellis2"
+   ],
+   "required": false,
+   "group": "3D"
+  },
+  {
+   "file": "trellis_2_int8_convrot.safetensors",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/diffusion_models/trellis_2_int8_convrot.safetensors",
+   "presets": [
+    "pixal3d-trellis2"
+   ],
+   "required": false,
+   "group": "3D"
+  },
+  {
+   "file": "trellis_2_shape_vae_bf16.safetensors",
+   "folder": "vae",
+   "url": "https://huggingface.co/Comfy-Org/Pixal3D/resolve/main/vae/trellis_2_shape_vae_bf16.safetensors",
+   "presets": [
+    "pixal3d-trellis2"
+   ],
+   "required": false,
+   "group": "3D"
+  },
+  {
+   "file": "trellis_2_texture_vae_bf16.safetensors",
+   "folder": "vae",
+   "url": "https://huggingface.co/Comfy-Org/Pixal3D/resolve/main/vae/trellis_2_texture_vae_bf16.safetensors",
+   "presets": [
+    "pixal3d-trellis2"
+   ],
+   "required": false,
+   "group": "3D"
+  },
+  {
+   "file": "dino_v3_L_naf_fp32.safetensors",
+   "folder": "clip_vision",
+   "url": "https://huggingface.co/Comfy-Org/Pixal3D/resolve/main/clip_vision/dino_v3_L_naf_fp32.safetensors",
+   "presets": [
+    "pixal3d-trellis2"
+   ],
+   "required": false,
+   "group": "3D"
+  },
+  {
+   "file": "wan2.2_ti2v_5B_fp16.safetensors",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors",
+   "presets": [
+    "wan22-5b-ti2v",
+    "wf-flipbook"
+   ],
+   "required": false,
+   "group": "Video"
+  },
+  {
+   "file": "wan2.2_vae.safetensors",
+   "folder": "vae",
+   "url": "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors",
+   "presets": [
+    "wan22-5b-ti2v",
+    "wf-flipbook"
+   ],
+   "required": false,
+   "group": "Video"
+  },
+  {
+   "file": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+   "folder": "text_encoders",
+   "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+   "presets": [
+    "wan22-5b-ti2v",
+    "wf-flipbook"
+   ],
+   "required": false,
+   "group": "Video"
+  },
+  {
+   "file": "seedvr2_3b_int8_convrot.safetensors",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/Comfy-Org/SeedVR2/resolve/main/diffusion_models/seedvr2_3b_int8_convrot.safetensors",
+   "presets": [
+    "seedvr2-3b-video"
+   ],
+   "required": false,
+   "group": "Video"
+  },
+  {
+   "file": "RealESRGAN_x4plus.safetensors",
+   "folder": "upscale_models",
+   "url": "https://huggingface.co/Comfy-Org/Real-ESRGAN_repackaged/resolve/main/RealESRGAN_x4plus.safetensors",
+   "presets": [
+    "realesrgan-video"
+   ],
+   "required": false,
+   "group": "Video"
+  },
+  {
+   "file": "acestep_v1.5_turbo.safetensors",
+   "folder": "diffusion_models",
+   "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/diffusion_models/acestep_v1.5_turbo.safetensors",
+   "presets": [
+    "ace-step-15"
+   ],
+   "required": false,
+   "group": "Audio"
+  },
+  {
+   "file": "qwen_0.6b_ace15.safetensors",
+   "folder": "text_encoders",
+   "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/text_encoders/qwen_0.6b_ace15.safetensors",
+   "presets": [
+    "ace-step-15"
+   ],
+   "required": false,
+   "group": "Audio"
+  },
+  {
+   "file": "qwen_1.7b_ace15.safetensors",
+   "folder": "text_encoders",
+   "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/text_encoders/qwen_1.7b_ace15.safetensors",
+   "presets": [
+    "ace-step-15"
+   ],
+   "required": false,
+   "group": "Audio"
+  },
+  {
+   "file": "ace_1.5_vae.safetensors",
+   "folder": "vae",
+   "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/vae/ace_1.5_vae.safetensors",
+   "presets": [
+    "ace-step-15"
+   ],
+   "required": false,
+   "group": "Audio"
+  },
+  {
+   "file": "stable_audio_3_small_sfx.safetensors",
+   "folder": "checkpoints",
+   "url": "https://huggingface.co/Comfy-Org/stable-audio-3/resolve/main/checkpoints/stable_audio_3_small_sfx.safetensors",
+   "presets": [
+    "sa3-small-sfx",
+    "wf-sfx-set",
+    "wf-voice-line-sfx"
+   ],
+   "required": false,
+   "group": "Audio"
+  },
+  {
+   "file": "t5gemma_b_b_ul2.safetensors",
+   "folder": "text_encoders",
+   "url": "https://huggingface.co/Comfy-Org/stable-audio-3/resolve/main/text_encoders/t5gemma_b_b_ul2.safetensors",
+   "presets": [
+    "sa3-small-sfx",
+    "wf-sfx-set",
+    "wf-voice-line-sfx"
+   ],
+   "required": false,
+   "group": "Audio"
+  },
+  {
+   "file": "t3_cfg.safetensors",
+   "folder": "tts/chatterbox/chatterbox",
+   "url": "https://huggingface.co/ResembleAI/chatterbox/resolve/main/t3_cfg.safetensors",
+   "presets": [
+    "tts-chatterbox",
+    "chatterbox-voice-swap",
+    "wf-voice-line-sfx",
+    "wf-voice-line-swap"
+   ],
+   "required": false,
+   "group": "Audio",
+   "comfy": "chatterbox/chatterbox/t3_cfg.safetensors",
+   "note": "The Chatterbox node pack can also download these itself on first use."
+  },
+  {
+   "file": "s3gen.safetensors",
+   "folder": "tts/chatterbox/chatterbox",
+   "url": "https://huggingface.co/ResembleAI/chatterbox/resolve/main/s3gen.safetensors",
+   "presets": [
+    "tts-chatterbox",
+    "chatterbox-voice-swap",
+    "wf-voice-line-sfx",
+    "wf-voice-line-swap"
+   ],
+   "required": false,
+   "group": "Audio",
+   "comfy": "chatterbox/chatterbox/s3gen.safetensors",
+   "note": "The Chatterbox node pack can also download these itself on first use."
+  },
+  {
+   "file": "ve.safetensors",
+   "folder": "tts/chatterbox/chatterbox",
+   "url": "https://huggingface.co/ResembleAI/chatterbox/resolve/main/ve.safetensors",
+   "presets": [
+    "tts-chatterbox",
+    "chatterbox-voice-swap",
+    "wf-voice-line-sfx",
+    "wf-voice-line-swap"
+   ],
+   "required": false,
+   "group": "Audio",
+   "comfy": "chatterbox/chatterbox/ve.safetensors",
+   "note": "The Chatterbox node pack can also download these itself on first use."
+  },
+  {
+   "file": "model-00001-of-00003.safetensors",
+   "folder": "tts/VibeVoice/VibeVoice-1.5B",
+   "url": "https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/model-00001-of-00003.safetensors",
+   "presets": [
+    "tts-vibevoice"
+   ],
+   "required": false,
+   "group": "Audio",
+   "note": "The VibeVoice node pack can also download these itself on first use."
+  },
+  {
+   "file": "model-00002-of-00003.safetensors",
+   "folder": "tts/VibeVoice/VibeVoice-1.5B",
+   "url": "https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/model-00002-of-00003.safetensors",
+   "presets": [
+    "tts-vibevoice"
+   ],
+   "required": false,
+   "group": "Audio",
+   "note": "The VibeVoice node pack can also download these itself on first use."
+  },
+  {
+   "file": "model-00003-of-00003.safetensors",
+   "folder": "tts/VibeVoice/VibeVoice-1.5B",
+   "url": "https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/model-00003-of-00003.safetensors",
+   "presets": [
+    "tts-vibevoice"
+   ],
+   "required": false,
+   "group": "Audio",
+   "note": "The VibeVoice node pack can also download these itself on first use."
+  },
+  {
+   "file": "model.safetensors.index.json",
+   "folder": "tts/VibeVoice/VibeVoice-1.5B",
+   "url": "https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/model.safetensors.index.json",
+   "presets": [
+    "tts-vibevoice"
+   ],
+   "required": false,
+   "group": "Audio",
+   "note": "The VibeVoice node pack can also download these itself on first use."
+  },
+  {
+   "file": "config.json",
+   "folder": "tts/VibeVoice/VibeVoice-1.5B",
+   "url": "https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/config.json",
+   "presets": [
+    "tts-vibevoice"
+   ],
+   "required": false,
+   "group": "Audio",
+   "note": "The VibeVoice node pack can also download these itself on first use."
+  },
+  {
+   "file": "preprocessor_config.json",
+   "folder": "tts/VibeVoice/VibeVoice-1.5B",
+   "url": "https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/preprocessor_config.json",
+   "presets": [
+    "tts-vibevoice"
+   ],
+   "required": false,
+   "group": "Audio",
+   "note": "The VibeVoice node pack can also download these itself on first use."
+  }
+ ]
+}
