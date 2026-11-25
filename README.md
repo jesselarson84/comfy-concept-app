@@ -256,7 +256,7 @@ Manifest extras used by workflows:
 - `promptFormat.template`: wraps what you type.
 - `ComfyMathExpression` nodes: work out crop and mask sizes from the input picture, so any size works.
 
-**ComfyUI menus:** the menu add-on lives in the repo at `comfyui/ComfyUI-AIWorkflowMenu`. After adding or changing a preset, rebuild its menus and install it:
+**ComfyUI menus and the Concept tab:** the add-on lives in the repo at `comfyui/ComfyUI-AIWorkflowMenu`. Besides the menus, it adds a **Concept** tab to ComfyUI's left sidebar (batch 22, `web/concept_sidebar.js`): the app's own page from `http://127.0.0.1:3100/?in=comfy` in a frame, without the node-view button since the real graph is beside it. After adding or changing a preset, rebuild its menus and install it:
 
 ```
 node scripts/sync-comfy-menu.mjs --install "<ComfyUI>/custom_nodes"
