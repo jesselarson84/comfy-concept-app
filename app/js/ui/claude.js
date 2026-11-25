@@ -153,11 +153,14 @@ export class ClaudeSheet extends Sheet {
   open({ mode = 'prompt', listen: talkNow = false, onAsk, onApplied }) {
     this.model ||= this.defaultModel();
     const question = mode === 'question';
+    // Batch 19: the Negative prompt's ⋮ has the same Write / Talk prompt; Claude writes only that text.
+    const negative = mode === 'negative';
+    const title = question ? 'Ask Claude' : negative ? 'Write negative prompt' : 'Write prompt';
     const out = h('div.cl-out', { hidden: true });
-    const talk = new TalkInput({ placeholder: question ? 'Ask about Comfy…' : 'Tell Claude what you want…', onSend: async (text) => {
+    const talk = new TalkInput({ placeholder: question ? 'Ask about Comfy…' : negative ? 'What should stay out of the picture?' : 'Tell Claude what you want…', onSend: async (text) => {
       talk.busy = true;
       out.hidden = false;
-      out.replaceChildren(h('div.cl-you', {}, text), h('div.cl-wait', {}, claudeLogo(14), h('span', {}, question ? 'Claude is thinking…' : 'Claude is filling in the form…')));
+      out.replaceChildren(h('div.cl-you', {}, text), h('div.cl-wait', {}, claudeLogo(14), h('span', {}, question ? 'Claude is thinking…' : negative ? 'Claude is writing the negative prompt…' : 'Claude is writing the prompt…')));
       try {
         const r = await onAsk(text, this.model);
         if (!question && r.actions?.length) { this.close(); await onApplied(r); return; }
@@ -166,14 +169,67 @@ export class ClaudeSheet extends Sheet {
       } catch (e) { out.replaceChildren(h('div.cl-you', {}, text), h('div.cl-error', { role: 'alert' }, e.message)); }
       talk.busy = false;
     } });
-    const el = h('div.sheet.claude-sheet', { role: 'dialog', 'aria-label': question ? 'Ask Claude' : 'Write prompt', dataset: { mode } },
+    const el = h('div.sheet.claude-sheet', { role: 'dialog', 'aria-label': title, dataset: { mode } },
       h('div.cl-grab', { 'aria-hidden': 'true' }),
-      h('div.cl-sheet-head', {}, h('span.cl-title', {}, claudeLogo(18), question ? 'Ask Claude' : 'Write prompt'), modelSwitch(() => this.model, (k) => { this.model = k; })),
+      h('div.cl-sheet-head', {}, h('span.cl-title', {}, claudeLogo(18), title), modelSwitch(() => this.model, (k) => { this.model = k; })),
       out, talk.root,
-      question ? null : h('span.cl-hint', {}, 'Claude fills in the prompt and settings, then stops. You press Run.'));
+      question ? null : h('span.cl-hint', {}, negative ? 'Claude writes only the negative prompt; nothing else changes. You press Run.' : 'Claude writes only the prompt; nothing else changes. You press Run.'));
     this.show(el);
     this.talk = talk;
     if (talkNow && talk.speech) talk.startListening(); else setTimeout(() => talk.ta.focus(), 50);
+  }
+}
+
+/**
+ * Batch 19: the floating Claude button is a chat about ComfyUI and this app.
+ * Claude answers, and when asked it sets up the form (preset, fields, preset
+ * settings) or builds a one-off workflow into it. It never loads pictures and
+ * never runs. The chat is kept in sessionStorage: switching apps and coming back
+ * keeps it; closing the app wipes it.
+ * open({ onAsk(text, model, chat) -> reply, onApplied(reply) -> { changed } })
+ */
+export const CHAT_KEY = 'claudeChat.v1';
+export function loadChat() { try { const c = JSON.parse(sessionStorage.getItem(CHAT_KEY) || '[]'); return Array.isArray(c) ? c : []; } catch { return []; } }
+function saveChat(c) { try { sessionStorage.setItem(CHAT_KEY, JSON.stringify(c.slice(-40))); } catch { /* full: the chat just isn't kept */ } }
+
+export class ChatSheet extends Sheet {
+  constructor({ defaultModel = () => 'haiku' } = {}) { super(); this.defaultModel = defaultModel; this.model = null; }
+
+  open({ onAsk, onApplied }) {
+    this.model ||= this.defaultModel();
+    const chat = loadChat();
+    const log = h('div.cl-chat', { 'aria-live': 'polite' });
+    const bubble = (m) => (m.role === 'user' ? h('div.cl-you', {}, m.text)
+      : h('div.cl-said', {}, h('div.cl-text', {}, m.text), m.changed?.length ? h('div.cl-changed', {}, h('i.i.i-check'), `On the form: ${m.changed.join(', ')}`) : null, m.cost ? h('span.cl-cost', {}, m.cost) : null));
+    const paint = (extra = []) => {
+      log.replaceChildren(...(chat.length || extra.length ? [...chat.map(bubble), ...extra]
+        : [h('p.cl-empty.muted', {}, 'Ask anything about ComfyUI, or tell Claude what to set up. It can pick a preset, fill in the form and build a workflow. You add pictures and press Run.')]));
+      log.scrollTop = log.scrollHeight;
+    };
+    const talk = new TalkInput({ placeholder: 'Ask or set something up…', onSend: async (text) => {
+      talk.busy = true;
+      const before = chat.map(({ role, text: t, changed }) => ({ role, text: changed?.length ? `${t}\n(Changed on the form: ${changed.join(', ')})` : t }));
+      chat.push({ role: 'user', text });
+      saveChat(chat);
+      paint([h('div.cl-wait', {}, claudeLogo(14), h('span', {}, 'Claude is thinking…'))]);
+      try {
+        const r = await onAsk(text, this.model, before);
+        const { changed = [] } = r.actions?.length ? await onApplied(r) : {};
+        chat.push({ role: 'assistant', text: r.reply, changed, cost: `${r.modelName || MODEL_NAMES[r.model] || ''} · ${fmtCost(r.costUsd)}` });
+        saveChat(chat);
+        paint();
+      } catch (e) { paint([h('div.cl-error', { role: 'alert' }, e.message)]); }
+      talk.busy = false;
+    } });
+    const el = h('div.sheet.claude-sheet.cl-chat-sheet', { role: 'dialog', 'aria-label': 'Claude', dataset: { mode: 'chat' } },
+      h('div.cl-grab', { 'aria-hidden': 'true' }),
+      h('div.cl-sheet-head', {}, h('span.cl-title', {}, claudeLogo(18), 'Claude'), modelSwitch(() => this.model, (k) => { this.model = k; })),
+      log, talk.root,
+      h('span.cl-hint', {}, 'ComfyUI only. Building a new workflow uses Opus. Closing the app clears this chat.'));
+    this.show(el);
+    this.talk = talk;
+    paint();
+    setTimeout(() => talk.ta.focus(), 50);
   }
 }
 

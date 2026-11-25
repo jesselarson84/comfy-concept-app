@@ -1115,3 +1115,25 @@ body:has(.prompt-editor:not([hidden])) .claude-fab { display: none; }
 .hsec-btn .i { width: 14px; height: 14px; }
 .history-session h3[role="button"] { cursor: pointer; align-items: center; -webkit-tap-highlight-color: transparent; }
 .history-session h3 .hp-ch { color: var(--c-muted); }
+/* Batch 19 (option B): a folder is one rounded card holding its projects; project names are smaller than folder names */
+.history-session[data-project] h3 { font-size: 15px; font-weight: 600; padding: 12px 14px 10px 16px; }
+.history-session[data-project] h3 .proj-sub { font-size: 12px; }
+.hgroup-card { background: #1f1f21; border-radius: 16px; margin: 12px 10px 0; padding-bottom: 6px; overflow: hidden; }
+.hgroup-card .hgroup { font-size: 17px; font-weight: 700; padding: 14px 14px 6px 14px; }
+.hgroup-card .history-session + .history-session { border-top: 1px solid #2e2f33; }
+.hgroup-card .history-session .thumbs.grid { padding: 0 8px 8px; }
+/* Batch 19: the floating Claude button's chat (ui/claude.js ChatSheet) */
+.cl-chat { display: flex; flex-direction: column; gap: 10px; min-height: 120px; max-height: 55vh; overflow-y: auto; overscroll-behavior: contain; font-size: 14px; line-height: 1.5; }
+.cl-said { display: flex; flex-direction: column; gap: 4px; max-width: 92%; }
+.cl-changed { display: flex; align-items: flex-start; gap: 6px; font-size: 12.5px; color: #c9c9cd; background: #26272a; border-radius: 10px; padding: 6px 9px; }
+.cl-changed .i { width: 14px; height: 14px; color: #8fd19e; margin-top: 2px; }
+.cl-said .cl-cost { margin-left: 0; }
+.cl-empty { margin: auto 0; font-size: 13px; line-height: 1.45; }
+/* Batch 19: "Claude's workflow · Save as preset / Discard" above the results after its first run */
+.cl-savebar { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 10px 10px 10px 12px; border-radius: 14px; background: #1f1f21; border: 1px solid #d9775766; }
+.cl-savebar[hidden] { display: none; }
+.cl-savebar-t { flex: 1; min-width: 0; display: grid; gap: 2px; font-size: 14px; font-weight: 600; color: #f2f2f4; }
+.cl-savebar-t small { font-size: 12px; font-weight: 400; color: #9a9aa0; }
+.cl-savebar .btn { min-height: 36px; height: 36px; border-radius: 10px; padding: 0 12px; font-size: 13px; font-weight: 600; }
+.cl-savebar-go { background: #d97757; color: #fff; border: 0; }
+.cl-savebar-no { background: transparent; color: #c9c9cd; border: 1px solid #3a3b3f; }

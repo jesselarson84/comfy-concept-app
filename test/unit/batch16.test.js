@@ -104,16 +104,15 @@ test('tool checks: aspect, resolution, batch, seed, preset', () => {
   assert.equal(describeError(Object.assign(new Error('x'), { status: 401 })).message, 'The API key was refused. Replace it in Settings.');
 });
 
-test('the prompt box: Claude fills in the form (checked) and stops; cached prompt + tools, adaptive thinking, effort set', async () => {
+test('the prompt box: Claude writes only the prompt (batch 19) and stops; cached prompt + tools, adaptive thinking, effort set', async () => {
   await call('POST', '/api/claude', { enabled: true, limitUsd: 20, defaultModel: 'haiku' });
   await reset();
   const r = await ask({ text: 'Same mech but at night in heavy rain, tall for a wallpaper' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.model, 'haiku');
   const form = r.body.actions.find((a) => a.type === 'form');
-  assert.deepEqual(form.changes, { prompt: 'Cinematic low-angle shot of a weathered scout mech in a pine forest at night, heavy rain, sodium streetlight', negative: 'bright daylight, cartoon', aspect: '16:9-portrait', res: '2k' });
-  assert.ok(!r.body.actions.some((a) => a.type === 'variations' || a.type === 'graph'));
-  assert.match(r.body.reply, /night with heavy rain/);
+  assert.deepEqual(form.changes, { prompt: 'Cinematic low-angle shot of a weathered scout mech in a pine forest at night, heavy rain, sodium streetlight' }, 'batch 19: only the prompt');
+  assert.equal(r.body.actions.length, 1, 'no settings, no variations, no graph');
   assert.ok(r.body.costUsd > 0);
   const reqs = await requests();
   assert.equal(reqs.length, 3);
@@ -168,7 +167,7 @@ test('Opus: effort high for fix / files, server-side fallback on, workflow tools
 });
 
 test('preset settings are clamped to the preset\'s range', async () => {
-  const r = await ask({ text: 'SETTINGS more steps' });
+  const r = await ask({ mode: 'chat', text: 'SETTINGS more steps' }); // batch 19: the chat sets settings, Write prompt does not
   const a = r.body.actions.find((x) => x.type === 'settings');
   assert.equal(a.preset, 'ai:klein-4b-t2i');
   const p = (await (await fetch(s.base + '/api/workflows')).json()).workflows.find((w) => w.id === 'ai:klein-4b-t2i');
@@ -242,4 +241,51 @@ test('no key: asks for one', async () => {
   assert.equal(r.status, 409);
   assert.equal(r.body.code, 'no-key');
   await call('POST', '/api/claude/key', { key: KEY });
+});
+
+// ---- batch 19 ------------------------------------------------------------------
+test('batch 19: Write prompt on Prompt / Negative prompt writes only that text; tools are look-only + write_prompt', async () => {
+  await call('POST', '/api/claude', { enabled: true, limitUsd: 20, defaultModel: 'haiku' });
+  await reset();
+  const r = await ask({ mode: 'negative', model: 'opus', text: 'keep it clean' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.actions, [{ type: 'form', changes: { negative: 'blurry, low detail, watermark' } }]);
+  const b = (await requests())[0].body;
+  assert.deepEqual(b.tools.map((t) => t.name), ['get_form', 'list_presets', 'get_preset', 'search_history', 'view_picture', 'write_prompt'], 'never builds, never sets settings (even on Opus)');
+  assert.match(JSON.stringify(b.messages), /WRITE THE NEGATIVE PROMPT ONLY/);
+});
+
+test('batch 19: the chat remembers its turns, sets up the form, never loads pictures', async () => {
+  await reset();
+  const chat = [{ role: 'user', text: 'what is guidance?' }, { role: 'assistant', text: 'It is how closely...' }, { role: 'user', text: 'and steps?' }, { role: 'assistant', text: 'More steps...' }];
+  const r = await ask({ mode: 'chat', text: 'REMEMBER', chat, pictures: [{ media: 'image/jpeg', data: 'AAAA', image: { filename: 'p.png', subfolder: 'concept-app', type: 'output' } }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.match(r.body.reply, /I see 4 earlier message/);
+  let b = (await requests())[0].body;
+  assert.ok(!JSON.stringify(b.messages).includes('"type":"image"'), 'no pictures in the chat');
+  assert.deepEqual(b.tools.map((t) => t.name), ['get_form', 'list_presets', 'get_preset', 'search_history', 'view_picture', 'set_form', 'set_preset_settings', 'build_workflow']);
+  assert.match(b.system[0].text, /CHAT MODE/);
+  await reset();
+  const set = await ask({ mode: 'chat', text: 'SETUP a lighthouse with Klein' });
+  assert.deepEqual(set.body.actions, [{ type: 'form', changes: { preset: 'ai:klein-4b-t2i', prompt: 'a lighthouse at dawn' } }]);
+  assert.match(set.body.reply, /Set up FLUX/);
+});
+
+test('batch 19: a Haiku chat hands building to Opus (build_workflow); the graph is checked and loaded', async () => {
+  await reset();
+  const r = await ask({ mode: 'chat', model: 'haiku', text: 'BUILDIT a lighthouse workflow' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const g = r.body.actions.find((a) => a.type === 'graph');
+  assert.equal(g?.name, 'Chat build');
+  assert.match(r.body.modelName, /Haiku \+ Opus/);
+  const reqs = await requests();
+  assert.equal(reqs[0].body.model, 'claude-haiku-5-5');
+  const opus = reqs.filter((x) => x.body.model === 'claude-opus-5-5');
+  assert.ok(opus.length >= 2, 'the build ran on Opus');
+  assert.ok(opus[0].body.tools.some((t) => t.name === 'propose_graph'));
+  assert.ok(!opus[0].body.tools.some((t) => t.name === 'build_workflow' || t.name === 'load_pictures'));
+  // an Opus chat builds itself
+  await reset();
+  await ask({ mode: 'chat', model: 'opus', text: 'hello' });
+  assert.ok((await requests())[0].body.tools.some((t) => t.name === 'propose_graph'));
 });

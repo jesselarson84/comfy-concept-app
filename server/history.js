@@ -85,6 +85,8 @@ export class HistoryStore {
       source: typeof input.source === 'string' && input.source ? input.source : undefined,
       // Batch 12: where the job came from when not this app's form ("desktop" ComfyUI, "schedule").
       origin: ['desktop', 'schedule'].includes(input.origin) ? input.origin : undefined,
+      // Batch 19: made by a one-off workflow Claude built: that workflow, so it can be saved as a preset later.
+      claudeGraph: claudeGraphOf(input.claudeGraph),
     };
     this.data.entries.push(e);
     await this.#save();
@@ -207,4 +209,15 @@ function sanitizeImages(list) {
     filename: i.filename, subfolder: String(i.subfolder || ''), type: String(i.type || 'output'),
     ...(['3d', 'video', 'audio'].includes(i.kind) ? { kind: i.kind } : {}),
   }));
+}
+
+/** Batch 19: { key, name, graph } of a Claude workflow (API-format nodes), or undefined. */
+export function claudeGraphOf(cg) {
+  if (!cg || typeof cg !== 'object' || !cg.graph || typeof cg.graph !== 'object' || Array.isArray(cg.graph)) return undefined;
+  const key = String(cg.key || '');
+  if (!/^claude:[\w-]{1,80}$/.test(key)) return undefined;
+  const nodes = Object.entries(cg.graph);
+  if (!nodes.length || nodes.length > 80 || !nodes.every(([, n]) => n && typeof n.class_type === 'string' && n.inputs && typeof n.inputs === 'object')) return undefined;
+  if (JSON.stringify(cg.graph).length > 200_000) return undefined;
+  return { key, name: String(cg.name || 'Claude workflow').slice(0, 60), graph: cg.graph };
 }

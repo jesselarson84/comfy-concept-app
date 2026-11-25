@@ -267,6 +267,8 @@ export class Viewer {
         { act: 'reuse', icon: 'i-rotate-ccw', label: 'Reuse settings', sub: 'Its prompt, seed and model', hidden: !this.hooks.onReuse, fn: run((cur) => { this.close(); this.hooks.onReuse(cur); }) },
         // Batch 16: only while Use Claude is on (Settings).
         { act: 'ask-claude', icon: claudeLogo(18), label: 'Ask Claude about this', sub: 'Fix it on the form', hidden: !this.hooks.onAskClaude || !this.hooks.claudeOn?.(), fn: run((cur) => this.hooks.onAskClaude(cur)) },
+        // Batch 19: made by a workflow Claude built that is not saved yet -> keep it as a preset.
+        { act: 'save-workflow', icon: 'i-save', label: 'Save workflow as preset', sub: `${it.meta?.claudeGraph?.name || "Claude's workflow"} · not saved yet`, hidden: !this.hooks.onSaveWorkflow || !this.hooks.claudeUnsaved?.(it), fn: run((cur) => this.hooks.onSaveWorkflow(cur)) },
       ] },
       { items: [{ act: 'delete', icon: 'i-trash-2', label: 'Delete', danger: true, hidden: !(it.historyId && this.hooks.onDelete), fn: () => this.remove() }] },
     ]);

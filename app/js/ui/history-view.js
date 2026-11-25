@@ -431,7 +431,8 @@ export class HistoryView {
       if (!b.head) return secs;
       const n = b.projects.reduce((a, p) => a + p.entries.length, 0);
       const hd = h('div.hgroup', { dataset: { group: b.head } }, h('i.i.i-folder'), h('span.hg-name', {}, b.head), h('span.hg-n', {}, `${b.projects.length} ${b.projects.length === 1 ? 'project' : 'projects'} · ${n}`));
-      return [hd, ...secs];
+      // Batch 19: each folder is one card holding its projects (option B).
+      return [h('div.hgroup-card', { dataset: { group: b.head } }, hd, ...secs)];
     });
     this.list.replaceChildren(...head, ...body);
     this.paintSelection();
@@ -448,7 +449,7 @@ export class HistoryView {
       // Turn history entries into the same item shape the viewer uses.
       const items = s.entries.filter((e) => e.images.length).map((e) => ({
         key: e.id, historyId: e.id, image: e.images[0], favorite: e.favorite, status: 'done', tags: [...new Set(entryTags(e))], at: e.createdAt,
-        meta: { prompt: e.prompt, negative: e.negative, seed: e.seed, workflow: e.workflow, legacyWorkflow: e.legacyWorkflow, width: e.width, height: e.height, steps: e.steps, strength: e.strength, reference: e.reference, action: e.action, parent: e.parent, promptId: e.promptId },
+        meta: { prompt: e.prompt, negative: e.negative, seed: e.seed, workflow: e.workflow, legacyWorkflow: e.legacyWorkflow, width: e.width, height: e.height, steps: e.steps, strength: e.strength, reference: e.reference, action: e.action, parent: e.parent, promptId: e.promptId, claudeGraph: e.claudeGraph },
         project: e.project ?? null, drive: driveInfo(e, projectsCache()), tagsBy: e.tags || null,
       }));
       // Non-image results (3D .glb, audio, video) open the 3D viewer / audio player / file sheet.
