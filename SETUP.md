@@ -117,7 +117,7 @@ git --version    # any version
 | **ComfyUI-VibeVoice** (wildminder) | VibeVoice TTS |
 | **ComfyUI-Chord** | PBR Maps (CHORD). Research-only license. |
 
-- [ ] *(Optional)* Install the app's own menu add-on, which adds **AI Models** / **AI Workflows** to ComfyUI's right-click menu. Run this after section 5:
+- [ ] *(Optional)* Install the app's own ComfyUI add-on. It adds **AI Models** / **AI Workflows** to ComfyUI's right-click menu and a **Concept** tab to ComfyUI's left sidebar that shows this app next to the node graph (drag the panel's edge to make it wider; the app must be running). Run this after section 5, then reload ComfyUI:
 
   ```powershell
   cd <app-folder>

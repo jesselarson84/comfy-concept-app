@@ -1137,3 +1137,5 @@ body:has(.prompt-editor:not([hidden])) .claude-fab { display: none; }
 .cl-savebar .btn { min-height: 36px; height: 36px; border-radius: 10px; padding: 0 12px; font-size: 13px; font-weight: 600; }
 .cl-savebar-go { background: #d97757; color: #fff; border: 0; }
 .cl-savebar-no { background: transparent; color: #c9c9cd; border: 1px solid #3a3b3f; }
+/* Batch 22: inside ComfyUI's sidebar the real node graph is right beside the app: no node-view button */
+.in-comfy #btn-canvas { display: none; }

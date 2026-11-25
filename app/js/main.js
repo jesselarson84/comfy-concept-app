@@ -53,6 +53,14 @@ import { speechSupport } from './lib/speech.js';
 import { SettingsSheet, resetOnClose } from './ui/settings-sheet.js';
 import { aspectLabel } from './lib/aspect.js';
 
+// Batch 22: shown in ComfyUI's left sidebar (the "Concept" tab of the ComfyUI add-on,
+// comfyui/ComfyUI-AIWorkflowMenu/web/concept_sidebar.js, opens /?in=comfy). The URL is
+// cleaned after start, so the frame remembers it for its own reloads. There the real
+// node graph is right beside the app, so the node-view button is hidden.
+if (new URLSearchParams(location.search).get('in') === 'comfy') sessionStorage.setItem('inComfy', '1');
+const inComfy = sessionStorage.getItem('inComfy') === '1';
+document.documentElement.classList.toggle('in-comfy', inComfy);
+
 const comfy = new ComfyClient();
 const queue = new JobQueue(comfy);
 // Batch 17: "Reset to defaults when the app closes" (Settings). sessionStorage lives
