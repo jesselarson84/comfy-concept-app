@@ -745,6 +745,17 @@ const claudeSheet = new ClaudeSheet({ defaultModel: () => claudeStatus?.defaultM
 // The floating Ask Claude button: bottom right on every screen while Use Claude is on.
 const claudeFab = h('button.claude-fab', { type: 'button', 'aria-label': 'Ask Claude a question', title: 'Ask Claude', dataset: { act: 'ask-claude-fab' }, hidden: true, onclick: () => openQuestion() }, claudeLogo(24));
 document.body.append(claudeFab);
+// Batch 18: on a phone the Ask button sits just above the raised bottom panel
+// (the Run bar, plus "This session" once it has pictures), so it never covers a
+// thumbnail. --dock-h = the panel's height from the bottom of the screen.
+function paintDock() {
+  const res = $('#results'), bar = $('.actionbar');
+  const top = Math.min(...[res, bar].filter((el) => el.offsetParent !== null).map((el) => el.getBoundingClientRect().top));
+  if (Number.isFinite(top)) document.documentElement.style.setProperty('--dock-h', `${Math.max(0, Math.round(window.innerHeight - top))}px`);
+}
+if ('ResizeObserver' in window) { const ro = new ResizeObserver(paintDock); ro.observe($('#results')); ro.observe($('.actionbar')); }
+window.addEventListener('resize', paintDock);
+paintDock();
 function paintClaude() { claudeFab.hidden = !claudeOn(); }
 async function loadClaude() { try { claudeStatus = await api.getClaude(); } catch { claudeStatus = null; } paintClaude(); }
 
