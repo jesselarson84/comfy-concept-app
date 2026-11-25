@@ -1,5 +1,7 @@
 # Comfy UI (the Comfy Concept app)
 
+> **Setting it up?** Start with **[SETUP.md](SETUP.md)**: ComfyUI and its custom nodes, every model file the presets use (with download links and folders), Tailscale, installing it on your phone, and the optional Claude features.
+
 The app shows up as **Comfy UI** on the phone (launcher label, PWA name, page title and share sheet). The repo, folders, package `app.jesse.comfyconcept` and internal names are still "Comfy Concept".
 
 A phone and tablet front-end (an installable PWA) for the ComfyUI on your home PC. It is built for **concepting**: you type a prompt and get a batch of images, with an optional reference image.
