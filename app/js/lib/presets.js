@@ -133,7 +133,6 @@ export function validatePreset(id, file) {
       optional: (m.optional || []).map((o) => ({ node: String(o.node), drop: o.drop || [] })),
       mask: m.mask ? { node: String(m.mask.node), input: 'image', image: String(m.mask.image) } : null,
       info: { ...(m.info || {}) },
-      needs: m.needs && typeof m.needs === 'object' ? { ...m.needs } : null, // batch 14: { bf16: true, why }
       heavy: m.heavy === true, gguf: m.gguf && wf[m.gguf.node] && typeof m.gguf.unet_name === 'string' ? { ...m.gguf, node: String(m.gguf.node) } : null,
     },
     workflow: wf,
@@ -376,26 +375,8 @@ export function vramFit({ estMB, gpuTotalMB, ramFreeMB, desktopReserveMB = 1200,
 }
 
 /** Availability of a preset = installed check + VRAM fit. */
-/**
- * Batch 14: can this GPU compute in bfloat16? true / false from its name, null
- * when unknown (then nothing is blocked). bf16 needs NVIDIA compute 8.0+: RTX 30,
- * 40 and 50 series, RTX A / Ada workstation cards, A100, H100, L4/L40...
- * RTX 20 series (Turing), GTX, Titan RTX, Quadro RTX, T4 and V100 can't.
- */
-export function gpuHasBf16(name) {
-  const n = String(name || '');
-  if (!n.trim()) return null;
-  if (/Quadro|GTX|TITAN|RTX\s*20\d\d|Tesla\s*(T4|V100|P\d+|K\d+)/i.test(n)) return false;
-  if (/RTX\s*(30|40|50)\d\d|RTX\s*A\d|\bAda\b|Blackwell|\b(A100|A10G?|A30|A40|A800|H100|H200|L4|L40S?|B100|B200|GB\d+)\b|RTX\s*PRO/i.test(n)) return true;
-  if (/NVIDIA|GeForce|Quadro|Tesla|TITAN|RTX|GTX/i.test(n)) return false;
-  return null; // not an NVIDIA name we know
-}
-
 export function presetAvailability(p, info, hw = {}, opts = {}) {
   if (!info?.objectInfo) return { status: 'unknown', label: 'ComfyUI offline', reason: 'ComfyUI is not reachable, so availability could not be checked' };
-  if (p.manifest.needs?.bf16 && gpuHasBf16(hw.gpuName) === false) {
-    return { status: 'unavailable', label: 'needs a newer GPU', reason: p.manifest.needs.why || `Needs a GPU that can compute in bfloat16 (RTX 30 series or newer); ${hw.gpuName} can't` };
-  }
   const inst = checkInstalled(p.workflow, info, p.manifest.files);
   if (!inst.ok) {
     const dl = inst.missingModels.length && !inst.missingNodes.length;
