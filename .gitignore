@@ -34,3 +34,6 @@ data/claude-key.json
 data/claude-spend.json
 data/claude-settings.json
 claude-key.json
+
+# Claude Code local settings (personal permissions)
+.claude/settings.local.json
