@@ -10,7 +10,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { checkApiFormat } from '../app/js/lib/workflow-detect.js';
 import { SUBGROUPS } from '../app/js/lib/presets.js';
-import { cleanName } from './user-presets.js';
+
+/** One line, no control characters, at most 60 characters. */
+export const cleanName = (s) => String(s || '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
 
 const MAX = 200;
 export const GROUPS = ['3D', 'Image', 'Video', 'Audio', 'Textures', 'Concept', 'VFX', '3D Assets', 'Sound', 'My presets'];

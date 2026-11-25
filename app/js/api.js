@@ -10,15 +10,12 @@ async function req(method, url, body) {
   return data;
 }
 export const getConfig = () => req('GET', '/api/config');
+/** Before any ComfyUI queue: the server applies the memory profile (unload
+ *  Ollama always on small GPUs, only when free VRAM is short on big ones). */
+export async function prepareComfyQueue(workflow) {
+  try { return await req('POST', '/api/memory/before-queue', { workflow }); } catch { return null; }
+}
 export const getWorkflows = ({ fresh = false } = {}) => req('GET', '/api/workflows' + (fresh ? '?fresh=1' : '')).then((d) => d.workflows);
-// Chat builder + saved setups ("My presets")
-export const proposeSetup = (body) => req('POST', '/api/builder/propose', body);
-export const checkSetup = (body) => req('POST', '/api/builder/check', body);
-export const getBuilderConfig = () => req('GET', '/api/builder/config');
-export const setBuilderModel = (model) => req('PUT', '/api/builder/config', { model });
-export const saveUserPreset = (body) => req('POST', '/api/user-presets', body);
-export const renameUserPreset = (id, name) => req('PATCH', `/api/user-presets/${encodeURIComponent(id)}`, { name });
-export const deleteUserPreset = (id) => req('DELETE', `/api/user-presets/${encodeURIComponent(id)}`);
 // Save as preset (node view): graphs saved into a picker section.
 export const saveGraphPreset = (body) => req('POST', '/api/graph-presets', body);
 export const updateGraphPreset = (id, patch) => req('PATCH', `/api/graph-presets/${encodeURIComponent(id)}`, patch);

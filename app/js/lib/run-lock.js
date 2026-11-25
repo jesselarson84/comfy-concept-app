@@ -2,8 +2,7 @@
 // -----------------------------------------------------------------------------
 // After Run is tapped it stays disabled until every job of that run has
 // finished, failed or been cancelled. Cancel stays active the whole time.
-// While locked the preset can't be switched and nothing else is queued (chat
-// Generate, workflow actions, builder test runs); several pictures go through
+// While locked the preset can't be switched and nothing else is queued; several pictures go through
 // Batch instead. `starting` covers the moment between the tap and the jobs
 // reaching the queue (the memory step and the POSTs), so a double tap can't
 // queue twice. Pure logic, shared by main.js, the Android notification and the

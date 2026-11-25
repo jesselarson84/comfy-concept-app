@@ -37,7 +37,7 @@ export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = 
   // data: { 'history.json': {...}, 'chats.json': {...} } pre-existing saved state (old shapes).
   if (data) for (const [f, v] of Object.entries(data)) fs.writeFileSync(path.join(dataDir, f), typeof v === 'string' ? v : JSON.stringify(v, null, 1));
   const comfyUrl = comfyDown ? 'http://127.0.0.1:9' : `http://127.0.0.1:${mockPort}`;
-  // ollamaDown: point at a closed port so the Chat tab shows its offline state.
+  // ollamaDown: point at a closed port (Ollama not running).
   const ollamaUrl = ollamaDown ? 'http://127.0.0.1:9' : `http://127.0.0.1:${ollamaPort}`;
   // Save to Drive never touches a real drive in tests: a temp "Q:" with (drive:
   // true) or without (drive: false) its "My Drive" folder.

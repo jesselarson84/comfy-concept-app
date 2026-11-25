@@ -9,14 +9,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from './helpers.js';
 import { validatePreset, clampPresetValues, applyPresetParams, checkInstalled } from '../../app/js/lib/presets.js';
-import { validateAction, buildActionGraph } from '../../app/js/lib/actions.js';
-import { buildSetup, validateGraph } from '../../app/js/lib/builder.js';
+import { validateGraph } from '../../app/js/lib/graph-validate.js';
 
 const objectInfo = JSON.parse(fs.readFileSync(path.join(ROOT, 'test/fixtures/object-info.json'), 'utf8'));
 const models = JSON.parse(fs.readFileSync(path.join(ROOT, 'test/fixtures/models.json'), 'utf8'));
 const read = (p) => JSON.parse(fs.readFileSync(path.join(ROOT, p), 'utf8'));
 const preset = () => validatePreset('hunyuan3d-21', read('workflows/ai/hunyuan3d-21.json'));
-const action = () => validateAction('image-to-3d', read('workflows/actions/image-to-3d.json'));
 
 /** Follow the CLIP vision image back to its source and check the cut-out chain. */
 export function assertCutout(g, loadId, label) {
@@ -76,34 +74,6 @@ test('Hunyuan3D preset reports "needs download" when the BiRefNet model is missi
   const r = checkInstalled(p.workflow, { objectInfo: oi, models });
   assert.equal(r.ok, false);
   assert.match(r.reasons.join(' '), /needs download: birefnet\.safetensors/);
-});
-
-test('Chat "Image to 3D" action: same cut-out chain; the chat image goes into LoadImage and the mask', () => {
-  const a = action();
-  assert.ok(a.ok, a.error);
-  const g = buildActionGraph(a, { steps: 30, detail: 256 }, 'rocket.png', 'concept-app');
-  assert.equal(g['2'].inputs.image, 'rocket.png');
-  assertCutout(g, '2', 'action');
-  assert.deepEqual(validateGraph(g, objectInfo), []);
-  assert.equal(Object.values(g).find((n) => n.class_type === 'VAEDecodeHunyuan3D').inputs.octree_resolution, 256);
-});
-
-test('Builder image_to_3d block: generated or uploaded picture is cut out before CLIP vision', () => {
-  for (const blocks of [
-    [{ type: 'load_model', params: { family: 'flux2-klein' } }, { type: 'txt2img' }, { type: 'image_to_3d', params: { steps: 30, detail: 256 } }],
-    [{ type: 'input_image' }, { type: 'image_to_3d' }],
-  ]) {
-    const r = buildSetup(blocks, { objectInfo });
-    assert.ok(r.ok, JSON.stringify(r.errors));
-    assert.deepEqual(validateGraph(r.graph, objectInfo), []);
-    const enc = Object.values(r.graph).find((n) => n.class_type === 'CLIPVisionEncode');
-    const comp = r.graph[enc.inputs.image[0]];
-    assert.equal(comp.class_type, 'ImageCompositeMasked');
-    const rb = r.graph[r.graph[comp.inputs.mask[0]].inputs.mask[0]];
-    assert.equal(rb.class_type, 'RemoveBackground');
-    assert.deepEqual(rb.inputs.image, comp.inputs.destination, 'mask and picture come from the same image');
-    assert.equal(Object.values(r.graph).find((n) => n.class_type === 'VAEDecodeHunyuan3D').inputs.octree_resolution, blocks.at(-1).params?.detail ?? 256);
-  }
 });
 
 test('Pixal3D / TRELLIS.2 preset already cuts the object out: BiRefNet mask (switch on) -> ImageCropToMask on black -> both conditionings', () => {

@@ -1,6 +1,6 @@
 // Batch 1: ComfyUI-style picker with the AI Workflow presets (live
-// availability), preset param clamps, a TTS preset run, and the guarded chat
-// builder (summary card -> Test run / Save as preset / Discard, rename/delete).
+// availability), preset param clamps and a TTS preset run. (Batch 15: the
+// chat builder tests went with the builder.)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -40,13 +40,6 @@ async function runAndWait() {
   await page.click('#btn-generate');
   await page.waitForFunction((n) => [...document.querySelectorAll('#thumbs .thumb')].filter((e) => e.className.includes('s-done')).length > n, n, { timeout: 10000 });
   return page.evaluate(() => window.conceptApp.queue.items.at(-1));
-}
-const lastAssistant = () => page.locator('.chat-msg.assistant').last();
-async function send(text) {
-  const n = await page.locator('.chat-msg.assistant:not(.chat-thinking)').count();
-  await page.fill('.chat-input', text);
-  await page.click('.chat-send');
-  await page.waitForFunction((n) => document.querySelectorAll('.chat-msg.assistant:not(.chat-thinking)').length > n && !document.querySelector('.chat-thinking'), n, { timeout: 10000 });
 }
 
 test('header says Comfy UI; Run button is the only blue element; picker has 3D / Image / Video / Audio with live availability', async () => {
@@ -135,65 +128,6 @@ test('VibeVoice preset: voice-sample slot uses verify-voice.flac by default; pla
   const vv = Object.values(g).find((n) => n.class_type === 'VibeVoiceTTS');
   assert.equal(vv.inputs.text, '[1] Hello from the app.');
   assert.equal(g[vv.inputs.speaker_1_voice[0]].inputs.audio, 'verify-voice.flac');
-});
-
-test('builder: proposal -> summary card; Test run queues a reduced graph without saving; Save adds it under My presets', async () => {
-  await pick('ai:klein-4b-t2i');
-  await page.fill('#prompt', 'a red fox');
-  if ((await page.locator('#chat').getAttribute('open')) === null) await page.click('#chat > summary');
-  await send('make a setup: schnell then upscale 2x');
-  const card = lastAssistant().locator('.setup-card');
-  assert.match(await card.textContent(), /Fast concept 2x/);
-  assert.match(await card.textContent(), /Checked against ComfyUI/);
-  assert.doesNotMatch(await lastAssistant().textContent(), /Great idea|I have made/);
-  for (const b of ['Test run', 'Save as preset', 'Discard']) assert.equal(await card.locator(`button:has-text("${b}")`).count(), 1, b);
-  await card.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: path.join(SHOTS, 'b1-builder-card.png') });
-  const before = (await comfyReqs()).filter((r) => r.path === '/prompt').length;
-  assert.equal(before, (await comfyReqs()).filter((r) => r.path === '/prompt').length, 'nothing queued by a proposal');
-  const n = await doneCount();
-  await card.locator('button:has-text("Test run")').click();
-  await page.waitForFunction((n) => [...document.querySelectorAll('#thumbs .thumb')].filter((e) => e.className.includes('s-done')).length > n, n, { timeout: 10000 });
-  const it = await page.evaluate(() => window.conceptApp.queue.items.at(-1));
-  assert.equal(it.meta.workflow, 'builder:test');
-  const g = await comfyGraph(it.promptId);
-  for (const x of Object.values(g)) if (typeof x.inputs.width === 'number') assert.ok(x.inputs.width <= 768);
-  assert.deepEqual((await (await fetch(s.base + '/api/user-presets')).json()).presets, [], 'test run does not save');
-  await card.locator('button:has-text("Save as preset")').click();
-  await page.waitForFunction(() => window.conceptApp.workflows.some((w) => w.group === 'My presets'));
-  assert.equal((await (await fetch(s.base + '/api/user-presets')).json()).presets.length, 1);
-  assert.match(await card.textContent(), /Saved under My presets/);
-});
-
-test('builder: an invalid proposal is rejected with the plain reason and has no Save button', async () => {
-  await send('make a setup BADSETUP');
-  const card = lastAssistant().locator('.setup-card');
-  assert.equal(await card.getAttribute('data-state'), 'rejected');
-  assert.match(await card.textContent(), /only works with Qwen-Image/);
-  assert.equal(await card.locator('button:has-text("Save as preset")').count(), 0);
-  assert.doesNotMatch(await lastAssistant().textContent(), /I have built/);
-  assert.match(await lastAssistant().textContent(), /cannot be built as asked/);
-  await card.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: path.join(SHOTS, 'b1-builder-rejected.png') });
-});
-
-test('My presets: pick, rename and delete from the picker', async () => {
-  const id = await page.evaluate(() => window.conceptApp.workflows.find((w) => w.group === 'My presets').id);
-  await pick(id);
-  assert.match(await page.textContent('#preset-crumb'), /My presets/);
-  await page.click('#preset-btn');
-  await page.click(`#picker .ent[data-preset="${id}"] .edit`);
-  await page.fill('#picker .ent.editing input', 'Fox upscaler');
-  await page.click('#picker .ent.editing button:has-text("Save")');
-  await page.waitForFunction(() => window.conceptApp.workflows.some((w) => w.label === 'Fox upscaler'));
-  await page.waitForSelector(`#picker .ent[data-preset="${id}"] .edit`); // picker stays open, row shows the new name
-  assert.match(await page.textContent(`#picker .ent[data-preset="${id}"]`), /Fox upscaler/);
-  await page.screenshot({ path: path.join(SHOTS, 'b1-my-presets.png') });
-  await page.click(`#picker .ent[data-preset="${id}"] .edit`);
-  await page.click('#picker .ent.editing button:has-text("Delete")');
-  await page.click('#picker .ent.editing button:has-text("Tap again")');
-  await page.waitForFunction(() => !window.conceptApp.workflows.some((w) => w.group === 'My presets'));
-  assert.deepEqual((await (await fetch(s.base + '/api/user-presets')).json()).presets, []);
 });
 
 test('no page errors in the batch 1 run', () => { assert.deepEqual(errors, []); });

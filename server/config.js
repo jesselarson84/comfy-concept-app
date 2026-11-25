@@ -20,8 +20,7 @@ export function loadConfig(overrides = {}) {
     dataDir: 'data',
     sessionGapMinutes: 90,
     outputSubfolder: 'concept-app',
-    // Local Ollama for the Chat tab. Stays on localhost; the app proxies an
-    // allow-listed part of its API under /ollama/ (see server/ollama.js).
+    // Local Ollama for the History tagger (server/tagger.js). Stays on localhost.
     ollamaUrl: 'http://127.0.0.1:11434',
     // GPU sharing between ComfyUI and Ollama: profiles picked from the detected
     // VRAM (see config/memory-profiles.json and server/memory.js).

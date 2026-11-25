@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startStack, ROOT } from '../unit/helpers.js';
-import { launch, pickAspect, menuAct } from './launch.js';
+import { launch, pickAspect, menuAct, pickOption } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -58,9 +58,12 @@ test('batch 8 ratio grid: both orientations side by side, shown the way they com
   assert.deepEqual(await page.$$eval('#aspect-pop .ar-opt', (b) => b.map((x) => x.textContent)), ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '9:21', '21:9']);
   assert.equal(await page.$eval('#aspect-pop .ar-opt[aria-checked="true"]', (b) => b.textContent), '1:1');
   await page.click('#aspect-pop .ar-opt[data-aspect="16:9-portrait"]');
-  assert.equal(await page.isVisible('#aspect-pop'), false, 'closes on pick');
+  assert.equal(await page.isVisible('#aspect-pop'), true, 'stays open on pick');
+  assert.equal(await page.$eval('#aspect-pop .ar-opt[aria-checked="true"]', (b) => b.textContent), '9:16', 'highlight moves to the pick');
   assert.equal(await app(() => window.conceptApp.panel.state.aspect), '16:9-portrait');
   assert.equal(await page.textContent('#aspect-label'), '9:16', 'shown the way it comes out');
+  await page.mouse.click(5, 5); // tapping outside closes it
+  assert.equal(await page.isVisible('#aspect-pop'), false, 'closes on tap outside');
   await pickAspect(page, '16:9-landscape');
   assert.equal(await page.textContent('#aspect-label'), '16:9');
   await pickAspect(page, '4:3-portrait');
@@ -77,13 +80,13 @@ test('resolution 1K / 2K / 4K locks the ratio to the long side; Aspect, orientat
   await pick('ai:klein-4b-t2i');
   assert.equal(await page.isVisible('#res-select'), true);
   await pickAspect(page, '16:9-landscape');
-  await page.selectOption('#aspect-res', '1k');
+  await pickOption(page, '#aspect-res', '1k');
   assert.equal(await size(), '1024 × 576');
-  await page.selectOption('#aspect-res', '2k');
+  await pickOption(page, '#aspect-res', '2k');
   assert.equal(await size(), '2048 × 1152');
   await pickAspect(page, '16:9-portrait');
   assert.equal(await size(), '1152 × 2048');
-  await page.selectOption('#aspect-res', '4k');
+  await pickOption(page, '#aspect-res', '4k');
   assert.equal(await size(), '2304 × 4096');
   // row 1: ratio button and resolution side by side; row 2: Batch and Seed side by side
   const geo = await app(() => {
@@ -108,7 +111,7 @@ test('4K renders at 2K and upscales 2x in the same graph; 2K renders natively', 
   await page.fill('#prompt', 'a tall white rocket');
   await setBatch(1);
   await pickAspect(page, '1:1');
-  await page.selectOption('#aspect-res', '4k');
+  await pickOption(page, '#aspect-res', '4k');
   await run();
   let g = lastGraph();
   // Klein feeds width / height through two PrimitiveInt nodes (75:68 / 75:69)
@@ -124,11 +127,11 @@ test('4K renders at 2K and upscales 2x in the same graph; 2K renders natively', 
   const meta = await app(() => window.conceptApp.queue.items.at(-1).meta);
   assert.deepEqual([meta.width, meta.height, meta.res], [4096, 4096, '4k']);
   // 2K: no upscale nodes
-  await page.selectOption('#aspect-res', '2k');
+  await pickOption(page, '#aspect-res', '2k');
   await run();
   g = lastGraph();
   assert.equal(nodes(g, 'UpscaleModelLoader').length, 0);
-  await page.selectOption('#aspect-res', '1k');
+  await pickOption(page, '#aspect-res', '1k');
 });
 
 test('picker: sub-category names bolder + lighter grey, their models indented; no lines', async () => {

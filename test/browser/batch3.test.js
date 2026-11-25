@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startStack, ROOT, pngBytes } from '../unit/helpers.js';
-import { launch } from './launch.js';
+import { launch, pickOption, dropdownOptions } from './launch.js';
 import { makeGlb } from '../fixtures/media.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
@@ -47,7 +47,7 @@ test('run lock: Run stays disabled for the whole run, Cancel stays active, no pr
   assert.equal(await page.isEnabled('#btn-cancel'), true);
   await page.waitForFunction(() => /^Running \d of 3$/.test(document.querySelector('#run-label').textContent));
   await shot('run-locked');
-  // a forced tap, Ctrl+Enter and the chat's Generate path all queue nothing extra
+  // a forced tap and Ctrl+Enter queue nothing extra
   await page.click('#btn-generate', { force: true });
   await page.focus('#prompt'); await page.keyboard.press('Control+Enter');
   const n = await app(() => window.conceptApp.queue.items.length);
@@ -261,8 +261,8 @@ test('Settings: open row is Aspect | Batch, then Seed full row; everything else 
   assert.equal(await page.locator(`${ctl('steps')} .stepper.fill`).count(), 1);
   assert.equal(await page.locator(`${ctl('shift')} .slider-box input.sl`).count(), 1);
   assert.equal(await page.textContent(`${ctl('shift')} .val`), '3.0');
-  assert.equal(await page.locator(`${ctl('sampler')} .cselect select`).count(), 1);
-  assert.deepEqual(await page.$$eval(`${ctl('sampler')} option`, (o) => o.map((x) => x.value)), ['res_multistep', 'euler', 'euler_ancestral', 'dpmpp_2m', 'uni_pc']);
+  assert.equal(await page.locator(`${ctl('sampler')} .dd .dd-btn`).count(), 1, "batch 15: the app's own dropdown");
+  assert.deepEqual((await dropdownOptions(page, `${ctl('sampler')} .dd`)).map(([v]) => v), ['res_multistep', 'euler', 'euler_ancestral', 'dpmpp_2m', 'uni_pc']);
   // slider fill is gray (--p set by JS) and nothing but Run is blue
   assert.match(await page.$eval(`${ctl('shift')} input.sl`, (i) => i.style.getPropertyValue('--p')), /^40(\.0+)?%$/);
   const blue = await page.$$eval('#panel *, .actionbar *, .actionbar', (els) => els.filter((e) => e.offsetParent && [getComputedStyle(e).backgroundColor, getComputedStyle(e).color, getComputedStyle(e).borderTopColor].includes('rgb(11, 140, 233)')).map((e) => e.id || e.className));
@@ -270,7 +270,7 @@ test('Settings: open row is Aspect | Batch, then Seed full row; everything else 
   await shot('settings-zimage');
   // the value reaches the graph
   await page.fill(`${ctl('shift')} input.sl`, '4.5');
-  await page.selectOption(`${ctl('sampler')} select`, 'euler');
+  await pickOption(page, `${ctl('sampler')} .dd`, 'euler');
   await setBatch(1); await page.fill('#prompt', 'settings test');
   await page.click('#btn-generate'); await idle();
   const g = lastGraph('ModelSamplingAuraFlow');
@@ -332,7 +332,7 @@ test('Settings: SeedVR2 video dims Chunk overlap while Split is Off; Chatterbox 
   await openSettings();
   assert.match(await page.textContent('#file-inputs'), /Voice sample/);
   assert.equal(await page.textContent(`${ctl('seconds')} .val`), '16 s');
-  assert.equal(await page.textContent(`${ctl('voice')} select option:checked`), 'Chatterbox (English)');
+  assert.equal(await page.textContent(`${ctl('voice')} .dd-text`), 'Chatterbox (English)'); // batch 15: the app's own dropdown
   await shot('settings-chatterbox');
   await page.fill('#prompt', 'Hello there.'); await setBatch(1);
   await page.click('#btn-generate'); await idle();
@@ -345,7 +345,7 @@ test('Settings: SeedVR2 video dims Chunk overlap while Split is Off; Chatterbox 
 test('Settings: no hint text inside Settings (labels and value readouts only)', async () => {
   for (const id of ['ai:z-image-turbo', 'ai:pixal3d-trellis2', 'ai:tts-chatterbox', 'ai:klein-4b-inpaint']) {
     await pick(id); await openSettings();
-    const extra = await page.$$eval('#params *', (els) => els.filter((e) => e.children.length === 0 && e.textContent.trim() && !e.closest('.label, .seg, select, .sg-h, .stepper')).map((e) => e.outerHTML));
+    const extra = await page.$$eval('#params *', (els) => els.filter((e) => e.children.length === 0 && e.textContent.trim() && !e.closest('.label, .seg, select, .dd, .sg-h, .stepper')).map((e) => e.outerHTML));
     assert.deepEqual(extra, [], id);
     assert.equal(await page.locator('#params [title], #params .hint, #params small, #params p').count(), 0, id);
   }

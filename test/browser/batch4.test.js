@@ -41,8 +41,7 @@ const formState = () => app(() => {
   return {
     prompt: q('#prompt'), ratio: q('#aspect-btn'), batch: q('#batch'), batchPlus: q('#batch-plus'),
     seedLock: q('#seed-lock'), seedDice: q('#seed-dice'), seedVal: q('#seed'),
-    params: [...document.querySelectorAll('#params input, #params select, #params button:not(.info-btn)')].map(st),
-    chatInput: q('.chat-input'),
+    params: [...document.querySelectorAll('#params input, #params button:not(.info-btn)')].map(st),
     cancel: q('#btn-cancel'), history: q('#btn-history'), canvas: q('#btn-canvas'),
   };
 });
@@ -60,7 +59,7 @@ test('B: the whole form is locked during a run and comes back exactly as it was'
   await page.click('#btn-generate');
   await page.waitForFunction(() => document.querySelector('#prompt').readOnly);
   const during = await formState();
-  for (const k of ['prompt', 'ratio', 'batch', 'batchPlus', 'seedLock', 'seedDice', 'seedVal', 'chatInput']) assert.equal(during[k], false, `${k} is locked`);
+  for (const k of ['prompt', 'ratio', 'batch', 'batchPlus', 'seedLock', 'seedDice', 'seedVal']) assert.equal(during[k], false, `${k} is locked`);
   assert.ok(during.params.every((x) => x === false), 'Settings are locked');
   assert.equal(during.cancel, true, 'Cancel stays usable');
   assert.equal(during.history, true, 'History stays usable');

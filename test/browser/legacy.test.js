@@ -1,7 +1,7 @@
 // Browser migration test: an app opened with state saved before batch 1
-// (localStorage preset "from-reference-image", old panel shape, an old chat
-// thread, old history entries) loads without errors, lands on the Klein 4B
-// presets, and Reuse / Discuss on the old results work.
+// (localStorage preset "from-reference-image", old panel shape, an old
+// data/chats.json, old history entries) loads without errors, lands on the
+// Klein 4B presets, and Reuse on the old results works.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -87,30 +87,6 @@ test('old history: Reuse on a From reference image result -> Klein 4B Image Edit
     await page.evaluate(() => window.conceptApp.viewer.open(() => [{ image: { filename: 'reference_00001_.png', subfolder: 'concept-app', type: 'output' }, meta: { workflow: 'from-reference-image', reference: { 10: 'raw.png' }, prompt: 'x', seed: 1 } }], 0));
     await menuAct(page, '.viewer', 'reuse');
     await page.waitForFunction(() => window.conceptApp.current?.id === 'ai:klein-4b-edit' && window.conceptApp.refs.values['76'] === 'raw.png');
-  } finally { await ctx.close(); }
-});
-
-test('old chat thread loads; feedback on its Fast concept image tells the model the new preset; Apply + same seed runs on Klein', async () => {
-  const { ctx, page } = await openWith(oldLocalStorage('fast-concept'));
-  try {
-    if ((await page.locator('#chat').getAttribute('open')) === null) await page.click('#chat > summary');
-    await page.waitForFunction(() => document.querySelectorAll('.chat-msg').length >= 2);
-    assert.match(await page.textContent('.chat-log'), /Made the hull rigid/);
-    const n = await page.locator('.chat-msg.assistant:not(.chat-thinking)').count();
-    await page.fill('.chat-input', 'img1 still looks like a balloon');
-    await page.click('.chat-send');
-    await page.waitForFunction((n) => document.querySelectorAll('.chat-msg.assistant:not(.chat-thinking)').length > n && !document.querySelector('.chat-thinking'), n, { timeout: 10000 });
-    const req = (await (await fetch(s.ollamaBase + '/mock/requests')).json()).filter((r) => r.path === '/api/chat').at(-1).body;
-    assert.match(req.messages[0].content, /img1: generated with prompt "a brass airship over a canyon", seed 4242, preset FLUX\.2 Klein 4B Text to Image \(was Fast concept\)/);
-    assert.match(req.messages[0].content, /Active preset: FLUX\.2 Klein 4B Text to Image/);
-    // Apply + Run on the proposal queues on the current (Klein) preset.
-    const btn = page.locator('.chat-msg.assistant').last().locator('button', { hasText: /Apply \+ (Run|same seed)/ }).first();
-    assert.ok(await btn.count(), 'proposal has an Apply + Run button');
-    await btn.click();
-    await page.waitForFunction(() => window.conceptApp.queue.items.some((i) => i.meta?.workflow === 'ai:klein-4b-t2i'), null, { timeout: 10000 });
-    // The stored chat keeps the image's original preset id (no rewrite of old data).
-    const c = await (await fetch(s.base + '/api/chats/c_oldchat01')).json();
-    assert.equal(c.messages[0].images[0].preset, 'fast-concept');
   } finally { await ctx.close(); }
 });
 

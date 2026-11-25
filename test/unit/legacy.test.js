@@ -7,7 +7,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { startStack } from './helpers.js';
 import { LEGACY_PRESETS, DEFAULT_PRESET, resolvePresetId, presetLabel, remapReference, migrateHistoryEntry, isLegacyPreset } from '../../app/js/lib/legacy-presets.js';
-import { buildMessages } from '../../app/js/lib/chat-context.js';
 import { oldHistory, oldChats } from '../fixtures/legacy-state.js';
 
 const j = async (r) => { assert.ok(r.ok, `HTTP ${r.status}`); return r.json(); };
@@ -47,11 +46,6 @@ test('migrateHistoryEntry returns a mapped copy and never touches the stored ent
   assert.equal(migrateHistoryEntry(null), null);
 });
 
-test('chat context: an image from the old Fast concept preset is described with its new preset', () => {
-  const msgs = buildMessages({ current: { prompt: 'p', preset: 'FLUX.2 Klein 4B Text to Image' }, images: { img1: oldChats().chats[0].messages[0].images[0] }, userText: 'more fog' });
-  assert.match(msgs[0].content, /img1: generated with prompt "a brass airship over a canyon", seed 4242, preset FLUX\.2 Klein 4B Text to Image \(was Fast concept\)/);
-});
-
 let s;
 before(async () => { s = await startStack({ folderWorkflows: false, legacyFiles: true, data: { 'history.json': oldHistory(), 'chats.json': oldChats() } }); });
 after(() => s?.close());
@@ -80,14 +74,10 @@ test('old data/history.json loads; entries come back mapped (legacyWorkflow kept
   assert.deepEqual(stored.reference, { 10: 'old-ref.png' });
 });
 
-test('old data/chats.json loads unchanged (preset stays as recorded); reading does not rewrite it', async () => {
+test('batch 15: an old data/chats.json is left on disk untouched (the Prompt assistant is gone)', async () => {
   const file = path.join(s.dataDir, 'chats.json');
   const before = fs.readFileSync(file);
-  const { chats } = await j(await fetch(s.base + '/api/chats'));
-  assert.deepEqual(chats.map((c) => c.id), ['c_oldchat01']);
-  const c = await j(await fetch(s.base + '/api/chats/c_oldchat01'));
-  assert.equal(c.messages[0].images[0].preset, 'fast-concept');
-  assert.equal(c.messages[1].applied, true);
+  assert.equal((await fetch(s.base + '/api/chats')).status, 404);
   assert.deepEqual(fs.readFileSync(file), before);
 });
 
@@ -97,7 +87,7 @@ test('retired preset files left in workflows/ are not listed; the Klein presets 
   const ids = workflows.map((w) => w.id);
   assert.ok(!ids.includes('fast-concept') && !ids.includes('from-reference-image'));
   assert.ok(ids.includes('ai:klein-4b-t2i') && ids.includes('ai:klein-4b-edit'));
-  assert.ok(!workflows.some((w) => !w.ai && !w.user), 'no folder presets in this stack');
+  assert.ok(!workflows.some((w) => !w.ai), 'no folder presets in this stack');
   assert.ok(!workflows.some((w) => w.group === 'App'));
   const edit = workflows.find((w) => w.id === 'ai:klein-4b-edit');
   assert.deepEqual(edit.controls.images.map((i) => i.node), ['76'], 'the slot old references are re-targeted to');

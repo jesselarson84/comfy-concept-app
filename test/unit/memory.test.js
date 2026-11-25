@@ -1,13 +1,13 @@
 // Memory profiles: GPU/RAM detection, profile choice (11 / 16 / 24 GB),
 // override precedence, config loading, unload decisions (incl. low free VRAM on
-// a 16 GB card), chat model fit and the partial-offload badge.
+// a 16 GB card) and the partial-offload badge. (Batch 15: no chat model fit.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startStack, ROOT, GPU_5080, GPU_2080TI } from './helpers.js';
-import { DEFAULT_MEMORY_CONFIG, normalizeMemoryConfig, selectProfile, workflowNeedMB, decideBeforeQueue, decideBeforeChat, modelFit, offloadBadge } from '../../app/js/lib/memory-profiles.js';
+import { DEFAULT_MEMORY_CONFIG, normalizeMemoryConfig, selectProfile, workflowNeedMB, decideBeforeQueue, offloadBadge } from '../../app/js/lib/memory-profiles.js';
 import { loadMemoryConfig } from '../../server/memory.js';
 import { parseNvidiaSmi, fromSystemStats } from '../../server/hardware.js';
 
@@ -52,12 +52,12 @@ test('config loading: missing file, broken JSON, partial file, bad values', () =
   assert.equal(miss.config.profiles.length, 2);
   const broken = loadMemoryConfig(tmpFile('{ "profile": '));
   assert.match(broken.warnings[0], /not valid JSON/);
-  const part = loadMemoryConfig(tmpFile({ headroomMB: 1024, workflowVramNeedMB: { 'fast-concept': 4000, 'action:upscale': 'lots' } }));
+  const part = loadMemoryConfig(tmpFile({ headroomMB: 1024, workflowVramNeedMB: { 'fast-concept': 4000, 'from-reference-image': 'lots' } }));
   assert.equal(part.config.headroomMB, 1024);
   assert.equal(workflowNeedMB(part.config, 'fast-concept'), 4000);
-  assert.equal(workflowNeedMB(part.config, 'action:upscale'), 2500);
+  assert.equal(workflowNeedMB(part.config, 'from-reference-image'), 3000);
   assert.equal(workflowNeedMB(part.config, 'something-new'), 3000);
-  assert.ok(part.warnings.some((w) => /action:upscale/.test(w)));
+  assert.ok(part.warnings.some((w) => /from-reference-image/.test(w)));
   const custom = loadMemoryConfig(tmpFile({ profiles: [{ id: 'xl', minVramMB: 22000, unloadOllamaBeforeQueue: 'never' }, { id: 'small' }, { id: 'large', minVramMB: 15000, unloadOllamaBeforeQueue: 'sometimes' }, { label: 'no id' }] }));
   assert.deepEqual(custom.config.profiles.map((p) => p.id), ['small', 'large', 'xl']);
   assert.equal(selectProfile(24564, custom.config).profile.id, 'xl');
@@ -66,7 +66,7 @@ test('config loading: missing file, broken JSON, partial file, bad values', () =
   assert.equal(loadMemoryConfig(tmpFile('[1,2]')).warnings[0], 'memory config is not an object - using defaults');
 });
 
-test('before a queue: small always unloads; large keeps the chat model when free VRAM allows, unloads when low', () => {
+test('before a queue: small always unloads; large keeps the Ollama model when free VRAM allows, unloads when low', () => {
   const gemma = [{ name: 'gemma3:4b', size: 3.8 * GB, size_vram: 2.9 * GB }];
   const need = workflowNeedMB(C, 'fast-concept');
   assert.equal(decideBeforeQueue({ profile: P('small'), freeMB: 9000, ollamaModels: gemma, needMB: need, headroomMB: C.headroomMB }).unload, true);
@@ -77,34 +77,9 @@ test('before a queue: small always unloads; large keeps the chat model when free
   assert.equal(low.unload, true); assert.match(low.reason, /2500 MB - headroom 768 < need 2500/);
   // 3D needs more: same free VRAM, different decision
   assert.equal(decideBeforeQueue({ profile: P('large'), freeMB: 6000, ollamaModels: gemma, needMB: workflowNeedMB(C, 'fast-concept'), headroomMB: C.headroomMB }).unload, false);
-  assert.equal(decideBeforeQueue({ profile: P('large'), freeMB: 6000, ollamaModels: gemma, needMB: workflowNeedMB(C, 'action:image-to-3d'), headroomMB: C.headroomMB }).unload, true);
+  assert.equal(decideBeforeQueue({ profile: P('large'), freeMB: 6000, ollamaModels: gemma, needMB: 8000, headroomMB: C.headroomMB }).unload, true);
   assert.equal(decideBeforeQueue({ profile: P('large'), freeMB: undefined, ollamaModels: gemma, needMB: need }).unload, true);
   assert.equal(decideBeforeQueue({ profile: P('large'), freeMB: 100, ollamaModels: [{ name: 'x', size: GB, size_vram: 0 }], needMB: need }).unload, false, 'RAM-only model needs no unload');
-});
-
-test('chat model fit: 12B fits a 5080, is too big for the small profile; spill to RAM is "partial"; swap is refused', () => {
-  const g12 = 8.1 * GB, g4 = 3.3 * GB;
-  const big = { totalVramMB: 16303, freeRamMB: 60000, config: C, profile: P('large') };
-  assert.equal(modelFit({ ...big, sizeBytes: g12, freeVramMB: 12000 }).fit, 'fits');
-  const part = modelFit({ ...big, sizeBytes: g12, freeVramMB: 5000 });
-  assert.equal(part.fit, 'partial'); assert.match(part.message, /slower, runs partly in RAM/);
-  const swap = modelFit({ ...big, sizeBytes: g12, freeVramMB: 1000, freeRamMB: 9000 });
-  assert.equal(swap.fit, 'no-fit'); assert.match(swap.message, /swap to disk/);
-  assert.equal(modelFit({ ...big, sizeBytes: 30 * GB, freeVramMB: 15000 }).fit, 'too-big');
-  const small = { totalVramMB: 11264, freeRamMB: 60000, config: C, profile: P('small') };
-  assert.equal(modelFit({ ...small, sizeBytes: g12, freeVramMB: 11000 }).fit, 'too-big');
-  // small profile frees ComfyUI first, so gemma3:4b "fits" even when ComfyUI holds VRAM now
-  assert.equal(modelFit({ ...small, sizeBytes: g4, freeVramMB: 600 }).fit, 'fits');
-  // an already-loaded model counts its own VRAM as available
-  assert.equal(modelFit({ ...big, sizeBytes: g4, freeVramMB: 800, loadedVramBytes: g4 * 1.2 }).fit, 'fits');
-  assert.equal(modelFit({ ...big, sizeBytes: g4, freeVramMB: 800 }).fit, 'partial');
-});
-
-test('before a chat turn: small frees ComfyUI only when free VRAM is low; large never forces it', () => {
-  assert.equal(decideBeforeChat({ profile: P('small'), freeMB: 1500, estMB: 4000, modelLoaded: false, headroomMB: 768 }).freeComfy, true);
-  assert.equal(decideBeforeChat({ profile: P('small'), freeMB: 8000, estMB: 4000, modelLoaded: false, headroomMB: 768 }).freeComfy, false);
-  assert.equal(decideBeforeChat({ profile: P('small'), freeMB: 100, estMB: 4000, modelLoaded: true }).freeComfy, false);
-  assert.equal(decideBeforeChat({ profile: P('large'), freeMB: 100, estMB: 4000, modelLoaded: false }).freeComfy, false);
 });
 
 test('partial-offload badge from /api/ps (size_vram < size)', () => {
@@ -121,48 +96,34 @@ test('hardware parsing: nvidia-smi CSV (incl. two GPUs) and ComfyUI /system_stat
 });
 
 // ---- server, end to end with fake nvidia-smi / RAM --------------------------
-test('GET /api/memory on a 2080 Ti: detected GPU + RAM, small profile, model fit list', async () => {
+test('GET /api/memory on a 2080 Ti: detected GPU + RAM, small profile; a queue unloads Ollama', async () => {
   const s = await startStack();
   try {
     const m = await j(await fetch(s.base + '/api/memory?fresh=1'));
     assert.deepEqual(m.hardware.gpu, { name: 'NVIDIA GeForce RTX 2080 Ti', totalMB: 11264, freeMB: 4000, usedMB: 7264, source: 'nvidia-smi' });
     assert.deepEqual(m.hardware.ram, { totalMB: 98204, freeMB: 60000 });
     assert.equal(m.profile.id, 'small'); assert.equal(m.profile.source, 'auto');
-    assert.deepEqual(m.models.map((x) => [x.name, x.fit]), [['gemma3:4b', 'fits'], ['llama3.2:3b', 'fits']]);
+    assert.equal(m.models, undefined, 'batch 15: no chat model list');
     // queue: small always unloads a loaded model
-    await fetch(s.base + '/ollama/api/chat', { method: 'POST', body: JSON.stringify({ model: 'gemma3:4b', messages: [{ role: 'user', content: 'hi' }], stream: false }) });
+    s.ollama.loaded.add('gemma3:4b'); // the History tagger's model, loaded
     const q = await post(s.base + '/api/memory/before-queue', { workflow: 'fast-concept' });
     assert.equal(q.unload, true); assert.deepEqual(q.result.stillLoaded, []);
-    // chat with low free VRAM: ComfyUI /free with unload_models
-    s.hw.gpu = { ...s.hw.gpu, freeMB: 900 };
-    const c = await post(s.base + '/api/memory/before-chat', { model: 'gemma3:4b' });
-    assert.equal(c.ok, true); assert.equal(c.keepAlive, '5m'); assert.equal(c.freed.ok, true); assert.deepEqual(c.freed.body, { unload_models: true, free_memory: true });
-    assert.ok((await j(await fetch(s.mockBase + '/mock/requests'))).some((r) => r.path === '/free'));
+    assert.doesNotMatch(await (await fetch(s.base + '/ollama/api/tags')).text(), /gemma3/, 'batch 15: no /ollama proxy');
   } finally { await s.close(); }
 });
 
-test('5080 (16 GB): chat model stays loaded next to ComfyUI; low free VRAM triggers the unload; 12B allowed with fit note', async () => {
-  const s = await startStack({ gpu: { ...GPU_5080, freeMB: 12000 }, ollamaOptions: { extraModels: [{ name: 'gemma3:12b', vision: true, size: 8149190253, family: 'gemma3' }] } });
+test('5080 (16 GB): the Ollama model stays loaded next to ComfyUI; low free VRAM triggers the unload', async () => {
+  const s = await startStack({ gpu: { ...GPU_5080, freeMB: 12000 } });
   try {
     const m = await j(await fetch(s.base + '/api/memory?fresh=1'));
     assert.equal(m.profile.id, 'large');
-    assert.equal(m.models.find((x) => x.name === 'gemma3:12b').fit, 'fits');
-    await fetch(s.base + '/ollama/api/chat', { method: 'POST', body: JSON.stringify({ model: 'gemma3:4b', messages: [{ role: 'user', content: 'hi' }], stream: false }) });
+    s.ollama.loaded.add('gemma3:4b'); // the History tagger's model, loaded
     const keep = await post(s.base + '/api/memory/before-queue', { workflow: 'fast-concept' });
     assert.equal(keep.unload, false); assert.equal(keep.result, undefined);
     assert.deepEqual([...s.ollama.loaded], ['gemma3:4b']);
     s.hw.gpu = { ...s.hw.gpu, freeMB: 2000 };
     const low = await post(s.base + '/api/memory/before-queue', { workflow: 'fast-concept' });
     assert.equal(low.unload, true); assert.equal(low.needMB, 2500); assert.deepEqual(low.result.stillLoaded, []);
-    // big model with little free VRAM: partial (RAM spill), keep_alive 10m, no ComfyUI /free
-    s.hw.gpu = { ...s.hw.gpu, freeMB: 4000 };
-    const c = await post(s.base + '/api/memory/before-chat', { model: 'gemma3:12b' });
-    assert.deepEqual([c.ok, c.fit, c.keepAlive, c.freed], [true, 'partial', '10m', undefined]);
-    // not enough VRAM + RAM -> refused (would swap)
-    s.hw.ram = { totalMB: 98204, freeMB: 9000 };
-    s.hw.gpu = { ...s.hw.gpu, freeMB: 1000 };
-    const no = await post(s.base + '/api/memory/before-chat', { model: 'gemma3:12b' });
-    assert.equal(no.ok, false); assert.equal(no.fit, 'no-fit');
   } finally { await s.close(); }
 });
 
@@ -179,7 +140,7 @@ test('memory profile is always Auto from VRAM: old saved choice, MEMORY_PROFILE 
     assert.equal((await j(await fetch(s.base + '/api/memory'))).profile.id, 'large');
     const q = await post(s.base + '/api/memory/before-queue', { workflow: 'default' });
     assert.equal(q.profile, 'large');
-    await fetch(s.base + '/ollama/api/chat', { method: 'POST', body: JSON.stringify({ model: 'gemma3:4b', messages: [{ role: 'user', content: 'hi' }], stream: false }) });
+    s.ollama.loaded.add('gemma3:4b'); // the History tagger's model, loaded
     const st = await j(await fetch(s.base + '/api/memory'));
     assert.deepEqual(st.ollama.loaded[0].badge, { partial: true, gpuPct: 60, text: 'slower, runs partly in RAM (60% on GPU)' });
   } finally { await s.close(); }

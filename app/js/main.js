@@ -19,10 +19,6 @@ import { ModelThumbs } from './ui/model-thumbs.js';
 import { Viewer } from './ui/viewer.js';
 import { HistoryView } from './ui/history-view.js';
 import { setKeepAwake, setRunStatus, bridge as nativeBridge, has as hasNative, absoluteUrl } from './native.js';
-import { PromptVersions } from './ui/prompt-versions.js';
-import { ChatPanel } from './ui/chat-panel.js';
-import { prepareComfyQueue } from './ollama-client.js';
-import { buildActionGraph } from './lib/actions.js';
 import { clampPresetValues, applyPresetParams, formatPrompt, dropEmptyOptional } from './lib/presets.js';
 import { detectControls } from './lib/workflow-detect.js';
 import { WorkflowPicker } from './ui/workflow-picker.js';
@@ -310,16 +306,15 @@ const importSheet = new ImportSheet({
 
 // ---- presets ---------------------------------------------------------------
 // The picker lists the AI Workflow presets (3D / Image / Video / Audio,
-// availability computed live on the server) and My presets: setups saved from
-// the chat builder plus any workflow imported or dropped into workflows/.
+// availability computed live on the server) and My presets: presets saved from
+// the node view plus any workflow imported or dropped into workflows/.
 // The old built-in "App presets" are retired; their ids still resolve (see
 // lib/legacy-presets.js). Default preset: FLUX.2 Klein 4B Text to Image.
 const picker = new WorkflowPicker({
   onPick: (id) => (isLocked() ? busy() : selectPreset(id)),
-  onRename: async (w, name) => { try { await api.renameUserPreset(w.user.id, name); toast('Renamed'); await loadWorkflows(current?.id, { fresh: false }); } catch (e) { toast(e.message, 6000); } },
   // Presets saved from the node view: rename and move to another section in one go.
   onEditGraph: async (w, patch) => { try { const g = await api.updateGraphPreset(w.graph.id, patch); toast(`Saved "${g.name}"`); await loadWorkflows(current?.id, { fresh: false }); } catch (e) { toast(e.message, 6000); } },
-  onDelete: async (w) => { try { await (w.graph ? api.deleteGraphPreset(w.graph.id) : api.deleteUserPreset(w.user.id)); toast(`Deleted "${w.label}"`); await loadWorkflows(current?.id === w.id ? undefined : current?.id); } catch (e) { toast(e.message, 6000); } },
+  onDelete: async (w) => { try { await api.deleteGraphPreset(w.graph.id); toast(`Deleted "${w.label}"`); await loadWorkflows(current?.id === w.id ? undefined : current?.id); } catch (e) { toast(e.message, 6000); } },
 });
 const usable = isUsable;
 // remember: true only when keepId is a real user choice (just imported / saved).
@@ -387,9 +382,9 @@ function selectPreset(id, { remember = true } = {}) {
 //   large (16 GB+, 5080): keep it loaded unless free VRAM is below what this
 //         workflow needs (workflowVramNeedMB).
 async function beforeComfyQueue(workflowId) {
-  const r = await prepareComfyQueue(workflowId);
+  const r = await api.prepareComfyQueue(workflowId);
   if (r?.result?.stillLoaded?.length) console.warn('Ollama models still loaded:', r.result.stillLoaded);
-  if (r) console.info('memory:', r.profile, r.unload ? 'unloaded chat model' : 'kept chat model', '-', r.reason);
+  if (r) console.info('memory:', r.profile, r.unload ? 'unloaded Ollama model' : 'kept Ollama model', '-', r.reason);
 }
 
 // ---- generate --------------------------------------------------------------
@@ -543,7 +538,7 @@ async function buildRun() {
 }
 
 // ---- memory options (lib/memory-options.js) ------------------------------------
-let memSettings = { textEncoderCpu: false, ollamaCpu: false };
+let memSettings = { textEncoderCpu: false };
 const OOM_STORE = 'conceptOom.v1'; // { workflowId: time } presets that ran out of memory (12 h)
 const oomMap = () => { try { return JSON.parse(localStorage.getItem(OOM_STORE)) || {}; } catch { return {}; } };
 const oomBefore = (id) => Date.now() - (oomMap()[id] || 0) < 12 * 3600e3;
@@ -598,47 +593,6 @@ async function startRun(workflowId, jobs) {
   return run;
 }
 
-// ---- chat builder: Test run of a proposed setup (never saved as a preset) ---
-async function runBuilderTest({ graph, name }) {
-  if (isLocked()) return busy();
-  const c = detectControls(graph);
-  const v = panel.values();
-  if (c.images.length) return toast('This setup needs a picture: Save it, then pick it under My presets and add the picture there.', 8000);
-  if (c.prompt.length && !v.prompt.trim()) return toast('Type a prompt first');
-  const seed = batchSeeds(1, v.seedMode, v.seed)[0];
-  // VibeVoice reads "[1] text": add the speaker tag to plain text (same rule as the VibeVoice preset).
-  const vv = Object.values(graph).some((n) => n.class_type === 'VibeVoiceTTS');
-  const prompt = vv ? formatPrompt({ promptFormat: { unless: '\\[\\d+\\]|Speaker \\d+:', template: '[1] {text}' } }, v.prompt) : v.prompt;
-  const workflow = injectParams(graph, c, { prompt, negative: v.negative, seed, outputPrefix: '', batchSize: 1 });
-  const run = await startRun('builder:test', [{ workflow, meta: { workflow: 'builder:test', prompt: `Test run · ${name} · ${v.prompt}`.slice(0, 400), seed, project: getCurrentProject() || undefined } }]);
-  if (run.length) toast('Test run queued');
-}
-
-// ---- workflow actions (from the chat's confirm chip) -------------------------
-/** LoadImage value for an image ComfyUI already has: inputs by name, outputs
- *  with the "[output]" annotation LoadImage understands (no re-upload needed). */
-function loadImageName(img) {
-  const rel = img.subfolder ? `${img.subfolder}/${img.filename}` : img.filename;
-  return img.type === 'input' ? rel : `${rel} [${img.type || 'output'}]`;
-}
-async function runAction(r) {
-  if (isLocked()) return busy();
-  const img = r.image;
-  let input = loadImageName(img);
-  if (img.type === 'temp') {
-    // temp files may vanish: copy the bytes into ComfyUI's input/ first.
-    const blob = await (await fetch(viewUrl(img))).blob();
-    input = (await comfy.uploadImage(new File([blob], img.filename, { type: blob.type }))).ref;
-  }
-  const workflow = buildActionGraph(r.action, r.params, input, config.outputSubfolder || '');
-  const meta = {
-    workflow: 'action:' + r.action.id, action: r.action.id, params: r.params,
-    prompt: `${r.action.manifest.verb} · ${img.prompt || img.filename}`, seed: img.seed,
-    parent: { historyId: img.historyId, image: { filename: img.filename, subfolder: img.subfolder || '', type: img.type || 'output' } },
-  };
-  const run = await startRun('action:' + r.action.id, [{ workflow, meta }]);
-  if (run.length) toast(`${r.action.manifest.name} queued`);
-}
 $('#btn-generate').addEventListener('click', generate);
 $('#btn-batch-add').addEventListener('click', saveToBatch);
 $('#btn-edit-cancel').addEventListener('click', () => endEdit(true));
@@ -702,24 +656,6 @@ async function shareFile(f) {
   } catch (e) { if (e.name !== 'AbortError') toast('Share failed: ' + e.message); }
 }
 
-// ---- prompt versions + Prompt assistant (Ollama chat) -----------------------
-const versions = new PromptVersions(panel, $('#prompt-tools'));
-const chat = new ChatPanel($('#chat-mount'), {
-  versions,
-  getContext: () => {
-    const c = current?.ok ? current.controls : null;
-    const v = panel.values();
-    return { prompt: v.prompt, negative: v.negative || '', negativeOn: !!(c?.negative.length && panel.state.negOn), hasNegative: !!c?.negative.length, preset: current?.label, workflow: current };
-  },
-  onGenerate: ({ seed } = {}) => { panel.setSeed(seed); return generate(); },
-  onRunAction: (r) => runAction(r),
-  onTestRun: (r) => runBuilderTest(r),
-  onSavedPreset: (id) => loadWorkflows(id, { remember: true }).then(() => toast('Saved under My presets')),
-});
-// Batch 5: the ⋮ menu (Import workflow, Setup builder model, the CPU switches)
-// is gone. Workflows still arrive by exporting from ComfyUI into workflows/;
-// the builder model stays what data/builder.json says (default gemma3:4b).
-
 // ---- connection banner -------------------------------------------------------
 function banner(text) { const b = $('#banner'); b.textContent = text || ''; b.hidden = !text; }
 // Shown only when the socket has been down for 4 s (lib/conn-banner.js), so a
@@ -741,7 +677,7 @@ async function handleLaunchParams() {
     // (it replaced "From reference image"), else any usable preset with one.
     const editId = resolvePresetId('from-reference-image');
     const hasSlot = (w) => usable(w) && w.controls?.images?.length;
-    const target = workflows.find((w) => w.id === editId && hasSlot(w)) || workflows.find((w) => hasSlot(w) && !w.user) || workflows.find(hasSlot);
+    const target = workflows.find((w) => w.id === editId && hasSlot(w)) || workflows.find(hasSlot);
     if (target) {
       if (current?.id !== target.id) selectPreset(target.id);
       refs.set(target.controls.images[0].node, ref);
@@ -796,5 +732,5 @@ async function start() {
 }
 start();
 // For tests and poking around from DevTools.
-window.conceptApp = { savePreset, maskSlot, modelThumbs, historyView, isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, chat, versions, picker, selectPreset, loadWorkflows,
+window.conceptApp = { savePreset, maskSlot, modelThumbs, historyView, isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, picker, selectPreset, loadWorkflows,
   lock, resume, connBanner, nodeView, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, importSheet, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };

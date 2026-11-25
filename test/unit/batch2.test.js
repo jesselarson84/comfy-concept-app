@@ -10,7 +10,6 @@ import { startStack, ROOT, pngBytes } from './helpers.js';
 import { safeFileName, safeSubfolder, checkAppOutput, scanAppFolder, mergeOutputs } from '../../server/outputs.js';
 import { openUnique, driveKind, DRIVE_FOLDERS } from '../../server/drive.js';
 import { makeGlb, makeWav } from '../fixtures/media.js';
-import { checkChain, summarize } from '../../app/js/lib/builder.js';
 
 const j = (r) => r.json();
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
@@ -168,30 +167,13 @@ test('audio helpers: time format and waveform peaks', async () => {
   assert.equal(makeWav(1, 8000).length, 44 + 16000);
 });
 
-test('builder card: the model line has no step count, the sampler line shows the clamped steps (matches the clamp note)', () => {
-  const ctx = {};
-  const c = checkChain([{ type: 'load_model', params: { family: 'flux2-klein' } }, { type: 'txt2img', params: { steps: 20, width: 1024, height: 1024 } }, { type: 'save' }], ctx);
-  assert.ok(c.ok, c.errors?.join(' '));
-  assert.deepEqual(c.notes, ['Steps 20 is outside 2-8, using 8.']);
-  const lines = summarize(c.blocks);
-  assert.equal(lines[0], 'Model: FLUX.2 Klein 4B');
-  assert.equal(lines[1], 'Text to image, 1024×1024, 8 steps');
-  assert.ok(lines.every((l) => (l.match(/(\d+) steps/g) || []).every((m) => m === '8 steps')));
-  for (const fam of ['flux1-schnell', 'flux1-dev', 'z-image-turbo', 'qwen-image']) {
-    const r = checkChain([{ type: 'load_model', params: { family: fam } }, { type: 'txt2img', params: { steps: 99 } }, { type: 'save' }], ctx);
-    const L = summarize(r.blocks);
-    assert.doesNotMatch(L[0], /steps|heavy/, fam);
-    assert.equal(L[1].match(/(\d+) steps/)[1], r.notes[0].match(/using (\d+)/)[1], fam);
-  }
-});
-
 test('hint sweep: no recommendations / upgrade notes / tags / More settings / memory setting left in the app', () => {
   const html = read('app/index.html');
   for (const re of [/More settings/, /builder-model-note/, /memory-mount/, /Results appear here/, /Low = stay close/]) assert.doesNotMatch(html, re);
-  const ui = ['app/js/main.js', 'app/js/ui/workflow-picker.js', 'app/js/ui/prompt-panel.js', 'app/js/ui/reference.js', 'app/js/ui/file-inputs.js', 'app/js/ui/chat-panel.js'].map(read).join('\n');
+  const ui = ['app/js/main.js', 'app/js/ui/workflow-picker.js', 'app/js/ui/prompt-panel.js', 'app/js/ui/reference.js', 'app/js/ui/file-inputs.js'].map(read).join('\n');
   for (const re of [/Recommended after/, /same list as ComfyUI right-click/, /span\.tg/, /\(pick a file to use your own\)/, /short clips: this runs/, /No image yet - pick/, /long-press the prompt box/, /30-40 s/, /Undo is under the prompt box/, /then tap Retry/, /Pull one \(e\.g\./, /Test run makes one result/, /rename or delete it in the picker/, /slower, partly in RAM/, /e\.g\. "looks like a swan/, /is Comfy Desktop running\?/, /MemoryPanel/]) assert.doesNotMatch(ui, re);
   assert.equal(fs.existsSync(path.join(ROOT, 'app/js/ui/memory-panel.js')), false);
-  assert.doesNotMatch(read('server/builder.js'), /RECOMMENDED|after the RTX 5080|Slow on this GPU/);
+  assert.equal(fs.existsSync(path.join(ROOT, 'server/builder.js')), false, 'batch 15: the workflow builder is gone');
   assert.doesNotMatch(read('server/index.js'), /\/api\/memory\/profile' && req\.method === 'PUT'/);
   // The Tailscale hint on the Android connection error stays (the owner, 10:39 PM); the address example is gone.
   const strings = read('android/app/src/main/res/values/strings.xml');

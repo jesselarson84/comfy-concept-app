@@ -14,7 +14,6 @@ import { createComfyProxy, injectIntoHtml, isPagePath, allowSameOriginFrame } fr
 import { ConnectionBanner, GRACE_MS } from '../../app/js/lib/conn-banner.js';
 import { exposedControls, infoFor, GLOSSARY } from '../../app/js/lib/setting-info.js';
 import { validatePreset, menuParts, SUBGROUPS } from '../../app/js/lib/presets.js';
-import { validateAction } from '../../app/js/lib/actions.js';
 
 function tempOutput() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-del4-'));
@@ -272,17 +271,6 @@ test('info: every control of every bundled AI preset (23 models + 18 workflows) 
     }
     assert.deepEqual(missing, [], 'controls without an (i) text');
   } finally { await st.close(); }
-});
-
-test('info: every parameter of the 2 workflow actions has a text', () => {
-  const dir = new URL('../../workflows/actions/', import.meta.url);
-  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
-  assert.equal(files.length, 2);
-  for (const f of files) {
-    const a = validateAction(f, JSON.parse(fs.readFileSync(new URL(f, dir), 'utf8')));
-    assert.ok(a.ok, a.error);
-    for (const [k, p] of Object.entries(a.manifest.params)) assert.ok(infoFor(k, { param: p }), `${f} ${k}`);
-  }
 });
 
 test('info: preset texts match what the presets really do (spot checks against the graphs)', () => {
