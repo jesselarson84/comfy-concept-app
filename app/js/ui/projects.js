@@ -3,7 +3,8 @@
 // projects.js); every output is filed into <project>/__comfy outputs/... and,
 // with no project, into ACTIVE/__Comfy UI/... (Unsorted).
 //
-// One sheet, three views:
+// One picker, three views (batch 19: a dropdown under the form's project button;
+// the Files "Move N items to…" picker is still a bottom sheet):
 //   list   - Recent projects (most recently used first), No project, New project…, Browse ACTIVE…
 //   browse - ACTIVE's folders: grouping folders open (›), projects show "✓ project",
 //            other folders get "Use". Projects never open (no projects inside projects).
@@ -11,6 +12,7 @@
 // pick() resolves with a project id, null (No project / Unsorted) or undefined (closed).
 import { h, toast } from './dom.js';
 import * as api from '../api.js';
+import { tapOutScrim } from './dropdown.js';
 
 let cache = null; // last /api/projects answer
 // Batch 12: the project new outputs go to, picked on THIS device. Every load of the
@@ -36,14 +38,30 @@ export class ProjectSheet {
    * @param o.title  sheet title ("Project", "Move 3 items to…")
    * @param o.move   true: picking moves things (No project = "Unsorted"), no ✓ on the current one
    */
-  pick({ title = 'Project', move = false } = {}) {
+  /**
+   * @param o.anchor  batch 19: open as a dropdown under this button (the form's project
+   *                  button) instead of a bottom sheet (the Files "Move N items to…" picker).
+   */
+  pick({ title = 'Project', move = false, anchor = null } = {}) {
     this.close();
     return new Promise((resolve) => {
-      this.resolve = resolve; this.move = move; this.title = title;
-      this.scrim = h('div.sheet-scrim', { onclick: () => this.finish(undefined) });
+      this.resolve = resolve; this.move = move; this.title = title; this.anchor = anchor;
       this.head = h('div.sheet-title.pj-title');
       this.body = h('div.df-list.pj-list');
-      this.el = h('div.sheet.pj-sheet', { role: 'dialog', 'aria-label': title }, this.head, this.body);
+      if (anchor) {
+        // Same look as the app's other dropdowns (ui/dropdown.js): fixed under its button,
+        // a see-through scrim to tap out, a max height with its own scroll.
+        this.scrim = tapOutScrim(() => this.finish(undefined));
+        this.el = h('div.dd-pop.pj-pop', { role: 'dialog', 'aria-label': title }, this.head, this.body);
+        anchor.setAttribute('aria-expanded', 'true'); anchor.classList.add('open');
+        // The keyboard (New project's name box) shrinks the window: keep the list fitted under the button.
+        this.onResize = () => this.place();
+        window.addEventListener('resize', this.onResize);
+        window.visualViewport?.addEventListener('resize', this.onResize);
+      } else {
+        this.scrim = h('div.sheet-scrim', { onclick: () => this.finish(undefined) });
+        this.el = h('div.sheet.pj-sheet', { role: 'dialog', 'aria-label': title }, this.head, this.body);
+      }
       document.body.append(this.scrim, this.el);
       this.keydown = (e) => { if (e.key === 'Escape') this.finish(undefined); };
       document.addEventListener('keydown', this.keydown);
@@ -51,12 +69,33 @@ export class ProjectSheet {
     });
   }
 
+  /** Dropdown mode: under the button, as tall as the room below it (above when there is more room there). */
+  place() {
+    if (!this.anchor || !this.el?.isConnected) return;
+    const r = this.anchor.getBoundingClientRect();
+    const vh = window.visualViewport?.height || innerHeight;
+    const w = Math.min(innerWidth - 16, Math.max(r.width, 340));
+    this.el.style.width = `${Math.round(w)}px`;
+    this.el.style.left = `${Math.round(Math.max(8, Math.min(r.left, innerWidth - w - 8)))}px`;
+    const below = vh - r.bottom - 14, above = r.top - 14;
+    const down = below >= 260 || below >= above;
+    const max = Math.max(160, Math.min(down ? below : above, 560));
+    this.el.style.maxHeight = `${Math.round(max)}px`;
+    if (down) { this.el.style.top = `${Math.round(r.bottom + 6)}px`; this.el.style.bottom = ''; }
+    else { this.el.style.top = ''; this.el.style.bottom = `${Math.round(innerHeight - r.top + 6)}px`; }
+  }
+
   #title(text, back) {
+    // Dropdown mode: no title bar on the first list (it sits right under its button);
+    // New project / Browse get one with a back arrow.
+    this.head.hidden = !!this.anchor && !back;
     this.head.replaceChildren(...[
       back ? h('button.btn.icon.pj-back', { type: 'button', 'aria-label': 'Back', dataset: { act: 'back' }, onclick: back }, h('i.i.i-chevron-left')) : null,
       h('span', {}, text), h('span.spacer'),
-      h('button.btn.icon', { type: 'button', 'aria-label': 'Close', dataset: { act: 'close' }, onclick: () => this.finish(undefined) }, h('i.i.i-x')),
+      this.anchor ? null : h('button.btn.icon', { type: 'button', 'aria-label': 'Close', dataset: { act: 'close' }, onclick: () => this.finish(undefined) }, h('i.i.i-x')),
     ].filter(Boolean));
+    this.body.scrollTop = 0;
+    requestAnimationFrame(() => this.place());
   }
 
   #row({ icon = 'i-folder', name, sub, end, on, act, data = {}, click }) {
@@ -144,6 +183,8 @@ export class ProjectSheet {
   close() {
     this.scrim?.remove(); this.el?.remove(); this.scrim = this.el = null;
     if (this.keydown) document.removeEventListener('keydown', this.keydown);
+    if (this.onResize) { window.removeEventListener('resize', this.onResize); window.visualViewport?.removeEventListener('resize', this.onResize); this.onResize = null; }
+    if (this.anchor) { this.anchor.setAttribute('aria-expanded', 'false'); this.anchor.classList.remove('open'); this.anchor = null; }
     if (this.resolve) { const r = this.resolve; this.resolve = null; r(undefined); }
   }
 }
@@ -157,7 +198,7 @@ export class ProjectChip {
     // batch 13: clipboard for a project (not mixed up with Files' folder); batch 17:
     // the empty circle for No project, the same icon as in the list.
     this.icon = h('i.i.i-circle');
-    this.btn = h('button.btn.picker.project-chip', { type: 'button', 'aria-label': 'Project', dataset: { act: 'project' }, onclick: () => this.open() },
+    this.btn = h('button.btn.picker.project-chip', { type: 'button', 'aria-label': 'Project', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', dataset: { act: 'project' }, onclick: () => this.open() },
       this.icon, this.crumb, this.name, h('i.i.i-chevron-down'));
     this.where = h('div.project-where.muted');
     host.replaceChildren(this.btn, this.where);
@@ -183,7 +224,7 @@ export class ProjectChip {
   }
 
   async open() {
-    const id = await this.sheet.pick({ title: 'Project' });
+    const id = await this.sheet.pick({ title: 'Project', anchor: this.btn }); // batch 19: a dropdown under the button
     if (id === undefined) return;
     current = id || null;
     await this.refresh();

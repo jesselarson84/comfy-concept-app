@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { startStack, ROOT } from '../unit/helpers.js';
-import { launch } from './launch.js';
+import { launch, toggleFiles } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -237,7 +237,7 @@ test('the floating Ask Claude button: on every screen; answers only (look-only t
   await shot('question');
   await closeSheet();
   // also on Files (in the corner)
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb[data-id]');
   assert.equal(await page.isVisible('.claude-fab'), true);
   await app(() => window.conceptApp.historyView.close());
@@ -270,7 +270,7 @@ test('viewer: ⋮ Ask Claude about this -> Fix this result (Opus, picture attach
 });
 
 test('Files: Claude button (no ⋮ in the bar) sends the pictures in tap order; a question is answered in the sheet; a merge builds a one-off workflow and lands on the form', async () => {
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb[data-id]');
   const ids = await page.$$eval('.history .thumb[data-id]', (b) => b.map((x) => x.dataset.id));
   assert.ok(ids.length >= 2);
@@ -362,7 +362,7 @@ test('switching Claude off hides everything again', async () => {
   assert.equal(await page.locator('.amenu [data-act="ask-claude"]').count(), 0);
   await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   await page.waitForSelector('.viewer', { state: 'hidden' });
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb[data-id]');
   const id = await page.$eval('.history .thumb[data-id]', (b) => b.dataset.id);
   await app((x) => window.conceptApp.historyView.startSelect(x), id);

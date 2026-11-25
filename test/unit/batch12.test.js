@@ -10,7 +10,7 @@ import { HistoryStore } from '../../server/history.js';
 import { createPcSync, describeGraph, modelKey } from '../../server/pc-sync.js';
 import { createScheduler } from '../../server/scheduler.js';
 import { deleteAppFile } from '../../server/outputs.js';
-import { statsOf, modelColor, TYPE_COLORS, GROUP_COLORS } from '../../app/js/lib/history-filter.js';
+import { statsOf, TYPE_COLORS } from '../../app/js/lib/history-filter.js';
 import { nextClockTime } from '../../app/js/ui/batch-sheet.js';
 
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
@@ -56,10 +56,11 @@ test('stats colours: tag kinds, model colour slots by first use (not rank), real
   assert.equal(s.models[1].slot, 0);
   // batch 13: old plain color tags are ignored (no Colors section, not searched)
   assert.deepEqual(Object.fromEntries(s.tags.map((t) => [t.tag, t.group])), { serious: 'mood', product: 'genre' });
-  assert.notEqual(modelColor(0), modelColor(1));
-  assert.ok(TYPE_COLORS.image && TYPE_COLORS['3d'] && GROUP_COLORS.mood);
+  // batch 19: models are colored by the type they make; no tag-kind colors
+  assert.equal(s.models[0].type, 'image');
+  assert.ok(TYPE_COLORS.image && TYPE_COLORS['3d']);
   const hv = read('app/js/ui/history-view.js');
-  assert.match(hv, /'By type'/); assert.doesNotMatch(hv, /'Colou?rs'/); assert.match(hv, /typeBar\('\.mini'\)/);
+  assert.match(hv, /'By type'/); assert.doesNotMatch(hv, /'Colou?rs'/); assert.match(hv, /typeBar\('\.mini', s\)/);
 });
 
 test('Details (option A): prompt card with Copy + Reuse, fact tiles, Saved to card, tags with kind dots, no Colours section', () => {

@@ -92,9 +92,9 @@ test('Edit a batch job: form loads the job, Cancel / Update replace Run + the ba
   assert.match(read('server/index.js'), /\/api\/schedule\/replace/);
 });
 
-test('bottom bar: Run, then one group [ + | stack count ]; count always shown', () => {
+test('bottom bar: Run, then one group [ + | stack count ]; batch 19: no count badge while there are no batches', () => {
   const html = read('app/index.html');
-  assert.match(html, /id="btn-generate"[\s\S]*<span class="batch-grp">\s*<button id="btn-batch-add"[^>]*><i class="i i-plus"><\/i><\/button>\s*<button id="btn-batch"[^>]*><i class="i i-layers"><\/i><span id="batch-count" class="batch-count">0<\/span>/);
+  assert.match(html, /id="btn-generate"[\s\S]*<span class="batch-grp">\s*<button id="btn-batch-add"[^>]*><i class="i i-plus"><\/i><\/button>\s*<button id="btn-batch" class="btn batch-btn no-jobs"[^>]*><i class="i i-layers"><\/i><span id="batch-count" class="batch-count" hidden>0<\/span>/);
   assert.doesNotMatch(html, /Save to batch<\/span>|i-list"/);
   assert.match(read('app/js/ui/batch-sheet.js'), /this\.badge\.textContent = String\(n\);/);
 });
@@ -113,7 +113,7 @@ test('project box: clipboard icon, name not bold; Files: no Folders, renamed; No
   const hv = read('app/js/ui/history-view.js');
   assert.doesNotMatch(hv, /foldersBtn|FoldersScreen|openAddTo|getFolders/);
   assert.match(hv, /h\('h2', \{\}, 'Files'\)/);
-  assert.match(hv, /this\.favOnly \? 'Favorites' : 'Files'/);
+  assert.doesNotMatch(hv, /favOnly/, 'batch 19: Favorites is a filter, not its own view');
   const html = read('app/index.html');
   assert.match(html, /id="btn-history"[^>]*aria-label="Files" title="Files"/);
   assert.match(html, /id="btn-canvas"[^>]*><i class="i i-nodes"><\/i>/);

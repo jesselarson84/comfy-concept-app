@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { startStack, ROOT, pngBytes } from '../unit/helpers.js';
-import { launch } from './launch.js';
+import { launch, toggleFiles } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -37,16 +37,19 @@ after(async () => { await browser?.close(); await s?.close(); });
 const tiles = () => page.$$eval('.history .thumb[data-id]', (t) => t.length);
 
 test('History: search box, filter chips, stats strip, no times on the tiles', async () => {
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb[data-id]');
   assert.equal(await page.isVisible('.history .hsearch'), true);
-  assert.deepEqual(await page.$$eval('.hfilters .hchip', (c) => c.map((x) => x.dataset.act)), ['type', 'model', 'date', 'tags']);
+  // batch 19: a filter button in the search box instead of the Type/Model/Date/Tags chips
+  assert.equal(await page.isVisible('.hsearch-row .hfilter-btn'), true);
+  assert.equal(await page.isVisible('.hfilters'), false);
   assert.equal(await tiles(), 3);
   assert.equal(await page.$('.history .thumb-time'), null, 'batch 10: no times on the tiles');
   // stats strip: totals; tap opens it (top models, tags, tagging line + switch)
   assert.match(await page.textContent('.hstats'), /3outputs.*this month/);
   await page.click('.hstats');
   await page.waitForSelector('.hstats.open .hbar');
+  await page.click('.hstats .hsec-btn'); // batch 19: Tags starts collapsed
   assert.ok((await page.$$eval('.hstats .htag', (t) => t.map((x) => x.dataset.tag))).includes('neon'));
   assert.equal(await page.isVisible('.hstats .hswitch'), true);
   await page.screenshot({ path: path.join(SHOTS, 'b9-history-stats.png') });
@@ -66,7 +69,7 @@ test('search: tags and colours match ("neon blue"), the result count shows, Clea
 });
 
 test('filter sheet: opens at the tapped chip; Type 3D + Show; the chip shows it and ✕ removes it', async () => {
-  await page.click('.hfilters .hchip[data-act="type"]');
+  await page.click('.hfilter-btn');
   await page.waitForSelector('.filter-sheet');
   await page.click('.filter-sheet [data-type="3d"]');
   assert.match(await page.textContent('.filter-sheet [data-act="show"]'), /Show 1/);
@@ -77,7 +80,7 @@ test('filter sheet: opens at the tapped chip; Type 3D + Show; the chip shows it 
   await page.click('.hchip.on .x');
   await page.waitForFunction(() => document.querySelectorAll('.history .thumb[data-id]').length === 3);
   // Date: Today
-  await page.click('.hfilters .hchip[data-act="date"]');
+  await page.click('.hfilter-btn');
   await page.click('.filter-sheet [data-date="today"]');
   await page.click('.filter-sheet [data-act="show"]');
   await page.waitForFunction(() => document.querySelectorAll('.history .thumb[data-id]').length === 1);

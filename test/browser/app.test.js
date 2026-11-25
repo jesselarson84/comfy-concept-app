@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { startStack, pngBytes, ROOT } from '../unit/helpers.js';
-import { launch, pickAspect, menuAct, saveToPhone } from './launch.js';
+import { launch, pickAspect, menuAct, saveToPhone, toggleFiles } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -237,18 +237,18 @@ test('workflow dropped into folder shows up without reload (SSE); unknown graph 
 });
 
 test('history view lists the session with images', async () => {
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history-session .thumb img');
   const n = await page.$$eval('.history-session .thumb', (t) => t.length);
   assert.ok(n >= 4, `history thumbs ${n}`);
   assert.ok(await page.$$eval('.history-session .thumb-label', (l) => l.some((x) => x.textContent === '★')));
   await page.screenshot({ path: path.join(SHOTS, 'phone-history.png') });
-  await page.click('#btn-history');
+  await toggleFiles(page);
 });
 
 test('history: Back closes a viewer opened from History, then History, without leaving the page', async () => {
   const url = page.url();
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history-session .thumb img');
   await page.click('.history-session .thumb');
   await page.waitForSelector('.viewer:not([hidden])');
@@ -259,9 +259,9 @@ test('history: Back closes a viewer opened from History, then History, without l
   await page.waitForFunction(() => document.querySelector('.history').hidden);
   assert.equal(page.url(), url);
   // Closing with the ✕ button also unwinds its history entry.
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history:not([hidden])');
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForFunction(() => document.querySelector('.history').hidden && !history.state?.history);
 });
 

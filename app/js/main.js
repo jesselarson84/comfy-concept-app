@@ -127,8 +127,6 @@ $('#btn-save-graph').addEventListener('click', () => { if (isLocked()) return bu
 /** Close History without leaving a stale Back entry, so the node view can take its place. */
 async function leaveHistory() {
   if (historyView.selecting) { historyView.endSelect(); await afterBack(); }
-  // Inside a folder: drop its Back entry too, so the node view takes over History's own.
-  if (history.state?.historySub) { history.back(); await afterBack(); }
   historyView.close(true);
 }
 

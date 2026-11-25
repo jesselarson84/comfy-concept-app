@@ -3,10 +3,10 @@
 // name, type, or its tags (genre, mood, palette, setting, lighting, medium),
 // so "neon studio" finds a picture tagged neon + studio. Batch 13: plain color
 // tags (an older tagger wrote them) are ignored everywhere - not searched, not shown.
-// Filters: type (picture / video / 3D / audio), model, date range, tags.
+// Filters: type (image / video / 3D / audio), model, date range, tags; batch 19: Favorites.
 
 export const TYPES = [
-  { key: 'image', label: 'Pictures' }, { key: 'video', label: 'Video' },
+  { key: 'image', label: 'Images' }, { key: 'video', label: 'Video' },
   { key: '3d', label: '3D' }, { key: 'audio', label: 'Audio' },
 ];
 export const DATES = [
@@ -54,10 +54,11 @@ export function haystack(e, labelOf = () => '') {
 }
 
 /**
- * Does an entry pass?  f = { q, types: Set, models: Set, date, tags: Set }
+ * Does an entry pass?  f = { q, types: Set, models: Set, date, tags: Set, fav }
  * (empty sets / missing = no filter).
  */
 export function matches(e, f = {}, { labelOf, now } = {}) {
+  if (f.fav && !e.favorite) return false;
   if (f.types?.size && !f.types.has(entryType(e))) return false;
   if (f.models?.size && !f.models.has(e.workflow)) return false;
   const r = dateRange(f.date, now);
@@ -68,12 +69,21 @@ export function matches(e, f = {}, { labelOf, now } = {}) {
   return true;
 }
 
-export const isFiltering = (f = {}) => !!(String(f.q || '').trim() || f.types?.size || f.models?.size || f.date || f.tags?.size);
+export const isFiltering = (f = {}) => !!(String(f.q || '').trim() || f.fav || f.types?.size || f.models?.size || f.date || f.tags?.size);
+
+/** Batch 19: how many filters are on (the number on the search box's filter button; the search text is not one). */
+export const filterCount = (f = {}) => (f.fav ? 1 : 0) + (f.types?.size || 0) + (f.models?.size || 0) + (f.date ? 1 : 0) + (f.tags?.size || 0);
+
+/** Batch 19: the stats' period toggle - entries made today / this month. */
+export function inPeriod(e, period, now = new Date()) {
+  const from = period === 'today' ? dayStart(now) : new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  return e.createdAt >= from;
+}
 
 /** Counts for the stats strip: total, by type, today, this month, top models, top tags. */
 export function statsOf(entries, { now = new Date(), labelOf = (id) => id } = {}) {
   const today = dayStart(now), month = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-  const byType = {}, models = new Map(), tags = new Map(), groupOf = new Map(), firstSeen = new Map();
+  const byType = {}, models = new Map(), tags = new Map(), groupOf = new Map(), firstSeen = new Map(), madeBy = new Map();
   let todayN = 0, monthN = 0;
   for (const e of entries) {
     // Batch 12: each tag's kind (genre, mood, ...) and when each model was first used (its color).
@@ -82,16 +92,22 @@ export function statsOf(entries, { now = new Date(), labelOf = (id) => id } = {}
     const t = entryType(e); byType[t] = (byType[t] || 0) + 1;
     if (e.createdAt >= today) todayN++;
     if (e.createdAt >= month) monthN++;
-    if (e.workflow) { const k = e.workflow; models.set(k, (models.get(k) || 0) + 1); }
+    if (e.workflow) {
+      const k = e.workflow; models.set(k, (models.get(k) || 0) + 1);
+      if (!madeBy.has(k)) madeBy.set(k, {});
+      madeBy.get(k)[t] = (madeBy.get(k)[t] || 0) + 1;
+    }
     for (const g of new Set(entryTags(e))) tags.set(g, (tags.get(g) || 0) + 1); // a tag in two groups counts once
   }
   const top = (m, n) => [...m.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]))).slice(0, n);
   // A model keeps its color slot: the order models were first used in, not their rank.
   const slot = new Map([...firstSeen.entries()].sort((a, b) => a[1] - b[1] || String(a[0]).localeCompare(String(b[0]))).map(([id], i) => [id, i]));
+  // Batch 19: the type a model makes (its most common output), for its bar color.
+  const typeOf = (id) => Object.entries(madeBy.get(id) || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || 'image';
   return {
     total: entries.length, byType, today: todayN, month: monthN,
-    models: top(models, 5).map(([id, n]) => ({ id, label: labelOf(id) || id, n, slot: slot.get(id) ?? 0 })),
-    allModels: top(models, 99).map(([id, n]) => ({ id, label: labelOf(id) || id, n, slot: slot.get(id) ?? 0 })),
+    models: top(models, 5).map(([id, n]) => ({ id, label: labelOf(id) || id, n, slot: slot.get(id) ?? 0, type: typeOf(id) })),
+    allModels: top(models, 99).map(([id, n]) => ({ id, label: labelOf(id) || id, n, slot: slot.get(id) ?? 0, type: typeOf(id) })),
     tags: top(tags, 200).map(([tag, n]) => ({ tag, n, group: groupOf.get(tag) || null })),
   };
 }
@@ -99,11 +115,10 @@ export function statsOf(entries, { now = new Date(), labelOf = (id) => id } = {}
 /** "3:04 PM" */
 export const timeLabel = (ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
-// ---- batch 12: colors (History stats, viewer Details) ------------------------
-// Categorical colors validated on the app's dark surface (color-blind + contrast checks).
-// Text never takes these colors; they sit on bars, dots and swatches next to it.
-export const TYPE_COLORS = { image: '#3987e5', '3d': '#d95926', video: '#199e70', audio: '#c98500' };
-export const MODEL_COLORS = ['#199e70', '#c98500', '#d55181', '#9085e9', '#3987e5', '#d95926'];
-export const GROUP_COLORS = { genre: '#3987e5', mood: '#d55181', palette: '#9085e9', setting: '#199e70', lighting: '#c98500', medium: '#d95926' };
-export const GROUP_LABELS = { genre: 'genre', mood: 'mood', palette: 'palette', setting: 'setting', lighting: 'lighting', medium: 'medium' };
-export const modelColor = (slot) => MODEL_COLORS[(slot || 0) % MODEL_COLORS.length];
+// ---- colors (Files stats) ------------------------------------------------------
+// Batch 19 (mockup v2): one color per type; the Top models bars take the color of
+// the type the model makes. Text never takes these colors. (Batch 19 also dropped
+// the per-model colors and the tag-kind dots.)
+export const TYPE_COLORS = { image: '#12C2AA', '3d': '#8F939C', video: '#9B7CF0', audio: '#E6A33A' };
+/** The key's order: Images, 3D, Video, Audio. */
+export const TYPE_KEY = ['image', '3d', 'video', 'audio'];

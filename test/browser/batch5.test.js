@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startStack, ROOT } from '../unit/helpers.js';
-import { launch, pickAspect, menuAct, pickOption } from './launch.js';
+import { launch, pickAspect, menuAct, pickOption, toggleFiles } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -156,7 +156,7 @@ test('History is a top bar toggle: top bar stays, dropdown and Run hide; batch f
   await setBatch(4);
   await run();
   const barBefore = await page.$eval('.topbar', (t) => t.getBoundingClientRect().top);
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb[data-id]');
   assert.equal(await page.getAttribute('#btn-history', 'aria-pressed'), 'true');
   assert.equal(await page.$eval('.topbar', (t) => t.getBoundingClientRect().top), barBefore, 'top bar did not move');
@@ -182,12 +182,12 @@ test('History is a top bar toggle: top bar stays, dropdown and Run hide; batch f
   fav = (await (await fetch(s.base + '/api/history?favorites=1')).json()).sessions.flatMap((x) => x.entries).map((e) => e.id);
   assert.ok(ids.every((id) => !fav.includes(id)), 'both unfavourited');
   await app(() => window.conceptApp.historyView.endSelect());
-  await page.click('#btn-history');
+  await toggleFiles(page);
   assert.equal(await page.isVisible('.actionbar'), true, 'back to the form');
 });
 
 test('viewer: strip, drag moves the next picture in, flick, rubber band, strip tap, swipe down closes', async () => {
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb[data-id]');
   await page.click('.history .thumb[data-id] >> nth=0');
   await page.waitForSelector('.viewer:not([hidden])');
@@ -254,7 +254,7 @@ test('viewer delete: ⋮ Delete + confirm removes only that picture from the PC 
   // closing reloads History without it
   await page.click('.viewer-top button[aria-label=Close]');
   await page.waitForFunction((x) => !document.querySelector(`.history .thumb[data-id="${x}"]`), id);
-  await page.click('#btn-history');
+  await toggleFiles(page);
 });
 
 test('no page errors in batch 5 tests', () => {

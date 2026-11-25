@@ -272,18 +272,18 @@ test('viewer Details: where the Drive copy is (filed, waiting, moving, missing)'
   assert.equal(driveInfo({ ...e, filed: { 'concept-app/a.png': { p: 'p1', f: 'Images/a.png', s: 'missing' } } }, data).state, 'missing');
 });
 
-test('UI wiring: chip at the top of the form, Move in the selection bar and the viewer menu, By project / By date, shell cached', () => {
+test('UI wiring: chip at the top of the form, Move in the selection bar and the viewer menu, always by project (batch 19), shell cached', () => {
   const html = read('app/index.html');
   assert.ok(html.indexOf('id="project-row"') < html.indexOf('id="prompt"'), 'chip above the prompt');
   const main = read('app/js/main.js');
   assert.match(main, /new ProjectChip\(\$\('#project-row'\)\)/);
   assert.match(main, /source: Object\.values\(refs\.values\)/, 'Use as reference sends its source picture');
   const hv = read('app/js/ui/history-view.js');
-  assert.match(hv, /act: 'move'/); assert.match(hv, /'By project'/); assert.match(hv, /'By date'/);
+  assert.match(hv, /act: 'move'/); assert.doesNotMatch(hv, /'By date'|groupBy/); assert.match(hv, /byProject\(shown, projectsCache\(\)\)/);
   assert.match(read('app/js/ui/viewer.js'), /Move to project…/);
   const sw = read('app/sw.js');
   assert.match(sw, /'\/js\/ui\/projects\.js'/);
-  assert.match(sw, /shell-v35/);
+  assert.match(sw, /shell-v36/);
   assert.match(read('app/js/ui/projects.js'), /act: 'use-here'/, 'inside a folder: use that folder itself');
 });
 

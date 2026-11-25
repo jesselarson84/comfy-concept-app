@@ -11,9 +11,12 @@
 //   - Trash deletes the files from the PC after a confirm (server checks every
 //     file is inside ComfyUI's output/concept-app folder).
 //   - 3D tiles get real preview stills (ui/model-thumbs.js), rendered lazily.
+// Batch 19: always grouped by project (projects collapsible, closed at first); a filter
+// button in the search box with removable chips for active filters; Favorites is a
+// filter (no ★ Favorites button); the stats' today / this month toggle.
 import { h, toast } from './dom.js';
 import { getHistory, deleteHistory, patchHistory, getTagger, setTagger, uploadPreview } from '../api.js';
-import { TYPES, DATES, entryType, entryTags, matches, isFiltering, statsOf, TYPE_COLORS, GROUP_COLORS, GROUP_LABELS, modelColor } from '../lib/history-filter.js';
+import { TYPES, DATES, entryType, entryTags, matches, isFiltering, filterCount, inPeriod, statsOf, TYPE_COLORS, TYPE_KEY } from '../lib/history-filter.js';
 import { viewUrl } from '../comfy-client.js';
 import { deleteThumb, thumbKey } from '../lib/thumb-cache.js';
 import { fileLabel } from '../lib/outputs.js';
@@ -22,6 +25,8 @@ import { loadProjects, projectsCache } from './projects.js';
 import { claudeLogo } from './claude.js';
 
 const LONG_PRESS_MS = 450;
+/** No filters on: no search text, no Favorites, empty sets. */
+const emptyFilter = () => ({ q: '', fav: false, types: new Set(), models: new Set(), date: null, tags: new Set() });
 
 export class HistoryView {
   /**
@@ -36,25 +41,26 @@ export class HistoryView {
     this.onMove = onMove;
     // Batch 16: Ask Claude about the selected pictures (numbered in tap order), only while Use Claude is on.
     this.onAskClaude = onAskClaude; this.claudeOn = claudeOn || (() => false);
-    this.groupBy = localStorage.getItem('historyGroup') === 'date' ? 'date' : 'project';
-    try { this.collapsed = new Set(JSON.parse(localStorage.getItem('historyCollapsed') || '[]')); } catch { this.collapsed = new Set(); }
+    // Batch 19: always grouped by project (the By project / By date toggle is gone).
+    // Projects are collapsible and start collapsed (this app load); folder groups stay open.
+    this.openProjects = new Set();
     // Batch 9: model names for search / filters / stats (main.js knows the presets).
     this.labelOf = labelOf || ((id) => id);
-    this.filter = { q: '', types: new Set(), models: new Set(), date: null, tags: new Set() };
+    this.filter = emptyFilter();
+    // Batch 19: the stats' period toggle (By type, Top models, Tags); This month by default.
+    this.statsPeriod = 'month';
+    this.tagsOpen = false;
     this.sessions = [];
     this.previewing = new Set(); // entries whose still is being made / sent
     this.host = host || document.body; this.button = button; this.onChange = onChange;
-    this.favOnly = false;
     this.selected = new Set();   // history entry ids
     this.selecting = false;
     this.entries = new Map();    // id -> entry (current list)
     this.list = h('div.history-list');
     this.title = h('h2', {}, 'Files'); // batch 13: History is called Files
-    this.favBtn = h('button.btn', { type: 'button', onclick: () => this.setView(null, !this.favOnly) }, '★ Favorites');
-    // Inside Favorites: back to all of Files (Back does the same).
-    this.backBtn = h('button.btn.icon.hist-back', { type: 'button', hidden: true, 'aria-label': 'All files', title: 'All files', dataset: { act: 'all-history' }, onclick: () => this.setView(null, false) }, h('i.i.i-chevron-left'));
-    // No close button: the History toggle in the top bar (or Back) closes it.
-    this.normalBar = h('div.history-top', {}, this.backBtn, this.title, h('span.spacer'), this.favBtn);
+    // No close button: the Files toggle in the top bar (or Back) closes it.
+    // Batch 19: no ★ Favorites button: Favorites is an option in the Filters box.
+    this.normalBar = h('div.history-top', {}, this.title);
     this.count = h('span.sel-count', {}, '0');
     // Favorite: favorites the whole selection, or unfavorites it when it is all favorites already.
     this.selFavBtn = h('button.icon-btn.sel-fav', { type: 'button', 'aria-label': 'Favorite', dataset: { act: 'favorite' }, onclick: () => this.favoriteSelected() }, '☆');
@@ -68,18 +74,16 @@ export class HistoryView {
       h('button.icon-btn', { type: 'button', 'aria-label': 'Delete', dataset: { act: 'delete' }, onclick: () => this.confirmDelete() }, h('i.i.i-trash-2')));
     // Batch 17: no ⋮ here (it only held Select all; each group's circle selects the group,
     // and in Favorites the star removes the selection from Favorites).
-    // Batch 9: search + filter chips, and the stats strip (tap to open).
+    // Batch 9: search and the stats strip (tap to open). Batch 19: the Type/Model/Date/Tags
+    // chips are gone: a filter button sits inside the search box (with a count when filters
+    // are on) and opens the Filters box; the active filters show as removable chips below.
     this.search = h('input.hsearch', { type: 'search', placeholder: 'Search prompts and tags', 'aria-label': 'Search Files', autocomplete: 'off', enterkeyhint: 'search',
       oninput: () => { this.filter.q = this.search.value; this.render(); } });
-    this.chips = h('div.hfilters');
-    // Batch 11: By project (default) / By date.
-    const seg = (key, label) => h('button.hseg-btn', { type: 'button', dataset: { group: key }, 'aria-pressed': String(this.groupBy === key), onclick: () => {
-      this.groupBy = key; localStorage.setItem('historyGroup', key);
-      for (const b of this.groupSeg.children) b.setAttribute('aria-pressed', String(b.dataset.group === key));
-      this.render();
-    } }, label);
-    this.groupSeg = h('div.hseg', { role: 'group', 'aria-label': 'Group Files' }, seg('project', 'By project'), seg('date', 'By date'));
-    this.tools = h('div.history-tools', {}, h('label.hsearch-row', {}, h('i.i.i-search', { 'aria-hidden': 'true' }), this.search), this.groupSeg, this.chips);
+    this.filterN = h('span.hfilter-n', { hidden: true });
+    this.filterBtn = h('button.hfilter-btn', { type: 'button', 'aria-label': 'Filters', title: 'Filters', dataset: { act: 'filters' }, onclick: (e) => { e.preventDefault(); this.openFilters(); } },
+      h('i.i.i-funnel', { 'aria-hidden': 'true' }), this.filterN);
+    this.chips = h('div.hfilters', { hidden: true });
+    this.tools = h('div.history-tools', {}, h('div.hsearch-row', {}, h('i.i.i-search', { 'aria-hidden': 'true' }), this.search, this.filterBtn), this.chips);
     this.statsOpen = localStorage.getItem('historyStatsOpen') === '1';
     this.stats = h('div.hstats', { role: 'button', tabindex: 0, dataset: { act: 'stats' } });
     this.stats.addEventListener('click', (e) => { if (e.target.closest('button, .hswitch')) return; this.statsOpen = !this.statsOpen; localStorage.setItem('historyStatsOpen', this.statsOpen ? '1' : '0'); this.paintStats(); });
@@ -90,29 +94,10 @@ export class HistoryView {
       if (this.root.hidden) return;
       if (this.selecting && !history.state?.historySel) { this.endSelect(true); return; }
       if (!history.state?.history) { this.close(true); return; }
-      if (this.inSub && !history.state.historySub) this.setView(null, false, true);
     });
   }
 
   get on() { return !this.root.hidden; }
-  /** Showing Favorites (not all of Files). */
-  get inSub() { return this.favOnly; }
-
-  /**
-   * Switch between all of Files and Favorites. Going into Favorites adds one
-   * Back entry ({ historySub }), so Back (or the arrow) returns to all of Files
-   * before it closes Files. (The first argument was a folder before batch 13.)
-   */
-  setView(_unused, favOnly, fromPop = false) {
-    const wasSub = this.inSub;
-    this.favOnly = !!favOnly;
-    this.favBtn.classList.toggle('on', this.favOnly);
-    if (this.on && !fromPop) {
-      if (this.inSub && !wasSub && !history.state?.historySub) history.pushState({ history: true, historySub: true }, '');
-      else if (!this.inSub && wasSub && history.state?.historySub) history.back();
-    }
-    return this.load();
-  }
 
   toggle() { return this.on ? this.close() : this.open(); }
 
@@ -120,8 +105,6 @@ export class HistoryView {
   async open({ replace = false } = {}) {
     if (this.root.hidden) {
       if (replace) history.replaceState({ history: true }, ''); else history.pushState({ history: true }, '');
-      // Opening Files always starts on all of it, not Favorites.
-      this.favOnly = false; this.favBtn.classList.remove('on');
       this.#paintOn(true);
     }
     await this.load();
@@ -132,8 +115,8 @@ export class HistoryView {
     if (this.root.hidden) return;
     this.endSelect(true);
     this.#paintOn(false);
-    // Pops this view's entries in one go (Favorites and a selection add one each).
-    if (!fromPop && history.state?.history) history.go(-(1 + (history.state.historySub ? 1 : 0) + (history.state.historySel ? 1 : 0)));
+    // Pops this view's entries in one go (a selection adds one).
+    if (!fromPop && history.state?.history) history.go(-(1 + (history.state.historySel ? 1 : 0)));
   }
 
   #paintOn(on) {
@@ -156,8 +139,8 @@ export class HistoryView {
     try { await Promise.all(ids.map((id) => patchHistory(id, { favorite: fav }))); } catch (e) { toast(e.message, 6000); }
     for (const id of ids) { const e = this.entries.get(id); if (e) e.favorite = fav; }
     toast(`${fav ? 'Added' : 'Removed'} ${ids.length} ${fav ? 'to' : 'from'} Favorites`);
-    // Stay in selection mode; repaint the stars on the tiles (and drop them from the Favorites view).
-    if (this.favOnly && !fav) { this.endSelect(); await this.load(); return; }
+    // Stay in selection mode; repaint the stars on the tiles (and drop them while the Favorites filter is on).
+    if (this.filter.fav && !fav) { this.endSelect(); this.render(); return; }
     for (const t of this.list.querySelectorAll('.thumb[data-id]')) {
       const e = this.entries.get(t.dataset.id);
       const label = t.querySelector('.thumb-label');
@@ -168,7 +151,7 @@ export class HistoryView {
 
   // ---- selection ------------------------------------------------------------
   startSelect(id) {
-    if (!this.selecting) { this.selecting = true; history.pushState({ history: true, historySub: !!history.state?.historySub, historySel: true }, ''); }
+    if (!this.selecting) { this.selecting = true; history.pushState({ history: true, historySel: true }, ''); }
     if (id) this.selected.add(id);
     this.paintSelection();
   }
@@ -291,12 +274,10 @@ export class HistoryView {
 
   // ---- list ----------------------------------------------------------------
   async load() {
-    this.title.textContent = this.favOnly ? 'Favorites' : 'Files';
-    this.backBtn.hidden = !this.inSub;
     this.list.replaceChildren(h('p.muted', {}, 'Loading…'));
     let sessions;
     // Batch 11: the projects (names, grouping folders) come along for the project groups.
-    try { [sessions] = await Promise.all([getHistory(this.favOnly), loadProjects().catch(() => null)]); } catch (e) { this.list.replaceChildren(h('p.muted', {}, e.message)); return; }
+    try { [sessions] = await Promise.all([getHistory(false), loadProjects().catch(() => null)]); } catch (e) { this.list.replaceChildren(h('p.muted', {}, e.message)); return; }
     this.sessions = sessions;
     this.entries = new Map(sessions.flatMap((s) => s.entries.map((e) => [e.id, e])));
     for (const id of [...this.selected]) if (!this.entries.has(id)) this.selected.delete(id);
@@ -306,31 +287,41 @@ export class HistoryView {
   }
 
   // ---- batch 9: search, filters, stats ----------------------------------------
-  /** Everything in the current view (all / Favorites), newest first. */
+  /** Everything in Files, newest first. */
   allEntries() { return this.sessions.flatMap((s) => s.entries).filter((e) => e.images?.length || e.files?.length).sort((a, b) => b.createdAt - a.createdAt); }
 
   /** History searched for one tag (a tag tapped in the viewer or the stats). */
   async searchTag(tag) {
-    this.filter = { q: '', types: new Set(), models: new Set(), date: null, tags: new Set([tag]) };
+    this.filter = { ...emptyFilter(), tags: new Set([tag]) };
     this.search.value = '';
     if (!this.on) await this.open(); else this.render();
   }
 
-  clearFilters() { this.filter = { q: '', types: new Set(), models: new Set(), date: null, tags: new Set() }; this.search.value = ''; this.render(); }
+  clearFilters() { this.filter = emptyFilter(); this.search.value = ''; this.render(); }
 
+  /**
+   * Batch 19: the filter button's count, and one small removable chip per active filter
+   * (✕ removes it; tapping the chip opens the Filters box at its section). The row is
+   * hidden when no filter is on.
+   */
   paintChips() {
     const f = this.filter;
-    const chip = (label, act, on, onX) => h(`button.hchip${on ? '.on' : ''}`, { type: 'button', dataset: { act }, onclick: (e) => { if (on && e.target.closest('.x')) { onX(); this.render(); } else this.openFilters(act); } },
-      label, on ? h('span.x', { 'aria-label': 'Remove' }, '✕') : h('i.i.i-chevron-down', { 'aria-hidden': 'true' }));
-    const typeLabel = [...f.types].map((t) => TYPES.find((x) => x.key === t)?.label || t).join(', ');
-    const modelLabel = f.models.size === 1 ? this.labelOf([...f.models][0]) : `${f.models.size} models`;
+    const n = filterCount(f);
+    this.filterN.hidden = !n; this.filterN.textContent = String(n);
+    this.filterBtn.classList.toggle('on', n > 0);
+    this.filterBtn.setAttribute('aria-label', n ? `Filters (${n} on)` : 'Filters');
+    const chip = (label, sec, onX, data = {}) => h('button.hchip.on', { type: 'button', dataset: { act: sec, ...data }, onclick: (e) => { if (e.target.closest('.x')) { onX(); this.render(); } else this.openFilters(sec); } },
+      h('span.hchip-t', {}, label), h('span.x', { 'aria-label': `Remove ${label}` }, '✕'));
     const dateLabel = f.date ? (DATES.find((d) => d.key === f.date.key)?.label || `${f.date.from || '…'} – ${f.date.to || '…'}`) : '';
-    this.chips.replaceChildren(
-      chip(f.types.size ? typeLabel : 'Type', 'type', f.types.size > 0, () => f.types.clear()),
-      chip(f.models.size ? modelLabel : 'Model', 'model', f.models.size > 0, () => f.models.clear()),
-      chip(f.date ? dateLabel : 'Date', 'date', !!f.date, () => { f.date = null; }),
-      ...[...f.tags].map((t) => chip(t, 'tags', true, () => f.tags.delete(t))),
-      ...(f.tags.size ? [] : [h('button.hchip', { type: 'button', dataset: { act: 'tags' }, onclick: () => this.openFilters('tags') }, h('i.i.i-sliders-horizontal', { 'aria-hidden': 'true' }), 'Tags')]));
+    const chips = [
+      f.fav ? chip('★ Favorites', 'fav', () => { f.fav = false; }) : null,
+      ...[...f.types].map((t) => chip(TYPES.find((x) => x.key === t)?.label || t, 'type', () => f.types.delete(t), { type: t })),
+      ...[...f.models].map((m) => chip(this.labelOf(m), 'model', () => f.models.delete(m), { model: m })),
+      f.date ? chip(dateLabel, 'date', () => { f.date = null; }) : null,
+      ...[...f.tags].map((t) => chip(t, 'tags', () => f.tags.delete(t), { tag: t })),
+    ].filter(Boolean);
+    this.chips.replaceChildren(...chips);
+    this.chips.hidden = !chips.length;
   }
 
   paintStats() {
@@ -340,32 +331,39 @@ export class HistoryView {
     this.stats.setAttribute('aria-expanded', String(this.statsOpen));
     this.stats.hidden = !all.length;
     const ch = h('i.i.i-chevron-down.hstats-ch', { 'aria-hidden': 'true' });
-    // Batch 12 (option C): color only where it means something - the type bar,
-    // the model bars and a dot per kind of tag.
-    const types = TYPES.filter((t) => TYPE_COLORS[t.key]);
-    const typeBar = (cls) => h(`span.htbar${cls}`, { 'aria-hidden': 'true' }, ...types.filter((t) => s.byType[t.key]).map((t) => h('i', { style: `flex:${s.byType[t.key]};background:${TYPE_COLORS[t.key]}` })));
+    // Batch 19 (mockup v2): one color per type (key order Images, 3D, Video, Audio);
+    // the bar only shows the types that were used.
+    const typeBar = (cls, st) => h(`span.htbar${cls}`, { 'aria-hidden': 'true' }, ...TYPE_KEY.filter((k) => st.byType[k]).map((k) => h('i', { style: `flex:${st.byType[k]};background:${TYPE_COLORS[k]}` })));
     if (!this.statsOpen) {
-      this.stats.replaceChildren(h('span', {}, h('b', {}, String(s.total)), 'outputs'), h('span', {}, h('b', {}, String(s.today)), 'today'), h('span', {}, h('b', {}, String(s.month)), 'this month'), typeBar('.mini'), ch);
+      this.stats.replaceChildren(h('span', {}, h('b', {}, String(s.total)), 'outputs'), h('span', {}, h('b', {}, String(s.today)), 'today'), h('span', {}, h('b', {}, String(s.month)), 'this month'), typeBar('.mini', s), ch);
       return;
     }
-    const max = Math.max(1, ...s.models.map((m) => m.n));
+    // Batch 19: today / this month is a two-way toggle for By type, Top models and Tags.
+    // "outputs" stays the all-time count; the file list is not affected.
+    const sp = statsOf(all.filter((e) => inPeriod(e, this.statsPeriod)), { labelOf: this.labelOf });
+    const period = (key, n, label) => h(`button.hperiod${this.statsPeriod === key ? '.on' : ''}`, { type: 'button', role: 'radio', 'aria-checked': String(this.statsPeriod === key), dataset: { period: key },
+      onclick: () => { if (this.statsPeriod !== key) { this.statsPeriod = key; this.paintStats(); } } }, h('b', {}, String(n)), h('span', {}, label));
+    const max = Math.max(1, ...sp.models.map((m) => m.n));
     const tg = this.taggerState;
     const tagLine = tg ? h('div.htagger', {},
       h('span.hdot', { dataset: { status: tg.status } }),
       h('span', {}, `${{ off: 'Tagging is off', done: 'All tagged', tagging: 'Tagging…', paused: `Tagging paused: ${tg.reason}`, waiting: 'Tagging waits for a quiet GPU' }[tg.status] || 'Tagging'} · ${tg.tagged} of ${tg.total} tagged`),
       h('label.hswitch', { title: 'Background tagging' }, h('input', { type: 'checkbox', checked: tg.enabled, 'aria-label': 'Background tagging', onchange: async (e) => { try { this.taggerState = await setTagger(e.target.checked); this.paintStats(); } catch (err) { toast(err.message, 6000); } } }), h('span'))) : null;
-    const others = s.tags.filter((t) => t.group).slice(0, 16); // batch 13: no Colors section
-    const groups = [...new Set(others.map((t) => t.group).filter((g) => GROUP_COLORS[g]))];
-    const tagBtn = (t, mark) => h('button.htag', { type: 'button', dataset: { tag: t.tag }, onclick: () => this.searchTag(t.tag) }, mark, t.tag, h('em', {}, String(t.n)));
+    const tags = sp.tags.filter((t) => t.group); // batch 13: no Colors section
+    // Batch 19: Tags starts collapsed ("TAGS · N ›"); tap the heading to open it. No colored dots.
+    const tagsHead = h('button.hsec.hsec-btn', { type: 'button', 'aria-expanded': String(this.tagsOpen), dataset: { act: 'tags-toggle' }, onclick: () => { this.tagsOpen = !this.tagsOpen; this.paintStats(); } },
+      `Tags · ${tags.length}`, h(`i.i.${this.tagsOpen ? 'i-chevron-down' : 'i-chevron-right'}`, { 'aria-hidden': 'true' }));
     this.stats.replaceChildren(...[
-      h('div.hnums', {}, h('div', {}, h('b', {}, String(s.total)), h('span', {}, 'outputs')), h('div', {}, h('b', {}, String(s.today)), h('span', {}, 'today')), h('div', {}, h('b', {}, String(s.month)), h('span', {}, 'this month'))),
-      h('div.hsec', {}, 'By type'), typeBar(''),
-      h('div.hlegend', {}, ...types.map((t) => h(`span${s.byType[t.key] ? '' : '.zero'}`, {}, h('i.hsw', { style: `background:${s.byType[t.key] ? TYPE_COLORS[t.key] : 'var(--c-border)'}` }), `${t.label} ${s.byType[t.key] || 0}`))),
-      s.models.length ? h('div.hsec', {}, 'Top models') : null,
-      ...s.models.map((m) => h('button.hbar', { type: 'button', dataset: { model: m.id }, onclick: () => { this.filter.models = new Set([m.id]); this.render(); } }, h('span', {}, m.label), h('i', {}, h('b', { style: `width:${Math.round((m.n / max) * 100)}%;background:${modelColor(m.slot)}` })), h('span.n', {}, String(m.n)))),
-      others.length ? h('div.hsec', {}, 'Tags') : null,
-      others.length ? h('div.htags', {}, ...others.map((t) => tagBtn(t, GROUP_COLORS[t.group] ? h('i.hdot2', { style: `background:${GROUP_COLORS[t.group]}` }) : null))) : null,
-      groups.length ? h('div.hlegend.hgroups', {}, ...groups.map((g) => h('span', {}, h('i.hdot2', { style: `background:${GROUP_COLORS[g]}` }), GROUP_LABELS[g]))) : null,
+      h('div.hnums', {}, h('div', {}, h('b', {}, String(s.total)), h('span', {}, 'outputs')),
+        h('div.hperiods', { role: 'radiogroup', 'aria-label': 'Stats period' }, period('today', s.today, 'today'), period('month', s.month, 'this month'))),
+      h('div.hsec', {}, 'By type'), typeBar('', sp),
+      // The key always shows all four types at full strength, with no numbers.
+      h('div.hlegend', {}, ...TYPE_KEY.map((k) => h('span', { dataset: { type: k } }, h('i.hsw', { style: `background:${TYPE_COLORS[k]}` }), TYPES.find((t) => t.key === k)?.label || k))),
+      sp.models.length ? h('div.hsec', {}, 'Top models') : null,
+      // Each model's bar takes the color of the type it makes.
+      ...sp.models.map((m) => h('button.hbar', { type: 'button', dataset: { model: m.id, type: m.type }, onclick: () => { this.filter.models = new Set([m.id]); this.render(); } }, h('span', {}, m.label), h('i', {}, h('b', { style: `width:${Math.round((m.n / max) * 100)}%;background:${TYPE_COLORS[m.type] || TYPE_COLORS.image}` })), h('span.n', {}, String(m.n)))),
+      tags.length ? tagsHead : null,
+      tags.length && this.tagsOpen ? h('div.htags', {}, ...tags.slice(0, 60).map((t) => h('button.htag', { type: 'button', dataset: { tag: t.tag }, onclick: () => this.searchTag(t.tag) }, t.tag, h('em', {}, String(t.n))))) : null,
       tagLine, ch].filter(Boolean));
   }
 
@@ -374,8 +372,8 @@ export class HistoryView {
     if (this.on) this.paintStats();
   }
 
-  /** Filter sheet: Type, Model, Date, Tags; opens scrolled to the chip that was tapped. */
-  openFilters(section = 'type') {
+  /** Filter sheet: Favorites (batch 19), Type, Model, Date, Tags; opens scrolled to the chip that was tapped. */
+  openFilters(section = 'fav') {
     const f = this.filter, s = statsOf(this.allEntries(), { labelOf: this.labelOf });
     const sheet = new Sheet();
     const pill = (label, on, click, data = {}) => h(`button.htag${on ? '.on' : ''}`, { type: 'button', dataset: data, onclick: (e) => { click(); e.currentTarget.classList.toggle('on'); count(); } }, label);
@@ -389,7 +387,9 @@ export class HistoryView {
       dateRow.querySelectorAll('.htag').forEach((b) => b.classList.remove('on')); if (!on) e.currentTarget.classList.add('on'); from.value = ''; to.value = ''; count();
     } }, d.label)));
     const sec = (key, title, ...body) => h('div.hf-sec', { dataset: { sec: key } }, h('div.hsec', {}, title), ...body);
+    const favN = this.allEntries().filter((e) => e.favorite).length;
     sheet.open('Filters', [
+      sec('fav', 'Favorites', h('div.htags', {}, pill(`★ Favorites ${favN}`, f.fav, () => { f.fav = !f.fav; }, { fav: '1' }))),
       sec('type', 'Type', h('div.htags', {}, ...TYPES.filter((t) => s.byType[t.key]).map((t) => pill(`${t.label} ${s.byType[t.key]}`, f.types.has(t.key), () => toggle(f.types, t.key), { type: t.key })))),
       sec('model', 'Model', h('div.htags', {}, ...s.allModels.map((m) => pill(`${m.label} ${m.n}`, f.models.has(m.id), () => toggle(f.models, m.id), { model: m.id })))),
       sec('date', 'Date', dateRow, h('div.hdates', {}, from, h('span.muted', {}, 'to'), to)),
@@ -419,32 +419,31 @@ export class HistoryView {
     this.paintChips();
     this.paintStats();
     const all = this.allEntries();
-    if (!all.length) { this.list.replaceChildren(h('p.muted', {}, this.favOnly ? 'No favorites yet.' : 'Nothing generated yet.')); this.paintSelection(); return; }
+    if (!all.length) { this.list.replaceChildren(h('p.muted', {}, 'Nothing generated yet.')); this.paintSelection(); return; }
     const filtering = isFiltering(this.filter);
     const shown = filtering ? all.filter((e) => matches(e, this.filter, { labelOf: this.labelOf })) : all;
     const head = filtering ? [h('div.hresults', {}, `${shown.length} ${shown.length === 1 ? 'result' : 'results'}`, h('button.link', { type: 'button', dataset: { act: 'clear-filters' }, onclick: () => this.clearFilters() }, 'Clear'))] : [];
     if (!shown.length) { this.list.replaceChildren(...head, h('p.muted', {}, 'Nothing matches.')); this.paintSelection(); return; }
-    const body = this.groupBy === 'project'
-      ? byProject(shown, projectsCache()).flatMap((b) => {
-        const secs = b.projects.map((p) => this.#section(p.label, p.entries, { sub: p.sub, cls: p.id ? '' : '.unsorted', key: p.id || 'unsorted' }));
-        if (!b.head) return secs;
-        const key = `g:${b.head}`, closed = this.collapsed.has(key);
-        const n = b.projects.reduce((a, p) => a + p.entries.length, 0);
-        const hd = h('button.hgroup', { type: 'button', dataset: { group: b.head }, 'aria-expanded': String(!closed), onclick: () => {
-          if (this.collapsed.has(key)) this.collapsed.delete(key); else this.collapsed.add(key);
-          localStorage.setItem('historyCollapsed', JSON.stringify([...this.collapsed]));
-          this.render();
-        } }, h('i.i.i-folder'), h('span.hg-name', {}, b.head), h('span.hg-n', {}, `${b.projects.length} ${b.projects.length === 1 ? 'project' : 'projects'} · ${n}`), h(`i.i.${closed ? 'i-chevron-right' : 'i-chevron-down'}`));
-        return [hd, ...(closed ? [] : secs)];
-      })
-      : byDay([{ entries: shown }]).map((s) => this.#section(s.label, s.entries));
+    // Batch 19: always by project. Folder groups (most recently used first) stay open;
+    // the projects in them (also most recent first) are collapsible and start collapsed.
+    const body = byProject(shown, projectsCache()).flatMap((b) => {
+      const secs = b.projects.map((p) => this.#section(p.label, p.entries, { sub: p.sub, cls: p.id ? '' : '.unsorted', key: p.id || 'unsorted' }));
+      if (!b.head) return secs;
+      const n = b.projects.reduce((a, p) => a + p.entries.length, 0);
+      const hd = h('div.hgroup', { dataset: { group: b.head } }, h('i.i.i-folder'), h('span.hg-name', {}, b.head), h('span.hg-n', {}, `${b.projects.length} ${b.projects.length === 1 ? 'project' : 'projects'} · ${n}`));
+      return [hd, ...secs];
+    });
     this.list.replaceChildren(...head, ...body);
     this.paintSelection();
   }
 
-  /** One group of tiles (a day, or a project) with its header and select-all circle. */
+  /**
+   * One project's tiles with its header and select-all circle. Batch 19: tapping the
+   * header opens / closes it (closed at first); a closed project builds no tiles.
+   */
   #section(label, entries, { sub = '', cls = '', key = '' } = {}) {
     {
+      const open = this.openProjects.has(key);
       const s = { label, entries };
       // Turn history entries into the same item shape the viewer uses.
       const items = s.entries.filter((e) => e.images.length).map((e) => ({
@@ -456,7 +455,7 @@ export class HistoryView {
       const files = s.entries.filter((e) => !e.images.length && e.files?.length);
       const ids = [...items.map((i) => i.historyId), ...files.map((e) => e.id)];
       const check = () => h('span.sel-check', { 'aria-hidden': 'true' }, h('i.i.i-check'));
-      const tiles = [
+      const tiles = !open ? [] : [
         ...items.map((it, i) => {
           const b = h('button.thumb.s-done', { type: 'button', dataset: { id: it.historyId }, title: it.meta.prompt },
             h('img', { src: viewUrl(it.image, { thumb: true }), loading: 'lazy', alt: '' }), h('span.thumb-label', {}, it.favorite ? '★' : ''), check());
@@ -473,11 +472,13 @@ export class HistoryView {
           return b;
         }),
       ];
-      return h(`section.history-session${cls}`, { dataset: { ids: JSON.stringify(ids), ...(key ? { project: key } : {}) } },
-        h('h3', {},
+      const flip = () => { if (this.openProjects.has(key)) this.openProjects.delete(key); else this.openProjects.add(key); this.render(); };
+      return h(`section.history-session${cls}${open ? '' : '.closed'}`, { dataset: { ids: JSON.stringify(ids), ...(key ? { project: key } : {}) } },
+        h('h3', { role: 'button', tabindex: 0, 'aria-expanded': String(open), onclick: flip, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } } },
+          h(`i.i.hp-ch.${open ? 'i-chevron-down' : 'i-chevron-right'}`, { 'aria-hidden': 'true' }),
           h('span.day', {}, s.label, sub ? h('small.proj-sub', {}, sub) : null), h('small.day-n', {}, String(s.entries.length)),
-          h('button.sel-all', { type: 'button', 'aria-label': `Select all from ${s.label}`, onclick: () => this.toggleGroup(ids) }, h('i.i.i-check'))),
-        h('div.thumbs.grid', {}, tiles));
+          h('button.sel-all', { type: 'button', 'aria-label': `Select all from ${s.label}`, onclick: (e) => { e.stopPropagation(); this.toggleGroup(ids); } }, h('i.i.i-check'))),
+        open ? h('div.thumbs.grid', {}, tiles) : null);
     }
   }
 }
@@ -527,17 +528,6 @@ export function driveInfo(e, data) {
   if (rec.s === 'gone') return { state: 'gone', path: '' };
   if ((rec.p ?? null) !== (e.project ?? null)) return { state: 'moving', path: `${base(rec.p)}/${rec.f}` };
   return { state: 'ok', path: `${base(rec.p)}/${rec.f}` };
-}
-
-/** Sessions (newest first) regrouped by calendar day: [{ key, label, entries }]. */
-export function byDay(sessions, now = new Date()) {
-  const days = new Map();
-  for (const e of sessions.flatMap((s) => s.entries).sort((a, b) => b.createdAt - a.createdAt)) {
-    const d = new Date(e.createdAt), key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    if (!days.has(key)) days.set(key, { key, label: dayLabel(d, now), entries: [] });
-    days.get(key).entries.push(e);
-  }
-  return [...days.values()];
 }
 
 /** Today / Yesterday / Sat, Jun 20 (with the year when it is not this year). */
