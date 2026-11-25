@@ -115,6 +115,7 @@ Claude (Anthropic's API) can fill in the form for you. It is **off by default**.
 - Tests never call the real API: `test/mock-claude.js` is a fake Claude server the SDK is pointed at (`baseURL`). When the SDK is not installed, the tests use a small stand-in client from that file instead; the app itself always uses the SDK.
 - Batch 17 form changes: the preset button reads the model name in full with "Text to Image" under it (beside it on a tablet); the prompt box sizes itself (3 lines empty, up to 6 on a phone or 15 on a tablet, then it scrolls) with ⋮ *Expand* (full screen) and *Clear prompt* (with Undo); the + has its own strip; the negative prompt is a "+ Negative prompt" line until you turn it on; Z-Image Turbo is the default preset; Settings › *Reset to defaults when the app closes* (this device, off by default).
 - Node view (also batch 16): the graph is fitted into view every time it is loaded or shown (ComfyUI's fit-view command, else by hand).
+- Batch 18: the preset button has a GPU chip icon. The bottom area (Run bar, plus *This session* once it has pictures) is one slightly lighter panel with rounded top corners and a soft shadow, no divider lines; *This session* is hidden while empty. On a phone the floating Ask Claude button sits just above that panel (`--dock-h`, kept current in `app/js/main.js`), so it never covers a thumbnail.
 
 ## GPU & memory profiles (2080 Ti now, RTX 5080 later)
 

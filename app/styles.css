@@ -1062,3 +1062,24 @@ body.viewer-open .claude-fab { bottom: calc(120px + var(--sab, 0px)); }
 #run-label { white-space: nowrap; }
 /* not over the full-screen prompt editor, where it would cover the text */
 body:has(.prompt-editor:not([hidden])) .claude-fab { display: none; }
+
+/* Batch 18: the bottom area is one raised panel (no divider lines). The Run bar
+   plus "This session" sit on a slightly lighter surface with rounded top corners
+   and a soft shadow. "This session" is hidden while it is empty, so the corners
+   move to the Run bar. The Ask Claude button sits above the panel: main.js keeps
+   --dock-h (the panel's height) up to date. */
+:root { --c-dock: #1f2023; }
+.results, .actionbar { border-top: 0; }
+@media (max-width: 819px) {
+  .results { background: var(--c-dock); border-radius: 16px 16px 0 0; box-shadow: 0 -6px 20px -4px #000a; position: relative; z-index: 1; padding-top: 8px; }
+  .results.empty { display: none; }
+  .actionbar { background: var(--c-dock); position: relative; z-index: 1; }
+  .results.empty + .actionbar { border-radius: 16px 16px 0 0; box-shadow: 0 -6px 20px -4px #000a; }
+  .actionbar .batch-grp { background: var(--c-card); }
+  .claude-fab { bottom: calc(var(--dock-h, 84px) + 12px); }
+}
+@media (min-width: 820px) {
+  .actionbar { background: var(--c-dock); border-radius: 16px 16px 0 0; box-shadow: 0 -6px 20px -4px #000a; position: relative; z-index: 1; }
+  /* the Ask button floats over the right-hand grid: room below the last row */
+  .results { padding-bottom: calc(84px + var(--sab)); }
+}
