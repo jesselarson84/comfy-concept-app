@@ -29,7 +29,7 @@ export class PromptPanel {
     res.id = 'aspect-res';
     $('#res-select').append(res);
     this.el = {
-      prompt: $('#prompt'), negToggle: $('#neg-toggle'), negRow: $('#neg-row'), negative: $('#negative'),
+      prompt: $('#prompt'), negAdd: $('#neg-add'), negRow: $('#neg-row'), negative: $('#negative'),
       msg: $('#preset-msg'), strengthField: $('#strength-field'), strength: $('#strength'), strengthOut: $('#strength-out'),
       aspectField: $('#aspect-field'), aspectSize: $('#aspect-size'), aspectBtn: $('#aspect-btn'), aspectLabel: $('#aspect-label'), aspectShape: $('#aspect-shape'), aspectPop: $('#aspect-pop'), resSelect: $('#res-select'), batch: $('#batch'), batchMinus: $('#batch-minus'), batchPlus: $('#batch-plus'),
       res, seedField: $('#seed-field'), seedLock: $('#seed-lock'), seed: $('#seed'), seedDice: $('#seed-dice'),
@@ -49,9 +49,11 @@ export class PromptPanel {
 
   #wire() {
     const e = this.el, s = this.state;
-    e.prompt.addEventListener('input', () => { s.prompt = e.prompt.value; this.save(); });
-    e.negative.addEventListener('input', () => { s.negative = e.negative.value; this.save(); });
-    e.negToggle.addEventListener('change', () => { s.negOn = e.negToggle.checked; e.negative.hidden = !s.negOn; this.save(); });
+    e.prompt.addEventListener('input', () => { s.prompt = e.prompt.value; this.fit(e.prompt); this.save(); });
+    e.negative.addEventListener('input', () => { s.negative = e.negative.value; this.fit(e.negative); this.save(); });
+    // Batch 17: "+ Negative prompt" turns it on (and puts the cursor in it); its ⋮ Remove turns it off.
+    e.negAdd.addEventListener('click', () => { this.setNegOn(true); e.negative.focus(); });
+    window.addEventListener('resize', () => this.fitAll());
     e.strength.addEventListener('input', () => { s.strength = Number(e.strength.value); e.strengthOut.textContent = s.strength.toFixed(2); this.save(); });
     // Batch 8: the ratio button opens a grid of every ratio in both orientations
     // (9:16 and 16:9 side by side) with a preview of the shape and its size.
@@ -173,8 +175,8 @@ export class PromptPanel {
   #paint() {
     const e = this.el, s = this.state;
     e.prompt.value = s.prompt; e.negative.value = s.negative;
-    e.negToggle.checked = s.negOn;
     e.batch.value = s.batch;
+    this.fitAll();
     this.#paintAspect();
     this.#paintSeed();
   }
@@ -202,8 +204,7 @@ export class PromptPanel {
     show(e.prompt.closest('.field'), !!c?.prompt.length || !c);
     // Workflows with a built-in instruction: shown as the placeholder; an empty prompt uses it.
     e.prompt.placeholder = wf?.ai?.promptDefault ? `${wf.ai.promptDefault} (or type your own)` : 'Describe the concept…';
-    show(e.negRow, !!c?.negative.length);
-    e.negative.hidden = !(c?.negative.length && s.negOn);
+    this.#paintNeg();
     show(e.strengthField, !!c?.strength.length);
     if (c?.strength.length) {
       const v = s.strength ?? c.defaults.strength ?? 0.75;
@@ -220,14 +221,49 @@ export class PromptPanel {
     e.batchField.querySelector('.stepper').classList.toggle('is-off', one);
     for (const el of [e.batch, e.batchMinus, e.batchPlus]) el.disabled = one;
     this.renderSettings();
+    this.fitAll();
   }
+
+  /** Batch 17: off = the "+ Negative prompt" line; on = its title row and box (presets with a negative only). */
+  #paintNeg() {
+    const e = this.el, has = !!this.wf?.controls?.negative?.length && !!this.wf?.ok;
+    e.negAdd.hidden = !has || this.state.negOn;
+    e.negRow.hidden = !has || !this.state.negOn;
+  }
+
+  setNegOn(on) { this.state.negOn = !!on; this.#paintNeg(); this.fitAll(); this.save(); }
+
+  /**
+   * Batch 17: the boxes size themselves to their text: the prompt is 3 lines when
+   * empty and grows to 6 lines on a phone (15 on a tablet), then scrolls inside;
+   * the negative prompt 2 lines, up to 4. No drag handle.
+   */
+  fit(ta) {
+    if (!ta || !ta.isConnected || ta.offsetParent === null) return;
+    const cs = getComputedStyle(ta);
+    const line = parseFloat(cs.lineHeight) || 21;
+    const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+    const wide = matchMedia('(min-width: 700px)').matches;
+    const [minL, maxL] = ta === this.el.prompt ? [3, wide ? 15 : 6] : [2, 4];
+    ta.style.height = 'auto';
+    const full = ta.scrollHeight + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+    const height = Math.min(Math.max(full, minL * line + pad), maxL * line + pad);
+    ta.style.height = `${Math.ceil(height)}px`;
+    ta.style.overflowY = full > height + 1 ? 'auto' : 'hidden';
+  }
+  fitAll() { this.fit(this.el.prompt); this.fit(this.el.negative); }
+
+  /** Clear the prompt / negative; -> the old text (for Undo). */
+  clearPrompt() { const old = this.state.prompt; this.setPrompt(''); return old; }
+  clearNegative() { const old = this.state.negative; this.state.negative = ''; this.#paint(); this.save(); return old; }
+  setNegative(text) { this.state.negative = text ?? ''; this.#paint(); this.save(); }
 
   /** (i) buttons of the fixed controls; texts can differ per preset (manifest info). */
   #staticInfo() {
     const e = this.el, m = this.wf?.ok ? this.wf.ai : null;
     const spots = [
       ['prompt', e.prompt.closest('.field').querySelector('.label'), 'Prompt'],
-      ['negative', e.negRow, 'Negative prompt'],
+      ['negative', e.negRow.querySelector('.label'), 'Negative prompt'],
       ['aspect', e.aspectField.querySelector('.label'), 'Aspect'],
       ['batch', e.batchField.querySelector('.label'), 'Batch'],
       ['seed', e.seedField.querySelector('.label'), 'Seed'],
@@ -414,6 +450,34 @@ export class PromptPanel {
   }
 
   setPrompt(text) { this.state.prompt = text; this.#paint(); this.save(); }
+
+  /**
+   * Batch 16: what Claude changed (already checked on the PC). changes: { prompt,
+   * negative, aspect, res, batch, seed: number | 'random' }; settings: { key: value }
+   * for the current preset. -> the keys that really changed.
+   */
+  applyChanges(changes = {}, settings = null) {
+    const s = this.state, done = [];
+    const set = (k, v) => { if (JSON.stringify(s[k]) !== JSON.stringify(v)) { s[k] = v; return true; } return false; };
+    if (changes.prompt !== undefined && set('prompt', changes.prompt)) done.push('prompt');
+    if (changes.negative !== undefined) { const a = set('negative', changes.negative), b = set('negOn', !!changes.negative); if (a || b) done.push('negative'); }
+    if (changes.aspect !== undefined && set('aspect', aspectKey(parseAspect(changes.aspect)))) done.push('aspect');
+    if (changes.res !== undefined && set('res', normRes(changes.res))) done.push('res');
+    if (changes.batch !== undefined && set('batch', Math.max(1, Math.min(this.maxBatch(), Number(changes.batch) || 1)))) done.push('batch');
+    if (changes.seed !== undefined) {
+      const before = `${s.seedMode}:${s.seed}`;
+      if (changes.seed === 'random') s.seedMode = 'random'; else { s.seed = Number(changes.seed); s.seedMode = 'locked'; }
+      if (`${s.seedMode}:${s.seed}` !== before) done.push('seed');
+    }
+    if (settings && this.wf?.ai) {
+      const bag = (s.params[this.wf.id] ||= {});
+      const cur = this.paramValues();
+      for (const [k, v] of Object.entries(settings)) if (k in this.wf.ai.params && cur[k] !== v) { bag[k] = v; done.push(`param:${k}`); }
+    }
+    this.#paint(); this.save();
+    if (this.wf) this.setWorkflow(this.wf);
+    return done;
+  }
 
   /** Batch 13 (Edit a batch job): how many runs, and a copy of / back to the whole form state. */
   setBatch(n) { this.state.batch = Math.max(1, Math.min(this.maxBatch(), Number(n) || 1)); this.#paint(); this.save(); if (this.wf) this.setWorkflow(this.wf); }

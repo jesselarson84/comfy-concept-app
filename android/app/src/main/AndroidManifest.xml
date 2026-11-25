@@ -18,7 +18,7 @@
          system camera app (ACTION_IMAGE_CAPTURE / ACTION_VIDEO_CAPTURE), which needs no permission as
          long as this app does NOT declare CAMERA. See README-ANDROID.md. -->
 
-    <!-- Package visibility (Android 11+): find the Tailscale app and camera apps. -->
+    <!-- Package visibility (Android 11+): find the Tailscale app, camera apps and (batch 16) the speech recognizer. -->
     <queries>
         <package android:name="com.tailscale.ipn" />
         <intent>
@@ -26,6 +26,9 @@
         </intent>
         <intent>
             <action android:name="android.media.action.VIDEO_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 

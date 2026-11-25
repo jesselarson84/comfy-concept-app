@@ -72,6 +72,7 @@ public class MainActivity extends Activity {
     private static final int REQ_FILE_CHOOSER = 1;
     private static final int REQ_STORAGE = 2;
     private static final int REQ_MICROPHONE = 4;
+    private static final int REQ_SPEECH = 5;   // batch 16: RECORD_AUDIO for talking to Claude
     private static final int BG_COLOR = 0xFF171718; // = @color/app_bg = top bar / action bar colour in app/styles.css
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -96,6 +97,8 @@ public class MainActivity extends Activity {
     private boolean clearHistoryOnFinish;
     private int probeGeneration;
     private boolean runActive;             // a run is going (the WebView is not paused)
+    private SpeechInput speech;            // batch 16: Android SpeechRecognizer for the Claude box
+    private String pendingSpeechLang;      // startSpeech waiting for RECORD_AUDIO
 
     // ---------------------------------------------------------------- lifecycle
 
@@ -198,6 +201,7 @@ public class MainActivity extends Activity {
             fileCallback = null;
         }
         runActive = false;
+        if (speech != null) speech.destroy();
         destroyWebView();
         io.shutdown();
         super.onDestroy();
@@ -1013,6 +1017,13 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == REQ_SPEECH) {
+            String lang = pendingSpeechLang;
+            pendingSpeechLang = null;
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) speech().start(lang);
+            else speech().fail("Microphone access was refused");
+            return;
+        }
         if (requestCode == REQ_MICROPHONE) {
             android.webkit.PermissionRequest r = pendingMicRequest;
             pendingMicRequest = null;
@@ -1077,6 +1088,35 @@ public class MainActivity extends Activity {
             }
         });
         root.requestApplyInsets();
+    }
+
+    // ---------------------------------------------------------------- speech (batch 16)
+
+    private SpeechInput speech() {
+        if (speech == null) speech = new SpeechInput(this, web);
+        return speech;
+    }
+
+    boolean speechAvailable() {
+        return SpeechInput.available(this);
+    }
+
+    /** The Claude box's mic: asks for RECORD_AUDIO the first time, then listens. */
+    void startSpeech(String lang) {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            speech().start(lang);
+            return;
+        }
+        pendingSpeechLang = lang;
+        requestPermissions(new String[] {Manifest.permission.RECORD_AUDIO}, REQ_SPEECH);
+    }
+
+    void stopSpeech() {
+        if (speech != null) speech.stop();
+    }
+
+    void cancelSpeech() {
+        if (speech != null) speech.cancel();
     }
 
     // ---------------------------------------------------------------- helpers

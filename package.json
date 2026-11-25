@@ -13,7 +13,9 @@
     "test:browser": "node --test \"test/browser/*.test.js\"",
     "icons": "node scripts/make-icons.js"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@anthropic-ai/sdk": ">=0.136.0"
+  },
   "devDependencies": {
     "playwright-core": "^1.50.0",
     "@sparticuz/chromium": "*"

@@ -76,3 +76,14 @@ export async function uploadPreview(id, blob) {
   if (!r.ok) throw new Error(`Preview upload failed (${r.status})`);
   return r.json();
 }
+// Batch 16: Claude. The key goes to the PC once and never comes back (only hasKey / source).
+export const getClaude = () => req('GET', '/api/claude');
+export const setClaude = (patch) => req('POST', '/api/claude', patch);
+export const setClaudeKey = (key) => req('POST', '/api/claude/key', { key });
+/** -> { reply, actions, model, modelName, costUsd, spentUsd, limitUsd } ; errors carry .code ('off' | 'no-key' | 'limit'). */
+export async function askClaude(body) {
+  const r = await fetch('/api/claude/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(data.error || `Claude failed (${r.status})`), { code: data.code, status: r.status });
+  return data;
+}

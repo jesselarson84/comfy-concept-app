@@ -283,7 +283,7 @@ test('UI wiring: chip at the top of the form, Move in the selection bar and the 
   assert.match(read('app/js/ui/viewer.js'), /Move to project…/);
   const sw = read('app/sw.js');
   assert.match(sw, /'\/js\/ui\/projects\.js'/);
-  assert.match(sw, /shell-v32/);
+  assert.match(sw, /shell-v34/);
   assert.match(read('app/js/ui/projects.js'), /act: 'use-here'/, 'inside a folder: use that folder itself');
 });
 

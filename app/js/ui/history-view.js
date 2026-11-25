@@ -19,6 +19,7 @@ import { deleteThumb, thumbKey } from '../lib/thumb-cache.js';
 import { fileLabel } from '../lib/outputs.js';
 import { bridge, has, absoluteUrl } from '../native.js';
 import { loadProjects, projectsCache } from './projects.js';
+import { claudeLogo } from './claude.js';
 
 const LONG_PRESS_MS = 450;
 
@@ -29,10 +30,12 @@ export class HistoryView {
    * (under the top bar, which stays put); `button` shows the pressed state;
    * onChange(on) lets main hide the node view / picker.
    */
-  constructor(openViewer, openFile, { modelThumbs, host, button, onChange, labelOf, onMove } = {}) {
+  constructor(openViewer, openFile, { modelThumbs, host, button, onChange, labelOf, onMove, onAskClaude, claudeOn } = {}) {
     this.openViewer = openViewer; this.openFile = openFile; this.modelThumbs = modelThumbs;
     // Batch 11: History is grouped by project by default ("By date" = the day groups).
     this.onMove = onMove;
+    // Batch 16: Ask Claude about the selected pictures (numbered in tap order), only while Use Claude is on.
+    this.onAskClaude = onAskClaude; this.claudeOn = claudeOn || (() => false);
     this.groupBy = localStorage.getItem('historyGroup') === 'date' ? 'date' : 'project';
     try { this.collapsed = new Set(JSON.parse(localStorage.getItem('historyCollapsed') || '[]')); } catch { this.collapsed = new Set(); }
     // Batch 9: model names for search / filters / stats (main.js knows the presets).
@@ -58,11 +61,13 @@ export class HistoryView {
     this.selBar = h('div.history-top.sel-bar', { hidden: true },
       h('button.icon-btn', { type: 'button', 'aria-label': 'Cancel selection', dataset: { act: 'cancel-sel' }, onclick: () => this.endSelect() }, '✕'),
       this.count, h('span.spacer'),
+      this.claudeBtn = h('button.icon-btn.sel-claude', { type: 'button', 'aria-label': 'Ask Claude', title: 'Ask Claude', dataset: { act: 'ask-claude' }, hidden: true, onclick: () => this.askClaude() }, claudeLogo(18)),
       this.selFavBtn,
       h('button.icon-btn', { type: 'button', 'aria-label': 'Move to project', title: 'Move to project', dataset: { act: 'move' }, onclick: () => this.moveSelected() }, h('i.i.i-folder-input')),
       h('button.icon-btn', { type: 'button', 'aria-label': 'Share', dataset: { act: 'share' }, onclick: () => this.share() }, h('i.i.i-share-2')),
-      h('button.icon-btn', { type: 'button', 'aria-label': 'Delete', dataset: { act: 'delete' }, onclick: () => this.confirmDelete() }, h('i.i.i-trash-2')),
-      h('button.icon-btn', { type: 'button', 'aria-label': 'More', dataset: { act: 'more' }, onclick: (e) => this.openMore(e.currentTarget) }, h('i.i.i-more-vertical')));
+      h('button.icon-btn', { type: 'button', 'aria-label': 'Delete', dataset: { act: 'delete' }, onclick: () => this.confirmDelete() }, h('i.i.i-trash-2')));
+    // Batch 17: no ⋮ here (it only held Select all; each group's circle selects the group,
+    // and in Favorites the star removes the selection from Favorites).
     // Batch 9: search + filter chips, and the stats strip (tap to open).
     this.search = h('input.hsearch', { type: 'search', placeholder: 'Search prompts and tags', 'aria-label': 'Search Files', autocomplete: 'off', enterkeyhint: 'search',
       oninput: () => { this.filter.q = this.search.value; this.render(); } });
@@ -170,7 +175,7 @@ export class HistoryView {
 
   endSelect(fromPop) {
     if (!this.selecting) return;
-    this.selecting = false; this.selected.clear(); this.menu?.remove();
+    this.selecting = false; this.selected.clear();
     if (!fromPop && history.state?.historySel) history.back();
     this.paintSelection();
   }
@@ -192,6 +197,7 @@ export class HistoryView {
   paintSelection() {
     this.root.classList.toggle('selecting', this.selecting);
     this.selBar.hidden = !this.selecting; this.normalBar.hidden = this.selecting;
+    if (this.claudeBtn) this.claudeBtn.hidden = !(this.onAskClaude && this.claudeOn());
     this.count.textContent = String(this.selected.size);
     const sel = [...this.selected].map((id) => this.entries.get(id)).filter(Boolean);
     const allFav = sel.length > 0 && sel.every((e) => e.favorite);
@@ -228,6 +234,13 @@ export class HistoryView {
   }
 
   // ---- actions on the selection ----------------------------------------------
+  /** Batch 16: the selected pictures, in the order they were tapped (a Set keeps insertion order). */
+  askClaude() {
+    const entries = [...this.selected].map((id) => this.entries.get(id)).filter((e) => e?.images?.length);
+    if (!entries.length) { toast('Pick pictures first (3D / audio / video cannot be sent)'); return; }
+    this.onAskClaude?.(entries.slice(0, 8));
+  }
+
   selectedFiles() {
     return [...this.selected].map((id) => this.entries.get(id)).filter(Boolean).flatMap((e) => (e.images?.length ? e.images : e.files || []));
   }
@@ -274,27 +287,6 @@ export class HistoryView {
       this.endSelect();
       await this.load();
     }
-  }
-
-  /** ⋮ menu on the selection bar. */
-  openMore(anchor) {
-    this.menu?.remove();
-    const item = (act, label, fn) => h('button.sel-menu-item', { type: 'button', dataset: { act }, onclick: async () => { close(); await fn(); } }, label);
-    const items = [item('select-all', 'Select all', () => { for (const g of this.list.querySelectorAll('.history-session')) for (const id of JSON.parse(g.dataset.ids || '[]')) this.selected.add(id); this.paintSelection(); })];
-    if (this.favOnly) items.push(item('remove-fav', 'Remove from Favorites', () => this.removeSelected(() => Promise.all([...this.selected].map((id) => patchHistory(id, { favorite: false }))))));
-    const scrim = h('div.sel-menu-scrim', { onclick: () => close() });
-    const menu = h('div.sel-menu', { role: 'menu' }, ...items);
-    const close = () => { scrim.remove(); menu.remove(); this.menu = null; };
-    const r = anchor.getBoundingClientRect();
-    menu.style.top = `${Math.round(r.bottom + 4)}px`; menu.style.right = `${Math.max(8, Math.round(window.innerWidth - r.right))}px`;
-    document.body.append(scrim, menu);
-    this.menu = { remove: close };
-  }
-
-  async removeSelected(fn) {
-    try { await fn(); } catch (e) { toast(e.message, 6000); return; }
-    this.endSelect();
-    await this.load();
   }
 
   // ---- list ----------------------------------------------------------------

@@ -29,3 +29,8 @@ _to_delete/
 *.bak
 .env
 .env.*
+# Batch 16: Claude's API key, settings and monthly spend (inside data/, listed so they are never committed)
+data/claude-key.json
+data/claude-spend.json
+data/claude-settings.json
+claude-key.json

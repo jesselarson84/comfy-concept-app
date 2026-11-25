@@ -56,8 +56,8 @@ test('header says Comfy UI; Run button is the only blue element; picker has 3D /
   const seg = await page.$eval('#aspect-pop .ar-opt[aria-checked="true"]', (b) => getComputedStyle(b).backgroundColor);
   assert.equal(seg, 'rgb(60, 61, 66)', 'selected = gray, not blue');
   await pickAspect(page, '1:1');
-  // Default preset (no saved choice): FLUX.2 Klein 4B Text to Image.
-  assert.equal(await page.evaluate(() => window.conceptApp.current.id), 'ai:klein-4b-t2i');
+  // Default preset (no saved choice): Z-Image Turbo (batch 17).
+  assert.equal(await page.evaluate(() => window.conceptApp.current.id), 'ai:z-image-turbo'); // batch 17: the fresh-client default
   assert.match(await page.textContent('#preset-crumb'), /Image/);
   await page.click('#preset-btn');
   const sections = await page.$$eval('#picker .grp', (els) => els.map((e) => e.dataset.section));
@@ -84,7 +84,7 @@ test('header says Comfy UI; Run button is the only blue element; picker has 3D /
 test('AI preset: params shown with ranges; out-of-range values are clamped before queueing; ratio dropdown + orientation flip', async () => {
   await pick('ai:klein-4b-t2i');
   assert.equal(await page.textContent('#preset-name'), 'FLUX.2 Klein 4B');
-  assert.equal(await page.textContent('#preset-crumb'), 'Image › Text to Image ›');
+  assert.equal(await page.textContent('#preset-crumb'), 'Text to Image');
   // Steps is under the Settings twirl-down (batch 3).
   assert.equal(await page.locator('#more').count(), 0);
   if (!(await page.$eval('#settings', (d) => d.open))) await page.click('#settings > summary');

@@ -91,8 +91,9 @@ test('the preset picker at the top still closes on a pick', async () => {
 
 test('Negative prompt sits right under the prompt box; no Prompt assistant, no Undo / Versions', async () => {
   await pick('ai:qwen-2512-t2i'); // has a negative prompt
+  if (!(await page.isVisible('#neg-row'))) await page.click('#neg-add'); // batch 17: "+ Negative prompt" turns it on
   const gap = await app(() => document.querySelector('#neg-row').getBoundingClientRect().top - document.querySelector('.prompt-field').getBoundingClientRect().bottom);
-  assert.ok(gap <= 6, `gap ${gap}px`);
+  assert.ok(gap <= 10, `gap ${gap}px`); // batch 17: the negative prompt's own title row sits right under
   assert.equal(await page.locator('#chat-mount, .chat, #prompt-tools, #prompt-undo, .versions').count(), 0);
   assert.equal(await app(() => 'chat' in window.conceptApp || 'versions' in window.conceptApp), false);
   for (const route of ['/api/chats', '/api/actions', '/api/builder/config', '/api/user-presets']) assert.equal((await fetch(s.base + route)).status, 404, route);

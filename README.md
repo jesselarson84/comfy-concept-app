@@ -11,7 +11,7 @@ Android phone/tablet --HTTPS (Tailscale)--> this app (127.0.0.1:3100 on the PC) 
 ## Run it
 
 1. Start Comfy Desktop.
-2. Double-click `start.bat`, or run `npm start`. You need Node 22 or newer. **No `npm install` is needed**, because the server has no dependencies.
+2. Double-click `start.bat`, or run `npm start`. You need Node 22 or newer. Run `npm install` once (batch 16): the only dependency is the Claude SDK (`@anthropic-ai/sdk`); without it everything works except Claude.
 3. On the PC, open http://127.0.0.1:3100/.
 
 Settings live in `config.json`. Put your own overrides in `config.local.json`, which git ignores. Environment variables take priority over both:
@@ -96,6 +96,25 @@ Chrome only offers the share target for an installed PWA served over HTTPS, whic
 ## Prompt assistant, workflow actions and setup builder: removed (batch 15)
 
 The Ollama chat under the prompt box (with its Undo / Versions), the chat's workflow actions (upscale, image to 3D) and the chat's setup builder are gone, to make room for a Claude integration. Ollama stays for the History tagger. An old `data/chats.json`, `data/user-presets.json` or `data/builder.json` is left on disk and no longer read.
+
+## Claude (batches 16-17)
+
+Claude (Anthropic's API) can fill in the form for you. It is **off by default**.
+
+- **Settings** (gear in the top bar): *Use Claude* on/off, this month's spend ("About $X of $Y used this month · resets Dec 1"), the **monthly limit** (default $20), which model Claude starts on (Haiku / Sonnet / Opus) and the **API key**. Off = no Claude buttons anywhere, nothing is sent.
+- **The key stays on the PC**: typed once on the phone, stored in `data/claude-key.json` (git-ignored) and never sent back (the phone only sees "Saved on your PC"). `ANTHROPIC_API_KEY` in the environment works too. Make the key at platform.claude.com in its **own Workspace** and give that Workspace a spend limit as a backstop.
+- **Monthly limit**: the server adds up every reply's real cost from its `usage` (input, output, cache write / read at each model's price) in `data/claude-spend.json` and refuses Claude requests once the limit is reached, until the 1st of next month.
+- **Prompt help** (the prompt's ⋮ → *Write prompt…* or *Talk prompt*, batch 17): a sheet with the model switch (resets to the Settings default each time the app opens) and one rounded input bar: text, a small mic and the orange send arrow. The mic uses the phone's own speech recognition (Web Speech in browsers; Android's SpeechRecognizer through the app's bridge) and sends by itself when you stop talking; *Talk prompt* starts listening at once. Claude **fills in the form and stops**: prompt, negative, preset, aspect, resolution, batch, seed, preset settings. You press Run or + Batch. What it changed gets an orange dot / outline, which stays until the run finishes. No summary, no Undo, and **one-shot**: every request starts fresh (no chat memory).
+- **Ask Claude** (the floating Claude button, bottom right on every screen): questions about Comfy, your presets and settings. **Answers only**: it gets look-only tools and never changes the form.
+- **Fix this result**: viewer ⋮ → *Ask Claude about this* (the picture, about 1024 px, plus its settings; always Opus).
+- **Files**: select pictures (numbered in the order you tap them) → the Claude button. Merge looks, variations of one picture, or ask about them (Opus).
+- **Variations**: "6 takes, vary the light" adds jobs to the **batch, not started**, each one different in a real way (Opus).
+- **Building a workflow**: when no preset fits (e.g. 4 reference pictures), Opus builds a one-off graph. The server checks it against ComfyUI's live `/object_info` and installed models (`app/js/lib/graph-validate.js`); Claude gets the errors and may try 3 times, else it says it can't. It loads as a one-off preset (grey line "Claude"); the node view's *Save preset* keeps it. Never queued.
+- **What Claude can do** is exactly the tools in `server/claude.js`: look (form, presets, a preset's settings, Files search, view a picture, and for Opus a preset's graph / node info) and change (form fields, preset settings, load pictures, add jobs unstarted, propose a graph). Every call is checked and clamped on the PC. No deleting, no Drive, no queueing, no other ComfyUI calls.
+- **Cost**: Haiku / Sonnet / Opus per the switch; Opus for fix, Files, variations and building; the system prompt and tools are cached; at most 8 tool steps (14 for Opus) and 8k / 16k output tokens per request; each reply shows its cost. History tagging stays on Ollama.
+- Tests never call the real API: `test/mock-claude.js` is a fake Claude server the SDK is pointed at (`baseURL`). When the SDK is not installed, the tests use a small stand-in client from that file instead; the app itself always uses the SDK.
+- Batch 17 form changes: the preset button reads the model name in full with "Text to Image" under it (beside it on a tablet); the prompt box sizes itself (3 lines empty, up to 6 on a phone or 15 on a tablet, then it scrolls) with ⋮ *Expand* (full screen) and *Clear prompt* (with Undo); the + has its own strip; the negative prompt is a "+ Negative prompt" line until you turn it on; Z-Image Turbo is the default preset; Settings › *Reset to defaults when the app closes* (this device, off by default).
+- Node view (also batch 16): the graph is fitted into view every time it is loaded or shown (ComfyUI's fit-view command, else by hand).
 
 ## GPU & memory profiles (2080 Ti now, RTX 5080 later)
 

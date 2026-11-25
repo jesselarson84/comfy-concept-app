@@ -111,12 +111,11 @@ export class WorkflowPicker {
   setCurrent(w) {
     this.current = w?.id || null;
     const sec = w ? SECTIONS.find((s) => s.key === sectionOf(w)) : null;
-    // "Image › Text to Image › Z-Image Turbo"; on a narrow phone the crumb is
-    // cut with an ellipsis first, so the preset's own name stays readable.
     const path = sec ? [sec.label, ...(w.subgroup ? [w.subgroup] : [])] : [];
-    // Two parts, so a phone can drop the section and keep "Text to Image ›".
-    this.crumb.replaceChildren(...(sec ? [h('span.crumb-sec', {}, `${sec.label} › `)] : []), ...(w?.subgroup ? [h('span.crumb-sub', {}, `${w.subgroup} ›`)] : []));
-    if (sec && !w.subgroup) this.crumb.firstChild.textContent = `${sec.label} ›`;
+    // Batch 17: the model name comes first and always reads in full; the grey
+    // line under it (beside it on a tablet) is the sub section, else the section.
+    this.crumb.textContent = w?.claude ? 'Claude' : path.at(-1) || '';
+    this.btn.classList.toggle('one-off', !!w?.oneOff);
     this.name.textContent = w ? rowName(w) : 'No presets';
     this.btn.title = w ? [...path, w.label].join(' › ') : '';
     this.btn.setAttribute('aria-label', w ? `Workflow preset: ${[...path, rowName(w)].join(', ')}` : 'Workflow preset');

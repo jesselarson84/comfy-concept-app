@@ -128,7 +128,8 @@ test('picker: a short hint per row (what it needs), search across both tabs, two
 
 test('+ in the prompt box: the current preset gets the file when it takes that kind, else "What next?"; never switches by itself', () => {
   const main = read('app/js/main.js'), html = read('app/index.html'), sheet = read('app/js/ui/import-sheet.js');
-  assert.match(html, /<span class="prompt-box">[\s\S]*id="prompt"[\s\S]*id="btn-attach"/);
+  // batch 17: the + has its own strip under the text (never over it)
+  assert.match(html, /<div class="prompt-box">[\s\S]*id="prompt"[\s\S]*<div class="prompt-foot"><button id="btn-attach"/);
   assert.match(main, /button: \$\('#btn-attach'\)/);
   assert.match(main, /kind === 'image' && current\.controls\?\.images\?\.length\) \{ refs\.set\(refs\.targetNode\(\), ref\)/);
   assert.match(main, /presetChooser\.open\(list, async \(w\) => \{/, 'the user picks the preset');

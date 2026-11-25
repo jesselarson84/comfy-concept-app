@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createMockComfy } from '../mock-comfy.js';
 import { createMockOllama } from '../mock-ollama.js';
+import { createMockClaude, testClaudeOptions } from '../mock-claude.js';
 import { createApp } from '../../server/index.js';
 import { loadConfig } from '../../server/config.js';
 
@@ -17,7 +18,7 @@ const listen = (server) => new Promise((r) => server.listen(0, '127.0.0.1', () =
 // ram: { totalMB, freeMB }. env: e.g. { MEMORY_PROFILE: 'large' }. memoryFile: a memory-profiles.json path.
 export const GPU_2080TI = { name: 'NVIDIA GeForce RTX 2080 Ti', totalMB: 11264, freeMB: 4000 };
 export const GPU_5080 = { name: 'NVIDIA GeForce RTX 5080', totalMB: 16303, freeMB: 9000 };
-export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = false, gpu = GPU_2080TI, ram = { totalMB: 98204, freeMB: 60000 }, env = {}, memoryFile, ollamaOptions = {}, comfyOptions = {}, folderWorkflows = true, legacyFiles = false, data = null, drive = true, projects = false, outputDir = null, appOptions = {} } = {}) {
+export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = false, gpu = GPU_2080TI, ram = { totalMB: 98204, freeMB: 60000 }, env = {}, memoryFile, ollamaOptions = {}, comfyOptions = {}, folderWorkflows = true, legacyFiles = false, data = null, drive = true, projects = false, outputDir = null, appOptions = {}, claude = false } = {}) {
   const mock = createMockComfy({ stepMs, ...comfyOptions });
   const mockPort = await listen(mock.server);
   const ollama = createMockOllama(ollamaOptions);
@@ -53,15 +54,20 @@ export async function startStack({ stepMs = 20, comfyDown = false, ollamaDown = 
   const runSmi = async () => { if (!hw.gpu) throw Object.assign(new Error('not found'), { code: 'ENOENT' }); return `${hw.gpu.name}, ${hw.gpu.totalMB}, ${hw.gpu.freeMB}\n`; };
   const fakeOs = { totalmem: () => hw.ram.totalMB * 1048576, freemem: () => hw.ram.freeMB * 1048576 };
   // appOptions: test seams of createApp (e.g. { unlink } to simulate a locked file).
-  const app = createApp(cfg, { runSmi, os: fakeOs, env, ...appOptions });
+  // Batch 16 (claude: true): a fake Claude API; the server's SDK is pointed at it (never the real API).
+  let claudeMock = null, claudeBase = null;
+  if (claude) { claudeMock = createMockClaude(); claudeBase = `http://127.0.0.1:${await listen(claudeMock.server)}`; }
+  const claudeOpts = claude ? { claude: { ...(await testClaudeOptions(claudeBase)), ...(appOptions.claude || {}) } } : {};
+  const app = createApp(cfg, { runSmi, os: fakeOs, env, ...appOptions, ...claudeOpts });
   const port = await listen(app.server);
   const base = `http://127.0.0.1:${port}`;
   return {
     mock, app, base, mockBase: `http://127.0.0.1:${mockPort}`, wfDir, dataDir, port, driveRoot, driveDir, projectsDir,
-    ollama, ollamaBase: `http://127.0.0.1:${ollamaPort}`, hw,
+    ollama, ollamaBase: `http://127.0.0.1:${ollamaPort}`, hw, claudeMock, claudeBase,
     async close() {
       app.server.closeAllConnections?.(); mock.server.closeAllConnections?.(); ollama.server.closeAllConnections?.();
       await new Promise((r) => app.server.close(r)); await new Promise((r) => mock.server.close(r)); await new Promise((r) => ollama.server.close(r));
+      if (claudeMock) { claudeMock.server.closeAllConnections?.(); await new Promise((r) => claudeMock.server.close(r)); }
     },
   };
 }

@@ -32,6 +32,9 @@
 //   /api/pc/job/:promptId  GET   a job's workflow (API graph + UI workflow) to open on the phone
 //   /api/schedule          GET   the batch; POST /api/schedule/jobs {jobs}, DELETE /api/schedule/jobs/:id,
 //                          POST /api/schedule/order {ids}, /start {at|null}, /stop, /clear
+//   Batch 16 - Claude (server/claude.js; the API key stays on the PC):
+//   /api/claude            GET settings + key status (never the key) + this month's spend; POST {enabled, limitUsd, defaultModel}
+//   /api/claude/key        POST {key} / DELETE     /api/claude/ask  POST {mode, model, text, memory, form, pictures}
 //   /scripts/* /extensions/* /assets/* -> ComfyUI too (custom-node extensions
 //                   that import from the ComfyUI root instead of /comfy/)
 // Binds 127.0.0.1 only. Remote access = `tailscale serve` in front of it.
@@ -66,6 +69,7 @@ import { createFiler } from './filer.js';
 import { createPcSync } from './pc-sync.js';
 import { createScheduler } from './scheduler.js';
 import { createSam } from './sam.js';
+import { createClaude } from './claude.js';
 
 const GROUP_OF = { image: 'Image', '3d': '3D', video: 'Video', audio: 'Audio' };
 const COMFY_SNIPPET = '<link rel="stylesheet" href="/comfy-tweaks.css" data-concept-tweaks><script src="/js/comfy-tweaks.js" data-concept-tweaks></script>';
@@ -163,6 +167,24 @@ export function createApp(cfg, opts = {}) {
     const r = rel.split(path.sep).join('/');
     return Object.fromEntries(Object.entries(KIND_DIRS).map(([k, f]) => [k, `${r}/${f}`]));
   }
+  // Batch 16: Claude fills in the form (server/claude.js). The key and the spend stay in data/.
+  const claude = createClaude({
+    dataDir: cfg.dataDir, history, env: env || process.env, log,
+    presets: async () => (await allWorkflows()).workflows,
+    objectInfo: async () => (await comfyInfo.get().catch(() => ({}))).objectInfo || null,
+    // A Files picture for view_picture: ComfyUI's webp preview, so it stays small.
+    fetchPicture: async (img) => {
+      const q = new URLSearchParams({ filename: img.filename, subfolder: img.subfolder || '', type: img.type || 'output', preview: 'webp;80' });
+      const r = await (opts.fetchImpl || fetch)(`${cfg.comfyUrl}/view?${q}`, { signal: AbortSignal.timeout(15000) });
+      if (!r.ok) throw new Error(`could not load the picture (${r.status})`);
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length > 4.5 * 1024 * 1024) throw new Error('that picture is too large to look at');
+      const ct = String(r.headers.get('content-type') || '');
+      return { data: buf.toString('base64'), media: /webp/.test(ct) ? 'image/webp' : /jpe?g/.test(ct) ? 'image/jpeg' : 'image/png' };
+    },
+    ...(opts.claude || {}),
+  });
+
   workflows.on('change', () => { for (const r of sseClients) r.write('event: workflows\ndata: {}\n\n'); });
 
   // If a browser lost track of a job (phone slept, tab closed), the history
@@ -404,6 +426,19 @@ export function createApp(cfg, opts = {}) {
       } catch (e) { return json(res, e.status || 500, { error: e.message }); }
       return json(res, 404, { error: 'Unknown API route' });
     }
+    // ---- Batch 16: Claude (the key never leaves the PC) ----
+    if (p === '/api/claude' || p.startsWith('/api/claude/')) {
+      let body = {};
+      if (req.method === 'POST') { try { const t = (await readBody(req, 40 * 1024 * 1024)).toString('utf8'); body = t ? JSON.parse(t) : {}; } catch { return json(res, 400, { error: 'Bad JSON' }); } }
+      try {
+        if (p === '/api/claude' && req.method === 'GET') return json(res, 200, claude.status());
+        if (p === '/api/claude' && req.method === 'POST') { claude.settings.set(body); return json(res, 200, claude.status()); }
+        if (p === '/api/claude/key' && req.method === 'POST') { claude.keys.set(body.key); return json(res, 200, claude.status()); }
+        if (p === '/api/claude/key' && req.method === 'DELETE') { claude.keys.remove(); return json(res, 200, claude.status()); }
+        if (p === '/api/claude/ask' && req.method === 'POST') return json(res, 200, await claude.ask(body));
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
+      return json(res, 404, { error: 'Unknown API route' });
+    }
     if (p === '/api/ollama/unload' && req.method === 'POST') return json(res, 200, await ollama.unloadAll());
     if (p === '/api/memory/settings' && req.method === 'GET') return json(res, 200, memory.getSettings());
     if (p === '/api/memory' && req.method === 'GET') return json(res, 200, await memory.status({ fresh: url.searchParams.has('fresh') }));
@@ -497,7 +532,7 @@ export function createApp(cfg, opts = {}) {
   };
   let pcTimer = null;
   const startPc = () => { if (!pcTimer) { pcTimer = setInterval(() => pcSync.tick().catch(() => {}), 15000); pcSync.tick().catch(() => {}); } };
-  return { server, workflows, history, folders, memory, hardware, cfg, presets, comfyInfo, tagger, projects, filer, pcSync, scheduler, startPc };
+  return { server, workflows, history, folders, memory, hardware, cfg, presets, comfyInfo, tagger, projects, filer, pcSync, scheduler, startPc, claude };
 }
 
 // Run directly: `node server/index.js` / `npm start` / start.bat
