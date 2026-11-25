@@ -29,7 +29,6 @@ import { viewUrl } from '../comfy-client.js';
 import { bridge, has, absoluteUrl } from '../native.js';
 import { confirmDialog } from './history-view.js';
 import { projectLabel, projectById } from './projects.js';
-import { GROUP_COLORS } from '../lib/history-filter.js';
 
 /** [muted 'Apps ›', 'Cache'] for a project id, ['Unsorted'] for none. */
 function projectCrumb(id) {
@@ -268,6 +267,8 @@ export class Viewer {
         { act: 'reuse', icon: 'i-rotate-ccw', label: 'Reuse settings', sub: 'Its prompt, seed and model', hidden: !this.hooks.onReuse, fn: run((cur) => { this.close(); this.hooks.onReuse(cur); }) },
         // Batch 16: only while Use Claude is on (Settings).
         { act: 'ask-claude', icon: claudeLogo(18), label: 'Ask Claude about this', sub: 'Fix it on the form', hidden: !this.hooks.onAskClaude || !this.hooks.claudeOn?.(), fn: run((cur) => this.hooks.onAskClaude(cur)) },
+        // Batch 19: made by a workflow Claude built that is not saved yet -> keep it as a preset.
+        { act: 'save-workflow', icon: 'i-save', label: 'Save workflow as preset', sub: `${it.meta?.claudeGraph?.name || "Claude's workflow"} · not saved yet`, hidden: !this.hooks.onSaveWorkflow || !this.hooks.claudeUnsaved?.(it), fn: run((cur) => this.hooks.onSaveWorkflow(cur)) },
       ] },
       { items: [{ act: 'delete', icon: 'i-trash-2', label: 'Delete', danger: true, hidden: !(it.historyId && this.hooks.onDelete), fn: () => this.remove() }] },
     ]);
@@ -327,8 +328,6 @@ export class Viewer {
         h(`span.vd-state.${d.state}`, {}, { ok: '✓ filed', waiting: '⏳ waiting', moving: '⏳ moving', missing: '⚠ not found', gone: 'not filed' }[d.state] || '')),
       h('div.vd-path', {}, d.path || ({ waiting: 'Filed on Drive once Drive and ComfyUI are reachable', moving: 'Moving to its new project', gone: "No longer in ComfyUI's output folder" }[d.state] || ''))) : null;
     const tags = [...new Set(it.tags || [])];
-    const groupOf = (t) => { for (const [g, list] of Object.entries(it.tagsBy || {})) if (list?.includes(t)) return g; return null; };
-    const mark = (t) => { const g = groupOf(t); return GROUP_COLORS[g] ? h('i.hdot2', { style: `background:${GROUP_COLORS[g]}` }) : null; };
     // (replaceChildren would print a null as the text "null": drop the empty parts)
     this.detailsBody.replaceChildren(...[
       h('div.vd-card', {},
@@ -339,7 +338,7 @@ export class Viewer {
       facts.length ? h('div.vd-facts', {}, ...facts.map(([k, v, wide]) => h(`div.vd-fact${wide ? '.wide' : ''}`, {}, h('span.vd-k', {}, k), h('span.vd-v', {}, String(v))))) : null,
       saved ? h('div.vd-sec', {}, 'Saved to') : null, saved,
       tags.length ? h('div.vd-sec', {}, 'Tags') : null,
-      tags.length ? h('div.viewer-tags.vd-tags', {}, ...tags.map((t) => { const b = this.#tagBtn(t); const mk = mark(t); if (mk) b.prepend(mk); return b; })) : null,
+      tags.length ? h('div.viewer-tags.vd-tags', {}, ...tags.map((t) => this.#tagBtn(t)) /* batch 19: no colored dots */) : null,
     ].filter(Boolean));
   }
 

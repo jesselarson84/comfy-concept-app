@@ -27,6 +27,7 @@ export class PromptPanel {
     // Batch 15: resolution uses the app's own dropdown (stays open after a pick).
     const res = dropdown({ options: [['1k', '1K'], ['2k', '2K'], ['4k', '4K']], label: 'Resolution' });
     res.id = 'aspect-res';
+    res.pop.classList.add('res-pop'); // batch 19: a plain list (no outlined boxes); the picked size gets a grey fill
     $('#res-select').append(res);
     this.el = {
       prompt: $('#prompt'), negAdd: $('#neg-add'), negRow: $('#neg-row'), negative: $('#negative'),

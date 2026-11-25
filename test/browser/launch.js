@@ -54,3 +54,23 @@ export async function dropdownOptions(page, sel) {
   await page.waitForSelector('.dd-pop', { state: 'detached' });
   return out;
 }
+
+/**
+ * Batch 19: tap the Files toggle; when that opened Files, open every project too
+ * (projects start collapsed, so their tiles are not built until opened).
+ */
+export async function toggleFiles(page) {
+  await page.click('#btn-history');
+  if (!(await page.isVisible('.history'))) return;
+  await expandFiles(page);
+}
+
+/** Batch 19: open every collapsed project in Files (after the list has loaded). */
+export async function expandFiles(page) {
+  await page.waitForFunction(() => { const l = document.querySelector('.history-list'); return l && !/Loading…/.test(l.textContent); });
+  for (let i = 0; i < 50; i++) {
+    const h3 = await page.$('.history-session.closed h3');
+    if (!h3) return;
+    await h3.click();
+  }
+}

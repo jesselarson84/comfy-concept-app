@@ -652,6 +652,7 @@ body.node-view-on #btn-import-media { display: none; }
 .hsearch { flex: 1; min-width: 0; height: 100%; min-height: 0; border: 0; outline: 0; background: transparent; color: var(--c-fg); font: inherit; font-size: 14px; padding: 0; }
 .hsearch:focus { outline: none; }
 .hfilters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.hfilters[hidden] { display: none; }
 .hchip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 10px; border-radius: 16px; border: 1px solid var(--c-border); background: transparent; color: var(--c-node-fg); font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
 .hchip .i { width: 14px; height: 14px; }
 .hchip.on { background: var(--c-selected); color: var(--c-fg); border-color: var(--c-fg); }
@@ -748,6 +749,14 @@ body.node-view-on #btn-import-media { display: none; }
 .project-chip.none .name { color: var(--c-muted); font-weight: 400; }
 .project-where { font-size: 12px; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pj-sheet { max-height: 86dvh; display: grid; grid-template-rows: auto 1fr; }
+/* Batch 19: the form's project picker is a dropdown (ui/dropdown.js look) with its own scroll */
+.pj-pop { display: flex; flex-direction: column; overflow: hidden; padding: 6px; }
+.pj-pop .pj-title { flex: none; padding: 2px 2px 6px; font-size: 15px; font-weight: 600; }
+.pj-pop .pj-title[hidden] { display: none; }
+.pj-pop .pj-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; align-content: start; }
+.pj-pop .pj-row { border-radius: var(--r-md); }
+.pj-pop .pj-sec { padding: 8px 8px 4px; }
+.project-chip.open { background: var(--c-selected); }
 .pj-title { display: flex; align-items: center; gap: 6px; }
 .pj-title .spacer { flex: 1; }
 .pj-list { gap: 2px; }
@@ -768,13 +777,9 @@ body.node-view-on #btn-import-media { display: none; }
 .pj-name { width: 100%; margin: 0 0 4px; }
 .pj-groups { display: grid; gap: 2px; }
 .pj-create { margin: 6px 0 4px; min-height: 46px; }
-.hseg { display: flex; gap: 0; border: 1px solid var(--c-border); border-radius: 16px; overflow: hidden; width: max-content; }
-.hseg-btn { height: 32px; padding: 0 14px; border: 0; background: transparent; color: var(--c-node-fg); font: inherit; font-size: 13px; cursor: pointer; }
-.hseg-btn[aria-pressed="true"] { background: var(--c-fg); color: #111; }
-.hgroup { display: flex; align-items: center; gap: 8px; width: 100%; padding: 18px 14px 4px 16px; border: 0; background: transparent; color: var(--c-fg); font: inherit; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; }
+.hgroup { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 18px 14px 4px 16px; color: var(--c-fg); font-size: 15px; font-weight: 600; }
 .hgroup .hg-name { flex: none; }
 .hgroup .hg-n { flex: 1; color: var(--c-muted); font-weight: 400; font-size: 12.5px; }
-.hgroup > .i:last-child { color: var(--c-muted); }
 .history-session[data-project] h3 .day { display: grid; gap: 2px; }
 .history-session .proj-sub { color: var(--c-muted); font-size: 12px; font-weight: 400; }
 .history-session.unsorted h3 .day { color: var(--c-node-fg); }
@@ -787,12 +792,9 @@ body.node-view-on #btn-import-media { display: none; }
 .htbar.mini { width: 56px; height: 8px; margin: 0; flex: none; }
 .hlegend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--c-fg); }
 .hlegend span { display: inline-flex; align-items: center; gap: 6px; }
-.hlegend .zero { color: var(--c-muted); }
-.hlegend.hgroups { margin-top: 8px; font-size: 11.5px; color: var(--c-muted); gap: 4px 10px; }
 .hsw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .hbar i { height: 8px; border-radius: 4px; background: #2f2f2f; }
 .hbar i b { border-radius: 4px; }
-.hdot2 { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
 
 /* ==== batch 12: viewer Details (option A) ==== */
 .vd-card { background: #262626; border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
@@ -827,6 +829,8 @@ body.node-view-on #btn-import-media { display: none; }
 .actionbar .batch-grp .btn { min-height: 48px; border-radius: 0; background: transparent; gap: 6px; padding: 0 14px; }
 .actionbar .batch-grp .btn + .btn { border-left: 1px solid #3a3b40; }
 .batch-count { min-width: 20px; height: 20px; border-radius: 10px; background: #3a3b40; color: var(--c-muted); font-size: 12px; line-height: 20px; text-align: center; padding: 0 5px; font-weight: 600; }
+.batch-count[hidden] { display: none; }
+.batch-btn.no-jobs .i { opacity: .35; }
 .batch-btn.has-jobs .batch-count { background: var(--c-primary, #3987e5); color: #fff; }
 .batch-btn.is-running .i { color: #5fb4ff; }
 .actionbar.editing .run, .actionbar.editing .batch-grp { display: none; }
@@ -919,6 +923,10 @@ body.node-view-on #btn-import-media { display: none; }
 .sp-row > .dd, .place-row > .dd { flex: 1; }
 .sp-row > .dd .dd-btn, .place-row > .dd .dd-btn { background: var(--c-input); }
 .place-row > .dd .dd-btn { height: 34px; border-radius: var(--r-md); }
+/* Batch 19: Resolution only - a plain list; the picked size just gets a grey fill */
+.res-pop .dd-list { gap: 2px; }
+.res-pop .dd-opt, .res-pop .dd-opt[aria-selected="true"] { border-color: transparent; }
+.res-pop .dd-opt[aria-selected="true"] { background: var(--c-selected); }
 .dd-scrim { position: fixed; inset: 0; z-index: 129; background: transparent; touch-action: none; }
 .dd-scrim.ar-scrim { z-index: 31; }
 .aspect-pop { z-index: 32; }
@@ -991,15 +999,20 @@ body.node-view-on #btn-import-media { display: none; }
 .settings-sheet { gap: 18px; padding: 14px 16px calc(22px + var(--sab, 0px)); border-radius: 20px 20px 0 0; max-height: 90vh; }
 .st-head { display: flex; align-items: center; justify-content: space-between; font-size: 18px; font-weight: 600; }
 .st-body { display: flex; flex-direction: column; gap: 18px; }
-.st-section { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #c9c9cd; margin-bottom: -8px; }
-.st-switch { display: flex; align-items: center; gap: 12px; background: #1f1f21; border-radius: 12px; padding: 12px; cursor: pointer; }
+.st-section { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; color: #f2f2f4; }
+.st-section .i { width: 18px; height: 18px; }
+/* Batch 19: General and Claude each sit in one slightly lighter grouped card */
+.st-group { display: flex; flex-direction: column; gap: 16px; background: #1f1f21; border-radius: 16px; padding: 14px; }
+.st-switch { display: flex; align-items: center; gap: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+/* Batch 19: no halo / focus ring around the switches after a tap (keyboard included) */
+.settings-sheet input[type="checkbox"], .settings-sheet input[type="checkbox"]:focus, .settings-sheet input[type="checkbox"]:focus-visible { outline: none; box-shadow: none; -webkit-tap-highlight-color: transparent; }
 .st-sw-t { flex: 1; display: flex; flex-direction: column; gap: 3px; font-size: 15px; }
 .st-sw-t small { font-size: 12px; color: #9a9aa0; line-height: 1.35; }
 .st-switch input { width: 44px; height: 26px; accent-color: #d97757; flex: none; }
 .st-row { display: flex; flex-direction: column; gap: 8px; }
 .st-row small { font-size: 12px; line-height: 1.35; }
 .st-lbl { font-size: 12px; color: #9a9aa0; }
-.st-bar { height: 10px; border-radius: 5px; background: #262729; overflow: hidden; }
+.st-bar { height: 10px; border-radius: 5px; background: #333438; overflow: hidden; }
 .st-bar i { display: block; height: 100%; background: #d97757; }
 .st-spend { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
 .st-limit { display: flex; align-items: center; gap: 8px; }
@@ -1008,7 +1021,7 @@ body.node-view-on #btn-import-media { display: none; }
 .st-key { flex: 1; min-width: 0; font-size: 14px; }
 .st-keyrow { display: flex; align-items: center; gap: 8px; }
 .st-keyrow .btn { height: 42px; border: 1px solid #3a3b3f; background: transparent; }
-.st-saved { flex: 1; height: 42px; border-radius: 10px; background: #1f1f21; display: flex; align-items: center; padding: 0 12px; gap: 8px; font-size: 14px; color: #c9c9cd; }
+.st-saved { flex: 1; height: 42px; border-radius: 10px; background: #2c2d31; display: flex; align-items: center; padding: 0 12px; gap: 8px; font-size: 14px; color: #c9c9cd; }
 .st-saved .i { color: #8fd19e; }
 .st-ask { margin: -8px 0 0; font-size: 12px; color: #f2b8a6; }
 
@@ -1083,3 +1096,44 @@ body:has(.prompt-editor:not([hidden])) .claude-fab { display: none; }
   /* the Ask button floats over the right-hand grid: room below the last row */
   .results { padding-bottom: calc(84px + var(--sab)); }
 }
+
+/* ==== batch 19: Files - filter button, active filter chips, stats toggle, collapsible projects ==== */
+.hsearch-row { padding-right: 4px; }
+.hfilter-btn { flex: none; position: relative; display: inline-flex; align-items: center; gap: 4px; height: 32px; min-width: 32px; padding: 0 8px; border: 0; border-radius: var(--r-md); background: transparent; color: var(--c-node-fg); font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.hfilter-btn:hover, .hfilter-btn.on { color: var(--c-fg); background: var(--c-card); }
+.hfilter-n { min-width: 18px; height: 18px; border-radius: 9px; background: var(--c-fg); color: #111; font-size: 11.5px; font-weight: 700; line-height: 18px; text-align: center; padding: 0 4px; box-sizing: border-box; }
+.hfilter-n[hidden] { display: none; }
+.hfilters .hchip { height: 26px; padding: 0 4px 0 10px; font-size: 12px; border-radius: 13px; }
+.hfilters .hchip .x { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; font-size: 11px; }
+.hnums > .hperiods { display: contents; }
+.hperiod { display: grid; text-align: left; background: var(--c-card); border: 1px solid transparent; border-radius: var(--r-lg); padding: 8px; font: inherit; color: inherit; cursor: pointer; }
+.hperiod b { font-size: 18px; margin: 0; }
+.hperiod span { color: var(--c-muted); font-size: 11.5px; }
+.hperiod.on { background: var(--c-selected); border-color: var(--c-fg); }
+.hperiod.on span { color: var(--c-node-fg); }
+.hsec-btn { display: flex; align-items: center; gap: 4px; width: 100%; border: 0; background: transparent; padding: 0; text-align: left; font-family: inherit; cursor: pointer; }
+.hsec-btn .i { width: 14px; height: 14px; }
+.history-session h3[role="button"] { cursor: pointer; align-items: center; -webkit-tap-highlight-color: transparent; }
+.history-session h3 .hp-ch { color: var(--c-muted); }
+/* Batch 19 (option B): a folder is one rounded card holding its projects; project names are smaller than folder names */
+.history-session[data-project] h3 { font-size: 15px; font-weight: 600; padding: 12px 14px 10px 16px; }
+.history-session[data-project] h3 .proj-sub { font-size: 12px; }
+.hgroup-card { background: #1f1f21; border-radius: 16px; margin: 12px 10px 0; padding-bottom: 6px; overflow: hidden; }
+.hgroup-card .hgroup { font-size: 17px; font-weight: 700; padding: 14px 14px 6px 14px; }
+.hgroup-card .history-session + .history-session { border-top: 1px solid #2e2f33; }
+.hgroup-card .history-session .thumbs.grid { padding: 0 8px 8px; }
+/* Batch 19: the floating Claude button's chat (ui/claude.js ChatSheet) */
+.cl-chat { display: flex; flex-direction: column; gap: 10px; min-height: 120px; max-height: 55vh; overflow-y: auto; overscroll-behavior: contain; font-size: 14px; line-height: 1.5; }
+.cl-said { display: flex; flex-direction: column; gap: 4px; max-width: 92%; }
+.cl-changed { display: flex; align-items: flex-start; gap: 6px; font-size: 12.5px; color: #c9c9cd; background: #26272a; border-radius: 10px; padding: 6px 9px; }
+.cl-changed .i { width: 14px; height: 14px; color: #8fd19e; margin-top: 2px; }
+.cl-said .cl-cost { margin-left: 0; }
+.cl-empty { margin: auto 0; font-size: 13px; line-height: 1.45; }
+/* Batch 19: "Claude's workflow · Save as preset / Discard" above the results after its first run */
+.cl-savebar { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 10px 10px 10px 12px; border-radius: 14px; background: #1f1f21; border: 1px solid #d9775766; }
+.cl-savebar[hidden] { display: none; }
+.cl-savebar-t { flex: 1; min-width: 0; display: grid; gap: 2px; font-size: 14px; font-weight: 600; color: #f2f2f4; }
+.cl-savebar-t small { font-size: 12px; font-weight: 400; color: #9a9aa0; }
+.cl-savebar .btn { min-height: 36px; height: 36px; border-radius: 10px; padding: 0 12px; font-size: 13px; font-weight: 600; }
+.cl-savebar-go { background: #d97757; color: #fff; border: 0; }
+.cl-savebar-no { background: transparent; color: #c9c9cd; border: 1px solid #3a3b3f; }

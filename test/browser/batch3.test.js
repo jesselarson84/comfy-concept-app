@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startStack, ROOT, pngBytes } from '../unit/helpers.js';
-import { launch, pickOption, dropdownOptions } from './launch.js';
+import { launch, pickOption, dropdownOptions, toggleFiles } from './launch.js';
 import { makeGlb } from '../fixtures/media.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
@@ -381,7 +381,7 @@ afterEach(async () => {
 
 test('History: long-press starts selection, tap toggles, select-all per group, X leaves; sel bar replaces the top bar', async () => {
   const ids = await seedHistory(['sel_a.png', 'sel_b.png', 'sel_c.png']);
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector(tile(ids[0]));
   await longPress(tile(ids[0]));
   await page.waitForSelector('.history.selecting');
@@ -411,7 +411,7 @@ test('History: long-press starts selection, tap toggles, select-all per group, X
 
 test('History: Add to → new folder, Favorites; Folders screen shows cover, name and count; folder view lists only its items', async () => {
   const ids = await seedHistory(['fold_a.png', 'fold_b.png']);
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector(tile(ids[0]));
   await longPress(tile(ids[0]));
   await page.click(tile(ids[1]));
@@ -443,7 +443,7 @@ test('History: Add to → new folder, Favorites; Folders screen shows cover, nam
 test('History: Delete asks first; Cancel keeps everything; Delete removes only this test\'s files (inside output/concept-app)', async () => {
   const ids = await seedHistory(['del_a.png', 'del_b.png']);
   const files = ['del_a.png', 'del_b.png'].map((n) => path.join(outDir, 'concept-app', 'hist', n));
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector(tile(ids[0]));
   await longPress(tile(ids[0]));
   await page.click(tile(ids[1]));
@@ -466,7 +466,7 @@ test('History: Delete asks first; Cancel keeps everything; Delete removes only t
 
 test('History selection bar and folders use no blue (Run stays the only blue element)', async () => {
   const ids = await seedHistory(['blue_a.png']);
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector(tile(ids[0]));
   await longPress(tile(ids[0]));
   const blue = await page.$$eval('.history *, .history', (els) => els.filter((e) => {
@@ -487,7 +487,7 @@ test('3D tiles: lazy stills through ONE offscreen renderer; offscreen tiles are 
     s.mock.files.set(`output/concept-app/hist/${n}`, glb);
     await fetch(s.base + '/api/history', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: 'ai:hunyuan3d-21', prompt: '', files: [img(n)], status: 'done' }) });
   }
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb.is-3d');
   // Earlier tests' pictures come first in the session: bring the first 3D tile up.
   await page.$eval('.history .thumb.is-3d', (t) => t.scrollIntoView({ block: 'start' }));
@@ -539,7 +539,7 @@ test('3D tiles: fallback is the source picture, then a neutral 3D placeholder; t
     await fetch(s.base + '/api/history', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: 'ai:hunyuan3d-21', prompt: n, files: [img(n)], parent: parent ? { image: parent } : undefined, status: 'done' }) });
   }
   s.mock.files.set('output/concept-app/hist/src_pic.png', pngBytes());
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb.is-3d[title="fb_none.glb"]');
   await page.locator('.history .thumb.is-3d[title="fb_none.glb"]').scrollIntoViewIfNeeded();
   await page.waitForTimeout(1500);
@@ -569,7 +569,7 @@ test('History selection matches the Google Photos layout: X · count · share ·
   };
   const old1 = await mk('gp_old1.png', now - 3 * DAY), old2 = await mk('gp_old2.png', now - 40 * DAY);
   const ids = await seedHistory(['gp_a.png', 'gp_b.png', 'gp_c.png']);
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector(tile(old2));
   const heads = await page.$$eval('.history-session h3', (hs) => hs.map((h) => [h.querySelector('.day').textContent, h.lastElementChild.classList.contains('sel-all')]));
   assert.equal(heads[0][0], 'Today');
@@ -606,7 +606,7 @@ test('Favorites is the first tile in the Folders grid, backed by the star; ⋮ i
   const ids = await seedHistory(['favtile_a.png']);
   await fetch(s.base + `/api/history/${ids[0]}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ favorite: true }) });
   const favCount = (await (await fetch(s.base + '/api/folders')).json()).favorites.count;
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.click('.history [data-act="folders"]');
   await page.waitForSelector('.folder-card[data-folder="favorites"]');
   assert.equal(await page.$eval('.folder-grid > .folder-card', (c) => c.dataset.folder), 'favorites');

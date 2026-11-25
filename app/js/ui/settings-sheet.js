@@ -83,10 +83,12 @@ export class SettingsSheet {
     }
     const reset = h('input', { type: 'checkbox', role: 'switch', id: 'st-reset', checked: resetOnClose(), 'aria-label': 'Reset to defaults when the app closes',
       onchange: () => { localStorage.setItem(RESET_KEY, reset.checked ? '1' : '0'); toast(reset.checked ? 'The form resets when you close the app' : 'The form is kept when you close the app'); } });
-    this.body.replaceChildren(...[
-      h('span.st-section', {}, h('i.i.i-settings'), 'General'),
-      h('label.st-switch', {}, h('span.st-sw-t', {}, h('b', {}, 'Reset to defaults when the app closes'), h('small', {}, 'Opening the app fresh starts on Z-Image Turbo with an empty prompt and default settings. Switching apps and coming back keeps everything.')), reset),
-      h('span.st-section', {}, claudeLogo(14), 'Claude'),
+    // Batch 19: each section is one grouped card holding its heading and all of its rows.
+    const group = (...kids) => h('div.st-group', {}, ...kids.filter(Boolean));
+    this.body.replaceChildren(
+      group(h('span.st-section', {}, h('i.i.i-settings'), 'General'),
+        h('label.st-switch', {}, h('span.st-sw-t', {}, h('b', {}, 'Reset to defaults when the app closes'), h('small', {}, 'Opening the app fresh starts on Z-Image Turbo with an empty prompt and default settings. Switching apps and coming back keeps everything.')), reset)),
+      group(h('span.st-section', {}, claudeLogo(18), 'Claude'),
       h('label.st-switch', {}, h('span.st-sw-t', {}, h('b', {}, 'Use Claude'), h('small', {}, 'Off: every Claude button is hidden, and nothing is sent.')), sw),
       this.pendingEnable ? h('p.st-ask', { role: 'alert' }, 'Add your API key below to turn Claude on.') : null,
       h('div.st-row', {}, h('span.st-lbl', {}, 'This month'),
@@ -97,7 +99,6 @@ export class SettingsSheet {
         h('div.st-limit', {}, h('span.muted', {}, '$'), limit, h('small.muted', {}, 'Claude stops answering until next month once this is reached.'))),
       h('div.st-row', {}, h('span.st-lbl', {}, 'Claude starts on'), seg, h('small.muted', {}, 'Fixing a picture, merging, variations and building always use Opus.')),
       h('div.st-row', {}, h('span.st-lbl', {}, 'API key'), keyRow,
-        h('small.muted', {}, 'Make it in its own Workspace at platform.claude.com and give that Workspace a limit too, as a backstop.')),
-    ].filter(Boolean));
+        h('small.muted', {}, 'Make it in its own Workspace at platform.claude.com and give that Workspace a limit too, as a backstop.'))));
   }
 }

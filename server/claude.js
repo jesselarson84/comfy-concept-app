@@ -24,7 +24,17 @@
 //   POST /api/claude            { enabled?, limitUsd?, defaultModel? }
 //   POST /api/claude/key        { key }   save (or replace) the key on this PC
 //   DELETE /api/claude/key
-//   POST /api/claude/ask        { mode, model, text, form, pictures }  (one-shot: no chat memory)
+//   POST /api/claude/ask        { mode, model, text, form, pictures, chat }
+//
+// Batch 19 modes:
+//   prompt / negative - the ⋮ of Prompt / Negative prompt: Claude writes ONLY that
+//                       text (write_prompt); no settings change. One-shot.
+//   chat              - the floating Claude button: a ComfyUI-only chat. The phone
+//                       sends the earlier turns (chat: [{ role, text }]); Claude may
+//                       answer, pick a preset and set fields / preset settings, and
+//                       build a one-off workflow (Opus; Haiku / Sonnet hand that part
+//                       to Opus with build_workflow). No pictures, never runs.
+//   fix / files / variations / question - as before.
 // -----------------------------------------------------------------------------
 import fs from 'node:fs';
 import path from 'node:path';
@@ -188,6 +198,20 @@ Building a one-off workflow (only when no preset fits, e.g. more reference pictu
 - Use only installed nodes and model files exactly as node_info lists them. Put the user's pictures in LoadImage nodes whose "image" input is "picture:N" (N = the attached picture number).
 - propose_graph checks it against the user's ComfyUI. If it returns errors, fix them. After 3 failed tries, stop and say plainly that you could not build it.`;
 
+const CHAT = `
+CHAT MODE (the floating Claude button). Talk with the user about ComfyUI and this app only; politely decline anything else.
+- Answer questions plainly: 1-5 short sentences, no markdown, no lists.
+- When the user asks you to set something up, do it on the form: pick a preset and set fields and preset settings with set_form / set_preset_settings. Only change the form when the user asks for it in this chat.
+- You cannot load pictures. If the preset needs pictures, tell the user to add them on the form.
+- You never run anything; the user presses Run.
+- After changing the form, say in one short sentence what you set. Your reply is always shown.`;
+
+const CHAT_HANDOFF = `
+- When no preset can do what the user wants, call build_workflow with a full description of the workflow. A bigger model builds it and loads it into the form.`;
+
+const CHAT_BUILD = `
+- In chat no pictures are attached: give every picture input a LoadImage node with image "example.png". The user loads the picture on the form.`;
+
 const NO_BUILD = `
 If the request needs a custom workflow that no preset offers, say so and suggest asking again from Files or the viewer (which use the bigger model).`;
 
@@ -202,8 +226,28 @@ const FIELD_PROPS = {
 
 /** Look-only tools (question mode never changes anything). */
 export const READ_TOOLS = ['get_form', 'list_presets', 'get_preset', 'search_history', 'view_picture'];
+/** Batch 19: what each kind of request may use (besides the look-only tools). */
+const MODE_TOOLS = {
+  prompt: ['write_prompt'],
+  chat: ['set_form', 'set_preset_settings', 'build_workflow', 'get_preset_graph', 'node_info', 'propose_graph'],
+};
 
-export function toolsFor(build, readOnly = false) {
+/**
+ * The tools of one request. kind: 'full' (fix / files / variations), 'question'
+ * (look only), 'prompt' (write the prompt or negative only), 'chat'.
+ * build: Opus may build workflows; a Haiku / Sonnet chat gets build_workflow instead.
+ */
+export function toolsFor(build, readOnly = false, kind = readOnly ? 'question' : 'full') {
+  const all = allTools(build);
+  if (kind === 'question') return all.filter((t) => READ_TOOLS.includes(t.name));
+  if (kind === 'prompt' || kind === 'chat') {
+    const extra = MODE_TOOLS[kind].filter((n) => kind !== 'chat' || (build ? n !== 'build_workflow' : !['get_preset_graph', 'node_info', 'propose_graph'].includes(n)));
+    return all.filter((t) => READ_TOOLS.includes(t.name) || extra.includes(t.name));
+  }
+  return all.filter((t) => !['write_prompt', 'build_workflow'].includes(t.name));
+}
+
+function allTools(build) {
   const tools = [
     { name: 'get_form', description: 'The form as it is now: preset, prompt, negative, aspect, resolution, batch, seed, preset settings and loaded pictures.', input_schema: obj({}) },
     { name: 'list_presets', description: 'All presets: id, name, section, whether it is available on this PC, how many pictures it takes, and what it makes.', input_schema: obj({}) },
@@ -214,8 +258,9 @@ export function toolsFor(build, readOnly = false) {
     { name: 'set_preset_settings', description: 'Change settings of the form\'s preset (keys from get_preset). Values are clamped to the allowed range.', input_schema: obj({ values: { type: 'object', description: 'key -> value' } }, ['values']) },
     { name: 'load_pictures', description: 'Put pictures into the preset\'s picture slots, in slot order. Each item is an attached picture number or a history_id.', input_schema: obj({ pictures: { type: 'array', items: { anyOf: [{ type: 'integer', description: 'attached picture number' }, { type: 'string', description: 'history id' }] } } }, ['pictures']) },
     { name: 'add_variations', description: 'Add 1-12 jobs to the user\'s batch (NOT started). Each job = the current form plus its own changes; each must differ in a real way.', input_schema: obj({ jobs: { type: 'array', maxItems: 12, items: obj({ label: { type: 'string', description: 'Short name, e.g. "Moonlit fog, low angle"' }, ...FIELD_PROPS, settings: { type: 'object', description: 'preset settings key -> value' } }, ['label']) } }, ['jobs']) },
+    { name: 'write_prompt', description: 'Write the text this request is about (the prompt, or the negative prompt). The only change you can make here.', input_schema: obj({ text: { type: 'string', description: 'The full new text' } }, ['text']) },
+    { name: 'build_workflow', description: 'Hand off to a bigger model that builds a one-off ComfyUI workflow and loads it into the form. Only when no preset can do it.', input_schema: obj({ what: { type: 'string', description: 'Everything the workflow must do, from the chat' } }, ['what']) },
   ];
-  if (readOnly) return tools.filter((t) => READ_TOOLS.includes(t.name));
   if (build) tools.push(
     { name: 'get_preset_graph', description: 'The ComfyUI API-format graph of a preset (to build from).', input_schema: obj({ id: { type: 'string' } }, ['id']) },
     { name: 'node_info', description: 'Inputs and outputs of ComfyUI node classes installed on this PC (combo lists = installed models).', input_schema: obj({ classes: { type: 'array', items: { type: 'string' }, maxItems: 12 } }, ['classes']) },
@@ -282,15 +327,17 @@ export function createClaude({ dataDir, presets, objectInfo, history, fetchPictu
     if (!s.enabled) throw err(403, 'Claude is switched off in Settings.', { code: 'off' });
     const sp = spend.status(s.limitUsd);
     if (sp.limitReached) throw err(429, `Monthly limit reached: about $${sp.spentUsd.toFixed(2)} of $${s.limitUsd.toFixed(2)} used. Claude is back on ${sp.resetsOn}.`, { code: 'limit' });
-    const mode = ['prompt', 'question', 'fix', 'files', 'variations'].includes(body.mode) ? body.mode : 'prompt';
-    const key = mode === 'prompt' || mode === 'question' ? (MODELS[body.model] ? body.model : s.defaultModel) : 'opus';
+    const mode = ['prompt', 'negative', 'chat', 'question', 'fix', 'files', 'variations'].includes(body.mode) ? body.mode : 'prompt';
+    const key = ['prompt', 'negative', 'chat', 'question'].includes(mode) ? (MODELS[body.model] ? body.model : s.defaultModel) : 'opus';
     const model = MODELS[key];
     const readOnly = mode === 'question';
-    const build = key === 'opus' && !readOnly;
+    // Batch 19: Write prompt (Prompt / Negative prompt) writes that text only, never builds.
+    const kind = mode === 'prompt' || mode === 'negative' ? 'prompt' : mode === 'chat' ? 'chat' : readOnly ? 'question' : 'full';
+    const build = key === 'opus' && (kind === 'full' || kind === 'chat');
     const text = String(body.text || '').trim().slice(0, 4000);
     if (!text) throw err(400, 'Say what you want first');
     const form = body.form && typeof body.form === 'object' ? body.form : {};
-    const pics = (Array.isArray(body.pictures) ? body.pictures : []).slice(0, 8).map((p, i) => ({
+    const pics = (kind === 'chat' ? [] : Array.isArray(body.pictures) ? body.pictures : []).slice(0, 8).map((p, i) => ({
       n: i + 1, media: /^image\/(jpeg|png|webp)$/.test(p?.media) ? p.media : 'image/jpeg',
       data: typeof p?.data === 'string' && p.data.length < 7_000_000 ? p.data.replace(/^data:[^,]*,/, '') : null,
       image: safeImage(p?.image), meta: p?.meta && typeof p.meta === 'object' ? p.meta : {},
@@ -301,7 +348,10 @@ export function createClaude({ dataDir, presets, objectInfo, history, fetchPictu
 
     // ---- actions collected for the phone ----
     const formChanges = {}; let params = null; let pictures = null; const variations = []; let graph = null;
-    let graphTries = 0;
+    let graphTries = 0, handoffs = 0;
+    // Batch 19: the chat so far (sent by the phone; wiped when the app closes).
+    const chat = kind === 'chat' ? (Array.isArray(body.chat) ? body.chat : []).filter((m) => m && ['user', 'assistant'].includes(m.role) && typeof m.text === 'string' && m.text.trim())
+      .slice(-30).map((m) => ({ role: m.role, text: m.text.slice(0, 4000) })) : [];
     const current = () => presetOf(formChanges.preset || presetId);
 
     const tools = {
@@ -375,6 +425,22 @@ export function createClaude({ dataDir, presets, objectInfo, history, fetchPictu
         }
         return `OK: ${variations.length} job(s) will be added to the batch, not started${notes.length ? ` (${notes.join('; ')})` : ''}`;
       },
+      write_prompt: ({ text: t }) => {
+        const field = mode === 'negative' ? 'negative' : 'prompt';
+        if (field === 'negative' && current()?.ok && !current().controls?.negative?.length) throw new Error('the form\'s preset has no negative prompt');
+        formChanges[field] = String(t ?? '').slice(0, 4000);
+        return `OK: the ${field === 'negative' ? 'negative prompt' : 'prompt'} is written. Stop now.`;
+      },
+      build_workflow: async ({ what }) => {
+        if (++handoffs > 1) throw new Error('only one build per message');
+        const transcript = [...chat, { role: 'user', text }].map((m) => `${m.role === 'user' ? 'User' : 'You'}: ${m.text}`).join('\n');
+        const r = await runLoop({
+          key: 'opus', toolDefs: cached(toolsFor(true, false, 'chat')), system: systemFor('chat', true), maxSteps: 14, effort: 'high',
+          messages: [{ role: 'user', content: [{ type: 'text', text: `Build a one-off workflow for this chat and load it into the form.\n\nThe chat so far:\n${transcript}\n\nWhat to build: ${String(what || '').slice(0, 2000)}\n[form preset: ${formChanges.preset || presetId || 'none'}]` }] }],
+        });
+        usedOpus = true;
+        return graph ? `Built "${graph.name}" and loaded it into the form. ${r.reply}` : `Not built: ${r.reply}`;
+      },
       get_preset_graph: ({ id }) => { const w = presetOf(id); if (!w?.ok || !w.workflow) throw new Error(`no usable preset "${id}"`); return w.workflow; },
       node_info: async ({ classes }) => {
         const info = await objectInfo();
@@ -407,9 +473,11 @@ export function createClaude({ dataDir, presets, objectInfo, history, fetchPictu
 
     // ---- the request ----
     const c = await client();
-    const toolDefs = toolsFor(build, readOnly);
-    toolDefs[toolDefs.length - 1] = { ...toolDefs[toolDefs.length - 1], cache_control: { type: 'ephemeral' } };
-    const system = [{ type: 'text', text: SYSTEM + (build ? BUILD : NO_BUILD), cache_control: { type: 'ephemeral' } }];
+    /** The last tool carries the cache breakpoint for tools + system. */
+    function cached(defs) { defs[defs.length - 1] = { ...defs[defs.length - 1], cache_control: { type: 'ephemeral' } }; return defs; }
+    /** Frozen per kind of request (same bytes every time, so it caches). */
+    function systemFor(k, b) { return [{ type: 'text', text: SYSTEM + (k === 'chat' ? CHAT + (b ? BUILD + CHAT_BUILD : CHAT_HANDOFF) : b ? BUILD : NO_BUILD), cache_control: { type: 'ephemeral' } }]; }
+    const toolDefs = cached(toolsFor(build, readOnly, kind));
     const content = [];
     for (const p of pics) {
       if (!p.data) continue;
@@ -417,50 +485,59 @@ export function createClaude({ dataDir, presets, objectInfo, history, fetchPictu
       content.push({ type: 'image', source: { type: 'base64', media_type: p.media, data: p.data } });
     }
     const lead = mode === 'question' ? 'QUESTION ONLY: answer it (you may look things up with the tools), change nothing. Answer in 1-5 short plain sentences, no markdown. '
+      : mode === 'prompt' ? 'WRITE THE PROMPT ONLY: write it with write_prompt, then stop. Change nothing else (no preset, size or settings). '
+      : mode === 'negative' ? 'WRITE THE NEGATIVE PROMPT ONLY: write what to keep out of the picture with write_prompt, then stop. Change nothing else. '
       : mode === 'fix' ? 'Fix this result (change the form so the next run is better). '
       : mode === 'files' ? `The user picked ${pics.length} picture(s) in Files, numbered in the order they tapped them. `
         : mode === 'variations' ? 'Make variations into the batch. ' : '';
     content.push({ type: 'text', text: `${lead}[form preset: ${presetId || 'none'}]\n${text}` });
-    // Batch 17: one-shot, no chat memory: every request starts fresh.
-    const messages = [{ role: 'user', content }];
+    // One-shot requests start fresh; batch 19: the chat sends its earlier turns as plain text.
+    const messages = [...chat.map((m) => ({ role: m.role, content: m.text })), { role: 'user', content }];
+    if (messages[0].role !== 'user') messages.shift();
 
-    const maxSteps = build ? 14 : 8;
-    const effort = key === 'haiku' ? 'low' : key === 'sonnet' ? 'medium' : mode === 'prompt' ? 'medium' : 'high';
-    let costUsd = 0, steps = 0, reply = '', stopped = null;
-    for (;;) {
-      steps++;
-      if (spend.spent() >= s.limitUsd) { stopped = 'limit'; reply ||= 'The monthly limit was reached in the middle of this. Nothing more was done.'; break; }
-      const req = {
-        model, max_tokens: build ? 16000 : 8000, system, tools: toolDefs, messages,
-        cache_control: { type: 'ephemeral' }, // the conversation so far, re-read on every tool step
-        thinking: { type: 'adaptive' }, output_config: { effort },
-        // Opus / Sonnet: a declined request is retried on the fallback model by the API.
-        ...(key !== 'haiku' ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
-      };
-      let res;
-      try { res = await c.beta.messages.create(req); } catch (e) { const d = describeError(e, sdk); log(`claude: ${d.message}`); throw err(d.status, d.message); }
-      const cost = costOf(res.model || model, res.usage);
-      costUsd += cost; spend.add(cost);
-      messages.push({ role: 'assistant', content: res.content });
-      const textOut = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
-      if (res.stop_reason === 'refusal') { stopped = 'refusal'; reply = `Claude declined this request${res.stop_details?.category ? ` (${res.stop_details.category})` : ''}. Nothing was changed.`; formChangesClear(); break; }
-      if (res.stop_reason === 'max_tokens') { stopped = 'max_tokens'; reply = textOut || 'The answer was too long and got cut off.'; break; }
-      if (res.stop_reason !== 'tool_use') { reply = textOut; break; }
-      if (steps >= maxSteps) { stopped = 'steps'; reply = textOut || 'That took too many steps, so I stopped. What was set so far is on the form.'; break; }
-      const results = [];
-      for (const b of res.content) {
-        if (b.type !== 'tool_use') continue;
-        const allowed = readOnly ? READ_TOOLS.includes(b.name) : (build || !['get_preset_graph', 'node_info', 'propose_graph'].includes(b.name));
-        const fn = Object.hasOwn(tools, b.name) && allowed ? tools[b.name] : null;
-        try {
-          if (!fn) throw new Error(`unknown tool ${b.name}`);
-          const out = await fn(b.input || {});
-          if (out?.image) results.push({ type: 'tool_result', tool_use_id: b.id, content: [{ type: 'image', source: { type: 'base64', media_type: out.image.media, data: out.image.data } }, { type: 'text', text: out.note }] });
-          else results.push({ type: 'tool_result', tool_use_id: b.id, content: typeof out === 'string' ? out : JSON.stringify(out) });
-        } catch (e) { results.push({ type: 'tool_result', tool_use_id: b.id, is_error: true, content: e.message }); }
+    let costUsd = 0, steps = 0, stopped = null, usedOpus = false;
+    /** The tool loop with one model; shared state (form changes, graph) lives above. -> { reply } */
+    async function runLoop({ key: k, toolDefs: defs, system, messages: msgs, maxSteps, effort }) {
+      const allowed = new Set(defs.map((t) => t.name));
+      let reply = '';
+      for (let n = 1; ; n++) {
+        steps++;
+        if (spend.spent() >= s.limitUsd) { stopped = 'limit'; reply ||= 'The monthly limit was reached in the middle of this. Nothing more was done.'; break; }
+        const req = {
+          model: MODELS[k], max_tokens: k === 'opus' && defs.some((t) => t.name === 'propose_graph') ? 16000 : 8000, system, tools: defs, messages: msgs,
+          cache_control: { type: 'ephemeral' }, // the conversation so far, re-read on every tool step
+          thinking: { type: 'adaptive' }, output_config: { effort },
+          // Opus / Sonnet: a declined request is retried on the fallback model by the API.
+          ...(k !== 'haiku' ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
+        };
+        let res;
+        try { res = await c.beta.messages.create(req); } catch (e) { const d = describeError(e, sdk); log(`claude: ${d.message}`); throw err(d.status, d.message); }
+        const cost = costOf(res.model || MODELS[k], res.usage);
+        costUsd += cost; spend.add(cost);
+        msgs.push({ role: 'assistant', content: res.content });
+        const textOut = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+        if (res.stop_reason === 'refusal') { stopped = 'refusal'; reply = `Claude declined this request${res.stop_details?.category ? ` (${res.stop_details.category})` : ''}. Nothing was changed.`; formChangesClear(); break; }
+        if (res.stop_reason === 'max_tokens') { stopped = 'max_tokens'; reply = textOut || 'The answer was too long and got cut off.'; break; }
+        if (res.stop_reason !== 'tool_use') { reply = textOut; break; }
+        if (n >= maxSteps) { stopped = 'steps'; reply = textOut || 'That took too many steps, so I stopped. What was set so far is on the form.'; break; }
+        const results = [];
+        for (const b of res.content) {
+          if (b.type !== 'tool_use') continue;
+          const fn = Object.hasOwn(tools, b.name) && allowed.has(b.name) ? tools[b.name] : null;
+          try {
+            if (!fn) throw new Error(`unknown tool ${b.name}`);
+            const out = await fn(b.input || {});
+            if (out?.image) results.push({ type: 'tool_result', tool_use_id: b.id, content: [{ type: 'image', source: { type: 'base64', media_type: out.image.media, data: out.image.data } }, { type: 'text', text: out.note }] });
+            else results.push({ type: 'tool_result', tool_use_id: b.id, content: typeof out === 'string' ? out : JSON.stringify(out) });
+          } catch (e) { results.push({ type: 'tool_result', tool_use_id: b.id, is_error: true, content: e.message }); }
+        }
+        msgs.push({ role: 'user', content: results });
       }
-      messages.push({ role: 'user', content: results });
+      return { reply };
     }
+
+    const effort = key === 'haiku' ? 'low' : key === 'sonnet' ? 'medium' : kind === 'prompt' || kind === 'chat' ? 'medium' : 'high';
+    const { reply } = await runLoop({ key, toolDefs, system: systemFor(kind, build), messages, maxSteps: build ? 14 : 8, effort });
     function formChangesClear() { for (const k of Object.keys(formChanges)) delete formChanges[k]; params = null; pictures = null; variations.length = 0; graph = null; }
 
     const actions = [];
@@ -471,7 +548,7 @@ export function createClaude({ dataDir, presets, objectInfo, history, fetchPictu
     if (pictures) actions.push({ type: 'pictures', pictures });
     if (variations.length) actions.push({ type: 'variations', preset: current()?.id, jobs: variations });
     const after = spend.status(s.limitUsd);
-    return { reply: reply || 'Done.', actions, model: key, modelName: NAMES[model], costUsd, spentUsd: after.spentUsd, limitUsd: s.limitUsd, resetsOn: after.resetsOn, steps, stopped };
+    return { reply: reply || 'Done.', actions, model: key, modelName: NAMES[model] + (usedOpus ? ' + Opus' : ''), costUsd, spentUsd: after.spentUsd, limitUsd: s.limitUsd, resetsOn: after.resetsOn, steps, stopped };
   }
 
   return { status, ask, keys, spend, settings };

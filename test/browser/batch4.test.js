@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startStack, ROOT } from '../unit/helpers.js';
-import { launch, pickAspect } from './launch.js';
+import { launch, pickAspect, toggleFiles } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -336,7 +336,7 @@ test('G: Back (Android back button) in node view returns to the default view, no
   // Batch 5: History and the node view are one or the other. Switching takes
   // over the Back entry, so Back from either returns to the default view.
   await page.click('#btn-canvas');
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForFunction(() => document.body.classList.contains('history-on') && !document.body.classList.contains('node-view-on'));
   assert.equal(await page.getAttribute('#btn-canvas', 'aria-pressed'), 'false');
   assert.equal(await page.isVisible('.actionbar'), false, 'Run hidden in History');
@@ -373,7 +373,7 @@ test('G: a run keeps going and stays locked across node-view toggles; canvas tog
 
 // ---- 1. History delete: errors still end selection mode and reload ---------------------
 test('History delete: an error from the server still ends selection mode and reloads the list', async () => {
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb');
   const before = await page.$$eval('.history .thumb', (t) => t.length);
   const loads = [];

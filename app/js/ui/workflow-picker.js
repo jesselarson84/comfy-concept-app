@@ -162,7 +162,7 @@ export class WorkflowPicker {
       dataset: { preset: w.id },
       onclick: (e) => { if (e.target.closest('.edit')) return; if (off) { toast(reason || 'Unavailable', 6000); return; } this.close(); this.onPick(w.id); },
       onkeydown: (e) => { if (e.key === 'Enter' && !off) { this.close(); this.onPick(w.id); } },
-    }, h('span.nm', {}, rowName(w)), !off && presetHint(w) ? h('span.hint', {}, presetHint(w)) : null, this.current === w.id ? h('i.i.i-check') : null,
+    }, h('span.nm', {}, rowName(w)), !off && presetHint(w) ? h('span.hint', {}, presetHint(w)) : null, /* batch 19: no ✓, the highlighted row shows the pick */
     w.graph ? h('button.edit.btn.text', { type: 'button', 'aria-label': `Rename, move or delete ${w.label}`, onclick: () => { this.editing = w.id; this.render(); } }, h('i.i.i-settings')) : null);
     row.classList.toggle('on', this.current === w.id);
     row.classList.toggle('dis', off);

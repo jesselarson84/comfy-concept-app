@@ -14,6 +14,12 @@
 //   NEVERGRAPH   propose_graph that is never valid (the server stops it after 3 tries)
 //   REFUSE       stop_reason "refusal"
 //   LOOP         get_form forever (the server's step cap stops it)
+// Batch 19:
+//   (write_prompt offered) get_form -> write_prompt -> text        (Prompt / Negative prompt ⋮)
+//   REMEMBER     chat: "I see N earlier message(s)."
+//   SETUP        chat: set_form { preset klein-4b-t2i, prompt } -> text
+//   BUILDIT      chat on Haiku/Sonnet: build_workflow -> text; the Opus hand-off:
+//                get_preset_graph z-image-turbo -> propose_graph "Chat build" -> text
 //
 // GET /mock/requests -> every request body (+ headers); POST /mock/reset.
 // key (x-api-key or Authorization: Bearer) "sk-ant-bad-…" -> 401 authentication_error.
@@ -41,6 +47,26 @@ function script(body) {
   const { text: t, index, images = 0 } = lastUserText(body.messages);
   const step = body.messages.slice(index + 1).filter((m) => m.role === 'assistant').length;
   const res = lastToolResult(body.messages);
+  const has = (name) => (body.tools || []).some((x) => x.name === name);
+  if (/^Build a one-off workflow for this chat/.test(t)) {
+    if (step === 0) return { content: [tool('get_preset_graph', { id: 'ai:z-image-turbo' })] };
+    if (step === 1 && res && !res.is_error) return { content: [tool('propose_graph', { name: 'Chat build', graph: JSON.parse(res.content), prompt: 'a lighthouse at dawn' })] };
+    return { content: [text('Built it from Z-Image Turbo.')] };
+  }
+  if (/REMEMBER/.test(t)) return { content: [text(`I see ${body.messages.length - 1} earlier message(s).`)] };
+  if (/SETUP/.test(t)) {
+    if (step === 0) return { content: [tool('set_form', { preset: 'ai:klein-4b-t2i', prompt: 'a lighthouse at dawn' })] };
+    return { content: [text('Set up FLUX.2 Klein 4B with your lighthouse prompt.')] };
+  }
+  if (/BUILDIT/.test(t) && has('build_workflow')) {
+    if (step === 0) return { content: [tool('build_workflow', { what: 'text to image of a lighthouse' })] };
+    return { content: [text('Built a workflow and loaded it into the form.')] };
+  }
+  if (has('write_prompt') && !/QUESTION|REFUSE|LOOP/.test(t)) {
+    if (step === 0) return { content: [tool('get_form', {})] };
+    if (step === 1) return { content: [tool('write_prompt', { text: /NEGATIVE/.test(t) ? 'blurry, low detail, watermark' : 'Cinematic low-angle shot of a weathered scout mech in a pine forest at night, heavy rain, sodium streetlight' })] };
+    return { content: [text('Wrote it.')] };
+  }
   if (/REFUSE/.test(t)) return { content: [], stop_reason: 'refusal', stop_details: { type: 'refusal', category: 'cyber', explanation: 'test' } };
   if (/QUESTION/.test(t)) return { content: [text(`A higher guidance makes it follow the prompt more closely. (I can see ${images} picture(s).)`)] };
   if (/LOOP/.test(t)) return { content: [tool('get_form', {})] };

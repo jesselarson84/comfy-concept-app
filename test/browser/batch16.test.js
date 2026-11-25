@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { startStack, ROOT } from '../unit/helpers.js';
-import { launch } from './launch.js';
+import { launch, toggleFiles } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -76,7 +76,7 @@ async function writePrompt(text) {
   await page.click('.claude-sheet [data-act="send"]');
   await page.waitForFunction(() => !document.querySelector('.claude-sheet') || document.querySelector('.claude-sheet .cl-text, .claude-sheet .cl-error'), null, { timeout: 15000 });
 }
-const closeSheet = () => app(() => window.conceptApp.claude.sheet.close());
+const closeSheet = () => app(() => { window.conceptApp.claude.sheet.close(); window.conceptApp.claude.chat.close(); }); // batch 19: + the chat
 /** The top bar is on screen and the page frame never moved (only the form scrolls). */
 const frameInPlace = () => app(() => ({ scrolled: document.scrollingElement.scrollTop, topBar: Math.round(document.querySelector('.topbar').getBoundingClientRect().top) }));
 
@@ -159,7 +159,7 @@ test('Write prompt… (prompt ⋮): a sheet with the model switch, starting on t
   await reload();
 });
 
-test('Claude fills in the form and stops: the sheet closes, orange marks only (no summary, no Undo), one-shot; the marks clear when the run finishes', async () => {
+test('Write prompt writes only the prompt (batch 19) and stops: the sheet closes, orange marks only (no summary, no Undo), one-shot; the marks clear when the run finishes', async () => {
   await pick('ai:qwen-2512-t2i');
   await page.fill('#prompt', 'A weathered scout mech crouched in a foggy pine forest at dawn');
   await page.locator('#prompt').dispatchEvent('input');
@@ -167,15 +167,13 @@ test('Claude fills in the form and stops: the sheet closes, orange marks only (n
   await resetClaude();
   await writePrompt('Same mech but at night in heavy rain, tall for a phone wallpaper, more cinematic');
   assert.equal(await page.locator('.claude-sheet').count(), 0, 'the sheet closed: Claude changed the form');
+  const before19 = await app(() => window.conceptApp.panel.state);
   const st = await app(() => window.conceptApp.panel.state);
   assert.match(st.prompt, /night, heavy rain/);
-  assert.equal(st.aspect, '16:9-portrait');
-  assert.equal(st.res, '2k');
-  assert.equal(st.negOn, true);
   assert.equal(await page.inputValue('#prompt'), st.prompt);
-  assert.equal(await page.isVisible('#neg-row'), true, 'the negative prompt section is on');
-  assert.equal(await page.textContent('#aspect-label'), '9:16');
-  for (const sel of ['.prompt-field', '#neg-row', '#aspect-field']) assert.equal(await page.locator(`${sel}.claude-changed`).count(), 1, sel);
+  assert.equal(await page.locator('.prompt-field.claude-changed').count(), 1);
+  assert.equal(await page.locator('#aspect-field.claude-changed, #neg-row.claude-changed').count(), 0, 'batch 19: nothing but the prompt changes');
+  assert.equal(st.aspect, before19.aspect);
   assert.equal(await page.locator('.cl-reply, .cl-changes, [data-act="undo"], [data-act="start-over"]').count(), 0, 'no summary, no Undo, no chat');
   assert.equal(await comfyPrompts(), queued, 'nothing was queued: the user presses Run');
   await shot('applied');
@@ -217,27 +215,33 @@ test('Talk prompt: listens at once, shows the words, and sends by itself when yo
   await closeSheet();
 });
 
-test('the floating Ask Claude button: on every screen; answers only (look-only tools), the form never changes', async () => {
+test('the floating Claude button (batch 19: a chat): on every screen; answers, remembers the chat until the app closes', async () => {
   const fab = await page.locator('.claude-fab').boundingBox();
   const run = await page.locator('.actionbar').boundingBox();
   assert.ok(fab.y + fab.height <= run.y, 'above the Run bar on the form');
   assert.ok(fab.x + fab.width > 380, 'bottom right');
   const before_ = await app(() => JSON.stringify(window.conceptApp.panel.state));
+  await app(() => sessionStorage.removeItem('claudeChat.v1'));
   await resetClaude();
   await page.click('.claude-fab');
-  await page.waitForSelector('.claude-sheet[data-mode="question"]');
-  assert.match(await page.textContent('.claude-sheet'), /Ask Claude/);
-  await page.fill('.claude-sheet .cl-input', 'make it rain');
+  await page.waitForSelector('.claude-sheet[data-mode="chat"]');
+  await page.fill('.claude-sheet .cl-input', 'QUESTION what does guidance do?');
   await page.click('.claude-sheet [data-act="send"]');
-  await page.waitForSelector('.claude-sheet .cl-text, .claude-sheet .cl-error');
-  assert.match(await page.textContent('.claude-sheet .cl-cost'), /answers only, never changes the form/);
-  assert.equal(await app(() => JSON.stringify(window.conceptApp.panel.state)), before_, 'nothing changed');
+  await page.waitForSelector('.claude-sheet .cl-said .cl-text');
+  assert.equal(await app(() => JSON.stringify(window.conceptApp.panel.state)), before_, 'a question changes nothing');
   const req = (await claudeReqs())[0].body;
-  assert.deepEqual(req.tools.map((t) => t.name), ['get_form', 'list_presets', 'get_preset', 'search_history', 'view_picture']);
-  await shot('question');
+  assert.deepEqual(req.tools.map((t) => t.name), ['get_form', 'list_presets', 'get_preset', 'search_history', 'view_picture', 'set_form', 'set_preset_settings', 'build_workflow']);
+  await shot('chat');
+  await closeSheet();
+  // the chat is still there when it opens again (wiped only when the app closes)
+  await page.click('.claude-fab');
+  await page.waitForSelector('.claude-sheet[data-mode="chat"] .cl-said');
+  await page.fill('.claude-sheet .cl-input', 'REMEMBER');
+  await page.click('.claude-sheet [data-act="send"]');
+  await page.waitForFunction(() => /I see 2 earlier message/.test(document.querySelector('.claude-sheet .cl-chat')?.textContent || ''));
   await closeSheet();
   // also on Files (in the corner)
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb[data-id]');
   assert.equal(await page.isVisible('.claude-fab'), true);
   await app(() => window.conceptApp.historyView.close());
@@ -270,7 +274,7 @@ test('viewer: ⋮ Ask Claude about this -> Fix this result (Opus, picture attach
 });
 
 test('Files: Claude button (no ⋮ in the bar) sends the pictures in tap order; a question is answered in the sheet; a merge builds a one-off workflow and lands on the form', async () => {
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb[data-id]');
   const ids = await page.$$eval('.history .thumb[data-id]', (b) => b.map((x) => x.dataset.id));
   assert.ok(ids.length >= 2);
@@ -362,7 +366,7 @@ test('switching Claude off hides everything again', async () => {
   assert.equal(await page.locator('.amenu [data-act="ask-claude"]').count(), 0);
   await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   await page.waitForSelector('.viewer', { state: 'hidden' });
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb[data-id]');
   const id = await page.$eval('.history .thumb[data-id]', (b) => b.dataset.id);
   await app((x) => window.conceptApp.historyView.startSelect(x), id);

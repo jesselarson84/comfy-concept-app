@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startStack, ROOT, pngBytes } from '../unit/helpers.js';
-import { launch, menuAct } from './launch.js';
+import { launch, menuAct, toggleFiles } from './launch.js';
 
 const SHOTS = path.join(ROOT, 'test/browser/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -46,7 +46,7 @@ before(async () => {
 after(async () => { await browser?.close(); await s?.close(); });
 
 const openFirst = async () => {
-  if (!(await page.isVisible('.history'))) await page.click('#btn-history');
+  if (!(await page.isVisible('.history'))) await toggleFiles(page);
   await page.waitForSelector('.history .thumb[data-id]');
   await page.click(`.history .thumb[data-id="${ids.a}"]`);
   await page.waitForSelector('.viewer:not([hidden]) .viewer-img');
@@ -54,7 +54,7 @@ const openFirst = async () => {
 };
 
 test('History tiles have no times; the full-screen view: ✕ count ⋮ on top, picture, prompt + date · model + tags, thumbnails at the bottom', async () => {
-  await page.click('#btn-history');
+  await toggleFiles(page);
   await page.waitForSelector('.history .thumb[data-id]');
   assert.equal(await page.$('.history .thumb-time'), null);
   await openFirst();

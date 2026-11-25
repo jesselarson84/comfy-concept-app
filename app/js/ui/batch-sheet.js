@@ -89,7 +89,10 @@ export class BatchSheet {
     try { this.data = await api.getSchedule(); } catch { return; }
     const n = rowsOf(this.data.jobs).filter((r) => r.status === 'waiting' || r.status === 'running').length;
     this.badge.textContent = String(n);
+    // Batch 19: no batches = the button is greyed out and the "0" badge is gone.
+    this.badge.hidden = n === 0;
     this.button.classList.toggle('has-jobs', n > 0);
+    this.button.classList.toggle('no-jobs', n === 0);
     this.button.classList.toggle('is-running', this.data.state === 'running');
     if (this.el && !this.drag && repaint) this.paint();
   }

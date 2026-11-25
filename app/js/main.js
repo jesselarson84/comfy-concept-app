@@ -47,7 +47,7 @@ import { withUpscale, pickUpscaleModel, RESOLUTIONS } from './lib/resolution.js'
 import { ProjectChip, ProjectSheet, loadProjects, projectLabel, getCurrentProject } from './ui/projects.js';
 import { PcCard } from './ui/pc-card.js';
 import { BatchSheet, rowsOf } from './ui/batch-sheet.js';
-import { ClaudeSheet, AskSheet, VariationsSheet, downscale, wantsVariations, claudeLogo } from './ui/claude.js';
+import { ClaudeSheet, ChatSheet, AskSheet, VariationsSheet, downscale, wantsVariations, claudeLogo } from './ui/claude.js';
 import { ActionMenu } from './ui/action-menu.js';
 import { speechSupport } from './lib/speech.js';
 import { SettingsSheet, resetOnClose } from './ui/settings-sheet.js';
@@ -124,11 +124,53 @@ const savePreset = new SavePresetSheet({
   },
 });
 $('#btn-save-graph').addEventListener('click', () => { if (isLocked()) return busy(); savePreset.open(); });
+
+// ---- Batch 19: keep a workflow Claude built, after trying it ----------------------
+// Every result made by a Claude workflow carries it (history: claudeGraph { key, name,
+// graph }), so it can be saved as a preset later from the result's ⋮ (Make more), in
+// the viewer and in Files. Right after its first run finishes, a bar above the results
+// offers Save as preset / Discard. "Saved" = a preset saved from it (graph.from = key).
+const claudeSaved = (key) => workflows.some((w) => w.graph?.from === key);
+const claudeBarOff = new Set(); // keys whose bar was discarded (this app load)
+const claudeRan = new Set();    // keys that finished a run
+const saveClaudeGraph = new SavePresetSheet({
+  getGraph: async () => saveClaudeGraph.cg.graph,
+  target: () => ({ label: saveClaudeGraph.cg.name }),
+  save: async ({ name, group, subgroup, workflow }) => {
+    const cg = saveClaudeGraph.cg;
+    const g = await api.saveGraphPreset({ name, group, subgroup, workflow, from: cg.key });
+    // On the form it becomes the saved preset (same graph, now kept).
+    await loadWorkflows(current?.id === cg.key ? g.id : current?.id, { remember: current?.id === cg.key });
+    paintClaudeBar();
+    return g;
+  },
+});
+function saveClaudeWorkflow(cg) {
+  if (!cg?.graph) return;
+  if (claudeSaved(cg.key)) return toast('Already saved as a preset');
+  saveClaudeGraph.cg = cg;
+  saveClaudeGraph.open();
+}
+const claudeBar = h('div.cl-savebar', { hidden: true, dataset: { act: 'claude-savebar' } });
+$('#results').prepend(claudeBar);
+function paintClaudeBar() {
+  const key = current?.oneOff ? current.id : null;
+  const show = !!key && claudeRan.has(key) && !claudeBarOff.has(key) && !claudeSaved(key);
+  claudeBar.hidden = !show;
+  if (!show) return;
+  claudeBar.replaceChildren(claudeLogo(20),
+    h('span.cl-savebar-t', {}, "Claude's workflow", h('small', {}, 'Worked? Keep it as a preset.')),
+    h('button.btn.cl-savebar-no', { type: 'button', dataset: { act: 'discard-claude' }, onclick: () => { claudeBarOff.add(key); paintClaudeBar(); } }, 'Discard'),
+    h('button.btn.cl-savebar-go', { type: 'button', dataset: { act: 'save-claude' }, onclick: () => saveClaudeWorkflow(current?.claudeGraph) }, 'Save as preset'));
+}
+queue.addEventListener('change', (e) => {
+  const it = e.detail;
+  const key = it?.meta?.claudeGraph?.key;
+  if (key && it.status === 'done' && !claudeRan.has(key)) { claudeRan.add(key); paintClaudeBar(); }
+});
 /** Close History without leaving a stale Back entry, so the node view can take its place. */
 async function leaveHistory() {
   if (historyView.selecting) { historyView.endSelect(); await afterBack(); }
-  // Inside a folder: drop its Back entry too, so the node view takes over History's own.
-  if (history.state?.historySub) { history.back(); await afterBack(); }
   historyView.close(true);
 }
 
@@ -162,6 +204,9 @@ const viewer = new Viewer({
   // Batch 16: ⋮ Ask Claude about this (only while Use Claude is on).
   onAskClaude: (it) => openAsk('fix', [{ image: it.image, historyId: it.historyId, meta: it.meta || {} }]),
   claudeOn: () => claudeOn(),
+  // Batch 19: a result of a Claude workflow that is not saved yet -> Save workflow as preset.
+  claudeUnsaved: (it) => !!it?.meta?.claudeGraph?.graph && !claudeSaved(it.meta.claudeGraph.key),
+  onSaveWorkflow: (it) => saveClaudeWorkflow(it.meta.claudeGraph),
   onTag: (tag) => { if (!historyView.on) $('#btn-history').click(); historyView.searchTag(tag); },
   // Trash in the viewer: this one picture, from the PC (History entries hold one picture each).
   onDelete: async (it) => {
@@ -392,6 +437,7 @@ function selectPreset(id, { remember = true } = {}) {
   const kinds = new Set([...(current?.ok && current.controls?.images?.length ? ['image'] : []), ...(m?.inputs || []).map((f) => f.kind)].filter((k) => ['image', 'video', 'audio'].includes(k)));
   importSheet.setKinds(kinds);
   $('#btn-attach').hidden = !kinds.size;
+  paintClaudeBar(); // batch 19: the Save bar belongs to a Claude workflow on the form
 }
 
 // ---- GPU sharing with Ollama ---------------------------------------------------
@@ -551,6 +597,7 @@ async function buildRun() {
         // Batch 11: made from a History picture -> the server files it in that picture's project.
         source: Object.values(refs.values).map((r) => refSources.get(r)).find(Boolean),
         project: getCurrentProject() || undefined, // batch 12: this device's pick (No project by default)
+        claudeGraph: current.claudeGraph, // batch 19: a Claude workflow travels with its results (save it later)
       },
     };
   });
@@ -742,8 +789,9 @@ const settingsSheet = new SettingsSheet({ button: $('#btn-settings'), onChange: 
 const askSheet = new AskSheet();
 const variationsSheet = new VariationsSheet();
 const claudeSheet = new ClaudeSheet({ defaultModel: () => claudeStatus?.defaultModel || 'haiku' });
+const chatSheet = new ChatSheet({ defaultModel: () => claudeStatus?.defaultModel || 'haiku' });
 // The floating Ask Claude button: bottom right on every screen while Use Claude is on.
-const claudeFab = h('button.claude-fab', { type: 'button', 'aria-label': 'Ask Claude a question', title: 'Ask Claude', dataset: { act: 'ask-claude-fab' }, hidden: true, onclick: () => openQuestion() }, claudeLogo(24));
+const claudeFab = h('button.claude-fab', { type: 'button', 'aria-label': 'Chat with Claude', title: 'Claude', dataset: { act: 'ask-claude-fab' }, hidden: true, onclick: () => openChat() }, claudeLogo(24));
 document.body.append(claudeFab);
 // Batch 18: on a phone the Ask button sits just above the raised bottom panel
 // (the Run bar, plus "This session" once it has pictures), so it never covers a
@@ -778,25 +826,41 @@ async function claudeAsk(body) {
   }
 }
 
-/** Prompt help (the prompt's ⋮): Write prompt… or Talk prompt (listening at once). */
-function openPromptHelp({ listen = false } = {}) {
+/**
+ * Prompt help (the ⋮ of Prompt / Negative prompt): Write prompt… or Talk prompt
+ * (listening at once). Batch 19: Claude writes only that text, no settings.
+ */
+function openPromptHelp({ listen = false, field = 'prompt' } = {}) {
   if (!claudeOn()) return;
   if (isLocked()) return busy();
   claudeSheet.open({
-    mode: 'prompt', listen,
+    mode: field === 'negative' ? 'negative' : 'prompt', listen,
     onAsk: (text, model) => {
       if (isLocked()) throw new Error('Wait for the run to finish first');
-      // "6 takes, vary the light": variations into the batch (always Opus)
-      return claudeAsk({ mode: wantsVariations(text) ? 'variations' : 'prompt', model, text, form: formForClaude() });
+      // "6 takes, vary the light" in the prompt's box: variations into the batch (always Opus)
+      const mode = field === 'negative' ? 'negative' : wantsVariations(text) ? 'variations' : 'prompt';
+      return claudeAsk({ mode, model, text, form: formForClaude() });
     },
     onApplied: (r) => applyClaude(r),
   });
 }
 
-/** The floating button: a question about Comfy, answered only (the form never changes). */
-function openQuestion() {
+/**
+ * Batch 19: the floating button is a chat about Comfy: answers, and on request
+ * sets up the form or builds a workflow into it (never pictures, never Run).
+ */
+function openChat() {
   if (!claudeOn()) return;
-  claudeSheet.open({ mode: 'question', onAsk: (text, model) => claudeAsk({ mode: 'question', model, text, form: formForClaude() }) });
+  chatSheet.open({
+    onAsk: (text, model, chat) => claudeAsk({ mode: 'chat', model, text, chat, form: formForClaude() }),
+    onApplied: async (r) => {
+      // The form changes: put it back on screen behind the chat (closing the chat shows it).
+      if (!viewer.root.hidden) { viewer.close(); await afterBack(); }
+      if (historyView.on) { historyView.close(); await afterBack(); }
+      if (nodeView.on) nodeView.hide();
+      return applyClaude(r);
+    },
+  });
 }
 
 /** Viewer "Fix this result" (one picture) and Files (several, in tap order). */
@@ -841,30 +905,43 @@ function clearField(which) {
   if (which === 'prompt') { const old = panel.clearPrompt(); undoToast('Prompt cleared', () => panel.setPrompt(old)); }
   else { const old = panel.clearNegative(); undoToast('Negative prompt cleared', () => panel.setNegative(old)); }
 }
-// Expand: the prompt full screen for comfortable editing (Back or Done returns).
+// Expand: the prompt (batch 19: or the negative prompt) full screen for comfortable editing (Back or Done returns).
 const promptEditor = new Overlay('prompt-editor', 'Prompt');
 const editorText = h('textarea.pe-text', { 'aria-label': 'Prompt', placeholder: 'Describe the concept…', enterkeyhint: 'done' });
-editorText.addEventListener('input', () => panel.setPrompt(editorText.value));
-promptEditor.root.append(overlayTop('Prompt', () => promptEditor.close(),
-  h('button.btn.cl-strong.pe-done', { type: 'button', dataset: { act: 'done' }, onclick: () => promptEditor.close() }, 'Done')), editorText);
-function openEditor() {
+let editorField = 'prompt';
+editorText.addEventListener('input', () => (editorField === 'negative' ? panel.setNegative(editorText.value) : panel.setPrompt(editorText.value)));
+const editorTitle = overlayTop('Prompt', () => promptEditor.close(),
+  h('button.btn.cl-strong.pe-done', { type: 'button', dataset: { act: 'done' }, onclick: () => promptEditor.close() }, 'Done'));
+promptEditor.root.append(editorTitle, editorText);
+function openEditor(field = 'prompt') {
   if (isLocked()) return busy();
-  editorText.value = panel.state.prompt;
+  editorField = field;
+  const neg = field === 'negative';
+  editorTitle.setTitle(neg ? 'Negative prompt' : 'Prompt');
+  editorText.placeholder = neg ? 'What to avoid…' : 'Describe the concept…';
+  editorText.setAttribute('aria-label', neg ? 'Negative prompt' : 'Prompt');
+  editorText.value = neg ? panel.state.negative : panel.state.prompt;
   promptEditor.show();
   setTimeout(() => editorText.focus(), 50);
 }
 $('#prompt-more').addEventListener('click', (e) => fieldMenu.open(e.currentTarget, [
   { items: [
-    { act: 'write-prompt', icon: claudeLogo(18), label: 'Write prompt…', sub: 'Claude fills in the prompt and settings', hidden: !claudeOn(), fn: () => openPromptHelp() },
-    { act: 'talk-prompt', icon: 'i-mic', label: 'Talk prompt', sub: 'Say it; Claude fills it in', hidden: !claudeOn() || !speechSupport(), fn: () => openPromptHelp({ listen: true }) },
+    { act: 'write-prompt', icon: claudeLogo(18), label: 'Write prompt…', sub: 'Claude writes the prompt', hidden: !claudeOn(), fn: () => openPromptHelp() },
+    { act: 'talk-prompt', icon: 'i-mic', label: 'Talk prompt', sub: 'Say it; Claude writes it', hidden: !claudeOn() || !speechSupport(), fn: () => openPromptHelp({ listen: true }) },
   ] },
   { items: [
     { act: 'expand', icon: 'i-maximize-2', label: 'Expand', fn: () => openEditor() },
     { act: 'clear-prompt', icon: 'i-trash-2', label: 'Clear prompt', hidden: !panel.state.prompt, fn: () => clearField('prompt') },
   ] },
 ]));
+// Batch 19: the same options as Prompt (Claude writes only the negative prompt), plus Remove.
 $('#neg-more').addEventListener('click', (e) => fieldMenu.open(e.currentTarget, [
   { items: [
+    { act: 'write-prompt', icon: claudeLogo(18), label: 'Write prompt…', sub: 'Claude writes the negative prompt', hidden: !claudeOn(), fn: () => openPromptHelp({ field: 'negative' }) },
+    { act: 'talk-prompt', icon: 'i-mic', label: 'Talk prompt', sub: 'Say it; Claude writes it', hidden: !claudeOn() || !speechSupport(), fn: () => openPromptHelp({ listen: true, field: 'negative' }) },
+  ] },
+  { items: [
+    { act: 'expand', icon: 'i-maximize-2', label: 'Expand', fn: () => openEditor('negative') },
     { act: 'clear-negative', icon: 'i-trash-2', label: 'Clear negative prompt', hidden: !panel.state.negative, fn: () => clearField('negative') },
     { act: 'remove-negative', icon: 'i-x', label: 'Remove', sub: 'Turns the negative prompt off', fn: () => (isLocked() ? busy() : panel.setNegOn(false)) },
   ] },
@@ -894,6 +971,7 @@ function claudePreset(a) {
   if (!controls.ok) { toast(`Claude's workflow could not be loaded: ${controls.error}`, 8000); return null; }
   const slug = String(a.name || 'one-off').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'one-off';
   const preset = { id: `claude:${slug}-${Date.now().toString(36)}`, ok: true, file: null, label: a.name, short: a.name, group: 'Claude', workflow: g, controls, output: 'image', claude: true, oneOff: true };
+  preset.claudeGraph = { key: preset.id, name: a.name, graph: g };
   workflows = [...workflows, preset];
   picker.setItems(workflows);
   return { preset, pictureNodes };
@@ -1030,4 +1108,4 @@ async function start() {
 start();
 // For tests and poking around from DevTools.
 window.conceptApp = { savePreset, maskSlot, modelThumbs, historyView, isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, picker, selectPreset, loadWorkflows,
-  lock, resume, connBanner, claude: { get status() { return claudeStatus; }, sheet: claudeSheet, fab: claudeFab, settingsSheet, askSheet, variationsSheet, applyClaude, loadClaude }, promptEditor, nodeView, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, importSheet, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };
+  lock, resume, connBanner, claude: { get status() { return claudeStatus; }, sheet: claudeSheet, chat: chatSheet, bar: claudeBar, saveSheet: saveClaudeGraph, fab: claudeFab, settingsSheet, askSheet, variationsSheet, applyClaude, loadClaude }, promptEditor, nodeView, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, importSheet, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };
