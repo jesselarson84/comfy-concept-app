@@ -65,8 +65,9 @@ export class HistoryView {
       this.selFavBtn,
       h('button.icon-btn', { type: 'button', 'aria-label': 'Move to project', title: 'Move to project', dataset: { act: 'move' }, onclick: () => this.moveSelected() }, h('i.i.i-folder-input')),
       h('button.icon-btn', { type: 'button', 'aria-label': 'Share', dataset: { act: 'share' }, onclick: () => this.share() }, h('i.i.i-share-2')),
-      h('button.icon-btn', { type: 'button', 'aria-label': 'Delete', dataset: { act: 'delete' }, onclick: () => this.confirmDelete() }, h('i.i.i-trash-2')),
-      h('button.icon-btn', { type: 'button', 'aria-label': 'More', dataset: { act: 'more' }, onclick: (e) => this.openMore(e.currentTarget) }, h('i.i.i-more-vertical')));
+      h('button.icon-btn', { type: 'button', 'aria-label': 'Delete', dataset: { act: 'delete' }, onclick: () => this.confirmDelete() }, h('i.i.i-trash-2')));
+    // Batch 17: no ⋮ here (it only held Select all; each group's circle selects the group,
+    // and in Favorites the star removes the selection from Favorites).
     // Batch 9: search + filter chips, and the stats strip (tap to open).
     this.search = h('input.hsearch', { type: 'search', placeholder: 'Search prompts and tags', 'aria-label': 'Search Files', autocomplete: 'off', enterkeyhint: 'search',
       oninput: () => { this.filter.q = this.search.value; this.render(); } });
@@ -174,7 +175,7 @@ export class HistoryView {
 
   endSelect(fromPop) {
     if (!this.selecting) return;
-    this.selecting = false; this.selected.clear(); this.menu?.remove();
+    this.selecting = false; this.selected.clear();
     if (!fromPop && history.state?.historySel) history.back();
     this.paintSelection();
   }
@@ -286,27 +287,6 @@ export class HistoryView {
       this.endSelect();
       await this.load();
     }
-  }
-
-  /** ⋮ menu on the selection bar. */
-  openMore(anchor) {
-    this.menu?.remove();
-    const item = (act, label, fn) => h('button.sel-menu-item', { type: 'button', dataset: { act }, onclick: async () => { close(); await fn(); } }, label);
-    const items = [item('select-all', 'Select all', () => { for (const g of this.list.querySelectorAll('.history-session')) for (const id of JSON.parse(g.dataset.ids || '[]')) this.selected.add(id); this.paintSelection(); })];
-    if (this.favOnly) items.push(item('remove-fav', 'Remove from Favorites', () => this.removeSelected(() => Promise.all([...this.selected].map((id) => patchHistory(id, { favorite: false }))))));
-    const scrim = h('div.sel-menu-scrim', { onclick: () => close() });
-    const menu = h('div.sel-menu', { role: 'menu' }, ...items);
-    const close = () => { scrim.remove(); menu.remove(); this.menu = null; };
-    const r = anchor.getBoundingClientRect();
-    menu.style.top = `${Math.round(r.bottom + 4)}px`; menu.style.right = `${Math.max(8, Math.round(window.innerWidth - r.right))}px`;
-    document.body.append(scrim, menu);
-    this.menu = { remove: close };
-  }
-
-  async removeSelected(fn) {
-    try { await fn(); } catch (e) { toast(e.message, 6000); return; }
-    this.endSelect();
-    await this.load();
   }
 
   // ---- list ----------------------------------------------------------------

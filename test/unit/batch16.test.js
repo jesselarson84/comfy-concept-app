@@ -131,11 +131,24 @@ test('the prompt box: Claude fills in the form (checked) and stops; cached promp
   // the same system prompt + tools bytes every request (cacheable)
   assert.equal(JSON.stringify(reqs[1].body.system), JSON.stringify(b.system));
   assert.equal(JSON.stringify(reqs[1].body.tools), JSON.stringify(b.tools));
-  // memory: earlier turns go along as plain text
+  // batch 17: one-shot: earlier turns are never sent (even if a client still sends them)
   await reset();
   await ask({ text: 'QUESTION what does guidance do?', memory: [{ role: 'user', text: 'make it rain' }, { role: 'assistant', text: 'Made it rain.' }] });
   const m = (await requests())[0].body.messages;
-  assert.deepEqual(m.slice(0, 2), [{ role: 'user', content: 'make it rain' }, { role: 'assistant', content: 'Made it rain.' }]);
+  assert.equal(m.length, 1);
+  assert.doesNotMatch(JSON.stringify(m), /Made it rain/);
+});
+
+test('batch 17: question mode answers only: look-only tools, never any action', async () => {
+  await call('POST', '/api/claude', { enabled: true, limitUsd: 20, defaultModel: 'haiku' });
+  await reset();
+  const r = await ask({ mode: 'question', model: 'sonnet', text: 'make it rain' }); // a change request in question mode
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.model, 'sonnet');
+  assert.deepEqual(r.body.actions, [], 'a question never changes the form');
+  const b = (await requests())[0].body;
+  assert.deepEqual(b.tools.map((t) => t.name), ['get_form', 'list_presets', 'get_preset', 'search_history', 'view_picture']);
+  assert.match(JSON.stringify(b.messages), /QUESTION ONLY/);
 });
 
 test('Opus: effort high for fix / files, server-side fallback on, workflow tools offered', async () => {

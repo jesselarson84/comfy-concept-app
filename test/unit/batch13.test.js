@@ -107,7 +107,8 @@ test('+ in the prompt box only when the preset takes a picture, video or audio; 
 });
 
 test('project box: clipboard icon, name not bold; Files: no Folders, renamed; Nodes icon; no color tags', () => {
-  assert.match(read('app/js/ui/projects.js'), /h\('i\.i\.i-clipboard-list'\), this\.crumb, this\.name/);
+  // batch 17: the clipboard for a project, the empty circle for No project
+  assert.match(read('app/js/ui/projects.js'), /this\.icon\.className = `i \$\{p \? 'i-clipboard-list' : 'i-circle'\}`/);
   assert.match(read('app/styles.css'), /\.project-chip \.name \{ font-weight: 400; \}/);
   const hv = read('app/js/ui/history-view.js');
   assert.doesNotMatch(hv, /foldersBtn|FoldersScreen|openAddTo|getFolders/);

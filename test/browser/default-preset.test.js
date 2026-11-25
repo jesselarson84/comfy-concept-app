@@ -40,8 +40,8 @@ test('fresh client with My presets present opens on FLUX.2 Klein 4B Text to Imag
     assert.ok(await p.evaluate(() => window.conceptApp.workflows.some((w) => w.group === 'My presets')));
     assert.equal(await p.evaluate(() => localStorage.length), 0, 'clean state');
     assert.equal(await p.evaluate(() => !!navigator.serviceWorker?.controller), false);
-    assert.equal(await cur(p), 'ai:klein-4b-t2i');
-    assert.equal((await p.textContent('#preset-crumb')).trim(), 'Image › Text to Image ›');
+    assert.equal(await cur(p), 'ai:z-image-turbo'); // batch 17: the fresh-client default
+    assert.equal((await p.textContent('#preset-crumb')).trim(), 'Text to Image');
     assert.equal(await p.evaluate(() => localStorage.getItem('preset')), null);
     // Returning user: pick a My presets entry, reload -> still there.
     await p.click('#preset-btn'); await p.click('#picker .ent[data-preset="basic-txt2img"]');

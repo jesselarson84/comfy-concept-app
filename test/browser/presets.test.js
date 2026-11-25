@@ -84,7 +84,7 @@ test('header says Comfy UI; Run button is the only blue element; picker has 3D /
 test('AI preset: params shown with ranges; out-of-range values are clamped before queueing; ratio dropdown + orientation flip', async () => {
   await pick('ai:klein-4b-t2i');
   assert.equal(await page.textContent('#preset-name'), 'FLUX.2 Klein 4B');
-  assert.equal(await page.textContent('#preset-crumb'), 'Image › Text to Image ›');
+  assert.equal(await page.textContent('#preset-crumb'), 'Text to Image');
   // Steps is under the Settings twirl-down (batch 3).
   assert.equal(await page.locator('#more').count(), 0);
   if (!(await page.$eval('#settings', (d) => d.open))) await page.click('#settings > summary');

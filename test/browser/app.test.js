@@ -33,10 +33,10 @@ async function pick(id, pg = page) { await pg.click('#preset-btn'); await pg.cli
 const currentPreset = (pg = page) => pg.evaluate(() => window.conceptApp.current?.id);
 const hasPreset = (id) => (window.conceptApp?.workflows || []).some((w) => w.id === id);
 
-test('fresh client opens on FLUX.2 Klein 4B Text to Image (not My presets); basic txt2img shows aspect, hides reference/strength/negative', async () => {
+test('fresh client opens on Z-Image Turbo (batch 17; not My presets); basic txt2img shows aspect, hides reference/strength/negative', async () => {
   assert.deepEqual(await page.evaluate(() => window.conceptApp.workflows.filter((w) => !w.ai).map((w) => w.label)), ['Basic reference', 'Basic txt2img']);
   // Start screen as a fresh client sees it (new context: no localStorage, no SW).
-  assert.equal(await currentPreset(), 'ai:klein-4b-t2i');
+  assert.equal(await currentPreset(), 'ai:z-image-turbo');
   assert.match(await page.textContent('#preset-crumb'), /Image/);
   assert.equal(await page.evaluate(() => localStorage.getItem('preset')), null, 'the automatic default is not remembered');
   await page.screenshot({ path: path.join(SHOTS, 'phone-start.png') });
@@ -223,8 +223,9 @@ test('workflow dropped into the folder -> appears in dropdown, negative prompt w
   fs.copyFileSync(path.join(ROOT, 'test/fixtures/sd15-negative.json'), path.join(s.wfDir, 'sd15-negative.json'));
   await page.waitForFunction(() => (window.conceptApp?.workflows || []).some((w) => w.id === 'sd15-negative'), null, { timeout: 5000 });
   await pick('sd15-negative');
-  assert.equal(await visible('#neg-row'), true, 'SD graph has a negative prompt');
-  await page.check('#neg-toggle');
+  // batch 17: off = "+ Negative prompt"; tapping it shows the box
+  assert.equal(await visible('#neg-add'), true, 'SD graph has a negative prompt');
+  await page.click('#neg-add');
   assert.equal(await visible('#negative'), true);
 });
 

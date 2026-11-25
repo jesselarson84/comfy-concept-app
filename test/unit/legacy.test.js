@@ -12,7 +12,7 @@ import { oldHistory, oldChats } from '../fixtures/legacy-state.js';
 const j = async (r) => { assert.ok(r.ok, `HTTP ${r.status}`); return r.json(); };
 
 test('legacy ids map: Fast concept -> Klein 4B T2I, From reference image -> Klein 4B Image Edit; others unchanged', () => {
-  assert.equal(DEFAULT_PRESET, 'ai:klein-4b-t2i');
+  assert.equal(DEFAULT_PRESET, 'ai:z-image-turbo'); // batch 17: the fresh-client default
   assert.equal(resolvePresetId('fast-concept'), 'ai:klein-4b-t2i');
   assert.equal(resolvePresetId('from-reference-image'), 'ai:klein-4b-edit');
   for (const id of ['ai:flux1-dev-gguf', 'user:abc', 'action:upscale', 'builder:test', 'my-import', '', undefined, null, 'constructor', '__proto__', 'toString']) assert.equal(resolvePresetId(id), id);

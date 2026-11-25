@@ -209,7 +209,7 @@ test('D: texts follow the preset, dimmed settings still explain themselves, and 
   await page.click('#refs .info-btn');
   assert.match(await page.textContent('#info-pop'), /picture to edit/i);
   await page.keyboard.press('Escape');
-  await page.click('label.prompt-field .info-btn');
+  await page.click('.prompt-field .info-btn');
   assert.match(await page.textContent('#info-pop'), /edit instruction/);
   await page.keyboard.press('Escape');
   // during a run
@@ -228,7 +228,7 @@ test('D: texts follow the preset, dimmed settings still explain themselves, and 
 // ---- E. Image sub sections ----------------------------------------------------
 test('E: the picker splits Image into Text to Image / Image Edit / Inpainting / Upscale; the button reads Image › Text to Image › Z-Image Turbo', async () => {
   await pick('ai:z-image-turbo');
-  assert.equal(await page.textContent('#preset-crumb'), 'Image › Text to Image ›');
+  assert.equal(await page.textContent('#preset-crumb'), 'Text to Image'); // batch 17: the name first, the grey line after
   assert.equal(await page.textContent('#preset-name'), 'Z-Image Turbo');
   assert.equal(await page.getAttribute('#preset-btn', 'title'), 'Image › Text to Image › Z-Image Turbo Text to Image');
   await page.click('#preset-btn');
@@ -243,7 +243,7 @@ test('E: the picker splits Image into Text to Image / Image Edit / Inpainting / 
   await shot('picker-subsections');
   await page.click('#picker .ent[data-preset="ai:klein-4b-inpaint"]');
   await page.waitForFunction(() => window.conceptApp.current?.id === 'ai:klein-4b-inpaint');
-  assert.equal(await page.textContent('#preset-crumb'), 'Image › Inpainting ›');
+  assert.equal(await page.textContent('#preset-crumb'), 'Inpainting');
   assert.equal(await page.textContent('#preset-name'), 'FLUX.2 Klein 4B');
 });
 

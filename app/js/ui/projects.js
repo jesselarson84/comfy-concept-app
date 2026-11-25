@@ -154,8 +154,11 @@ export class ProjectChip {
     this.sheet = new ProjectSheet();
     this.isLocked = isLocked;
     this.crumb = h('span.crumb'); this.name = h('span.name', {}, 'No project');
+    // batch 13: clipboard for a project (not mixed up with Files' folder); batch 17:
+    // the empty circle for No project, the same icon as in the list.
+    this.icon = h('i.i.i-circle');
     this.btn = h('button.btn.picker.project-chip', { type: 'button', 'aria-label': 'Project', dataset: { act: 'project' }, onclick: () => this.open() },
-      h('i.i.i-clipboard-list'), this.crumb, this.name, h('i.i.i-chevron-down')); // batch 13: clipboard, so it is not mixed up with Files' folder
+      this.icon, this.crumb, this.name, h('i.i.i-chevron-down'));
     this.where = h('div.project-where.muted');
     host.replaceChildren(this.btn, this.where);
     host.hidden = false;
@@ -172,6 +175,7 @@ export class ProjectChip {
     const p = projectById(getCurrentProject());
     this.crumb.textContent = p?.group.length ? `${p.group.join(' › ')} ›` : '';
     this.name.textContent = p ? p.name : 'No project';
+    this.icon.className = `i ${p ? 'i-clipboard-list' : 'i-circle'}`;
     this.btn.classList.toggle('none', !p);
     const root = d?.root || 'ACTIVE';
     this.where.textContent = d && !d.available ? 'Google Drive is offline: outputs are filed once it is back'

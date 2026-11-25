@@ -4,14 +4,14 @@
 // the retired App presets mapped by legacy-presets.js), even if it is
 // unavailable right now - the panel then says why.
 // Fresh client (nothing saved, or the saved preset no longer exists):
-//   1. FLUX.2 Klein 4B Text to Image when it is available;
+//   1. Z-Image Turbo when it is available (batch 17; before that FLUX.2 Klein 4B);
 //   2. otherwise the first AVAILABLE AI Workflow entry, in list order;
-//   3. otherwise Klein 4B T2I anyway (shown with its "unavailable" reason), or
+//   3. otherwise Z-Image Turbo anyway (shown with its "unavailable" reason), or
 //      the first AI Workflow entry;
 //   never a My presets entry (saved or imported workflows).
 // The automatic default is not written to localStorage: only a real pick is
-// remembered, so a client that fell back while Klein was missing opens on
-// Klein again once it is back.
+// remembered, so a client that fell back while it was missing opens on it
+// again once it is back.
 // Shared by the browser (main.js) and the server (/api/workflows "default").
 // -----------------------------------------------------------------------------
 import { DEFAULT_PRESET, resolvePresetId } from './legacy-presets.js';
@@ -25,11 +25,11 @@ export const isAiWorkflow = (w) => !!(w && typeof w.id === 'string' && w.id.star
 export function defaultPreset(workflows) {
   const list = Array.isArray(workflows) ? workflows : [];
   const ai = list.filter(isAiWorkflow);
-  const klein = ai.find((w) => w.id === DEFAULT_PRESET);
-  if (isUsable(klein)) return klein.id;
+  const def = ai.find((w) => w.id === DEFAULT_PRESET);
+  if (isUsable(def)) return def.id;
   const firstOk = ai.find(isUsable);
   if (firstOk) return firstOk.id;
-  return (klein || ai[0])?.id ?? null;
+  return (def || ai[0])?.id ?? null;
 }
 
 /**

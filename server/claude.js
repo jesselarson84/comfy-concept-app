@@ -24,7 +24,7 @@
 //   POST /api/claude            { enabled?, limitUsd?, defaultModel? }
 //   POST /api/claude/key        { key }   save (or replace) the key on this PC
 //   DELETE /api/claude/key
-//   POST /api/claude/ask        { mode, model, text, memory, form, pictures }
+//   POST /api/claude/ask        { mode, model, text, form, pictures }  (one-shot: no chat memory)
 // -----------------------------------------------------------------------------
 import fs from 'node:fs';
 import path from 'node:path';
@@ -180,7 +180,7 @@ How to work:
 - For "N takes / variations" use add_variations: each job must differ in a real, visible way (light, angle, palette, composition, setting...), never just a new seed. They are added to the user's batch, not started.
 - Write prompts in the style the preset expects (natural sentences for FLUX/Qwen/Z-Image), concrete and visual.
 - Tool results tell you what was clamped or refused; adjust and continue.
-- Your final message is shown under the form: 1-3 short plain sentences, no markdown, no lists. Say what you changed and why, or answer the question.`;
+- Your final message is shown only when you changed nothing: 1-3 short plain sentences, no markdown, no lists.`;
 
 const BUILD = `
 Building a one-off workflow (only when no preset fits, e.g. more reference pictures than any preset takes):
@@ -200,7 +200,10 @@ const FIELD_PROPS = {
   seed: { description: '"random" or a whole number', anyOf: [{ type: 'string', enum: ['random'] }, { type: 'integer' }] },
 };
 
-export function toolsFor(build) {
+/** Look-only tools (question mode never changes anything). */
+export const READ_TOOLS = ['get_form', 'list_presets', 'get_preset', 'search_history', 'view_picture'];
+
+export function toolsFor(build, readOnly = false) {
   const tools = [
     { name: 'get_form', description: 'The form as it is now: preset, prompt, negative, aspect, resolution, batch, seed, preset settings and loaded pictures.', input_schema: obj({}) },
     { name: 'list_presets', description: 'All presets: id, name, section, whether it is available on this PC, how many pictures it takes, and what it makes.', input_schema: obj({}) },
@@ -212,6 +215,7 @@ export function toolsFor(build) {
     { name: 'load_pictures', description: 'Put pictures into the preset\'s picture slots, in slot order. Each item is an attached picture number or a history_id.', input_schema: obj({ pictures: { type: 'array', items: { anyOf: [{ type: 'integer', description: 'attached picture number' }, { type: 'string', description: 'history id' }] } } }, ['pictures']) },
     { name: 'add_variations', description: 'Add 1-12 jobs to the user\'s batch (NOT started). Each job = the current form plus its own changes; each must differ in a real way.', input_schema: obj({ jobs: { type: 'array', maxItems: 12, items: obj({ label: { type: 'string', description: 'Short name, e.g. "Moonlit fog, low angle"' }, ...FIELD_PROPS, settings: { type: 'object', description: 'preset settings key -> value' } }, ['label']) } }, ['jobs']) },
   ];
+  if (readOnly) return tools.filter((t) => READ_TOOLS.includes(t.name));
   if (build) tools.push(
     { name: 'get_preset_graph', description: 'The ComfyUI API-format graph of a preset (to build from).', input_schema: obj({ id: { type: 'string' } }, ['id']) },
     { name: 'node_info', description: 'Inputs and outputs of ComfyUI node classes installed on this PC (combo lists = installed models).', input_schema: obj({ classes: { type: 'array', items: { type: 'string' }, maxItems: 12 } }, ['classes']) },
@@ -270,17 +274,19 @@ export function createClaude({ dataDir, presets, objectInfo, history, fetchPictu
 
   /**
    * One request from the phone. -> { reply, actions, model, costUsd, spentUsd, limitUsd, steps }
-   * mode: prompt (model from the switch) | fix | files | variations (always Opus)
+   * mode: prompt / question (model from the switch) | fix | files | variations (always Opus)
+   * question: answers only, with the look-only tools; the form is never changed.
    */
   async function ask(body = {}) {
     const s = settings.get();
     if (!s.enabled) throw err(403, 'Claude is switched off in Settings.', { code: 'off' });
     const sp = spend.status(s.limitUsd);
     if (sp.limitReached) throw err(429, `Monthly limit reached: about $${sp.spentUsd.toFixed(2)} of $${s.limitUsd.toFixed(2)} used. Claude is back on ${sp.resetsOn}.`, { code: 'limit' });
-    const mode = ['prompt', 'fix', 'files', 'variations'].includes(body.mode) ? body.mode : 'prompt';
-    const key = mode === 'prompt' ? (MODELS[body.model] ? body.model : s.defaultModel) : 'opus';
+    const mode = ['prompt', 'question', 'fix', 'files', 'variations'].includes(body.mode) ? body.mode : 'prompt';
+    const key = mode === 'prompt' || mode === 'question' ? (MODELS[body.model] ? body.model : s.defaultModel) : 'opus';
     const model = MODELS[key];
-    const build = key === 'opus';
+    const readOnly = mode === 'question';
+    const build = key === 'opus' && !readOnly;
     const text = String(body.text || '').trim().slice(0, 4000);
     if (!text) throw err(400, 'Say what you want first');
     const form = body.form && typeof body.form === 'object' ? body.form : {};
@@ -401,26 +407,22 @@ export function createClaude({ dataDir, presets, objectInfo, history, fetchPictu
 
     // ---- the request ----
     const c = await client();
-    const toolDefs = toolsFor(build);
+    const toolDefs = toolsFor(build, readOnly);
     toolDefs[toolDefs.length - 1] = { ...toolDefs[toolDefs.length - 1], cache_control: { type: 'ephemeral' } };
     const system = [{ type: 'text', text: SYSTEM + (build ? BUILD : NO_BUILD), cache_control: { type: 'ephemeral' } }];
-    const memory = (Array.isArray(body.memory) ? body.memory : []).slice(-20)
-      .filter((m) => (m?.role === 'user' || m?.role === 'assistant') && typeof m.text === 'string' && m.text.trim())
-      .map((m) => ({ role: m.role, content: m.text.slice(0, 4000) }));
-    while (memory.length && memory[0].role !== 'user') memory.shift();
     const content = [];
     for (const p of pics) {
       if (!p.data) continue;
       content.push({ type: 'text', text: `Picture ${p.n}${p.meta?.prompt ? ` (made with preset ${p.meta.workflow || '?'}, seed ${p.meta.seed ?? '?'}${p.meta.width ? `, ${p.meta.width}x${p.meta.height}` : ''}${p.meta.steps ? `, ${p.meta.steps} steps` : ''}; prompt: ${String(p.meta.prompt).slice(0, 600)})` : ''}:` });
       content.push({ type: 'image', source: { type: 'base64', media_type: p.media, data: p.data } });
     }
-    const lead = mode === 'fix' ? 'Fix this result (change the form so the next run is better). '
+    const lead = mode === 'question' ? 'QUESTION ONLY: answer it (you may look things up with the tools), change nothing. Answer in 1-5 short plain sentences, no markdown. '
+      : mode === 'fix' ? 'Fix this result (change the form so the next run is better). '
       : mode === 'files' ? `The user picked ${pics.length} picture(s) in Files, numbered in the order they tapped them. `
         : mode === 'variations' ? 'Make variations into the batch. ' : '';
     content.push({ type: 'text', text: `${lead}[form preset: ${presetId || 'none'}]\n${text}` });
-    const messages = [...memory, { role: 'user', content }];
-    // alternate roles: merge a trailing user memory turn into this one
-    for (let i = messages.length - 2; i >= 0; i--) if (messages[i].role === messages[i + 1].role) { const a = messages[i], b = messages[i + 1]; messages.splice(i, 2, { role: a.role, content: [...(typeof a.content === 'string' ? [{ type: 'text', text: a.content }] : a.content), ...(typeof b.content === 'string' ? [{ type: 'text', text: b.content }] : b.content)] }); }
+    // Batch 17: one-shot, no chat memory: every request starts fresh.
+    const messages = [{ role: 'user', content }];
 
     const maxSteps = build ? 14 : 8;
     const effort = key === 'haiku' ? 'low' : key === 'sonnet' ? 'medium' : mode === 'prompt' ? 'medium' : 'high';
@@ -448,7 +450,8 @@ export function createClaude({ dataDir, presets, objectInfo, history, fetchPictu
       const results = [];
       for (const b of res.content) {
         if (b.type !== 'tool_use') continue;
-        const fn = Object.hasOwn(tools, b.name) && (build || !['get_preset_graph', 'node_info', 'propose_graph'].includes(b.name)) ? tools[b.name] : null;
+        const allowed = readOnly ? READ_TOOLS.includes(b.name) : (build || !['get_preset_graph', 'node_info', 'propose_graph'].includes(b.name));
+        const fn = Object.hasOwn(tools, b.name) && allowed ? tools[b.name] : null;
         try {
           if (!fn) throw new Error(`unknown tool ${b.name}`);
           const out = await fn(b.input || {});
@@ -461,6 +464,7 @@ export function createClaude({ dataDir, presets, objectInfo, history, fetchPictu
     function formChangesClear() { for (const k of Object.keys(formChanges)) delete formChanges[k]; params = null; pictures = null; variations.length = 0; graph = null; }
 
     const actions = [];
+    if (readOnly) formChangesClear(); // belt and braces: a question never changes the form
     if (graph) actions.push({ type: 'graph', ...graph });
     if (Object.keys(formChanges).length) actions.push({ type: 'form', changes: formChanges });
     if (params) actions.push({ type: 'settings', preset: current()?.id, values: params });

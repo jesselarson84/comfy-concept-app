@@ -44,7 +44,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .field-row { display: flex; gap: 14px; flex-wrap: wrap; }
 .label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 textarea, input[type=number], input[type=text] { width: 100%; background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; min-height: var(--tap); }
-#prompt { min-height: 30vh; resize: vertical; font-size: 17px; }
+#prompt { font-size: 17px; }
 textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent-2); outline-offset: 1px; }
 .msg { background: #1d2540; border: 1px solid #33427a; border-radius: var(--radius); padding: 10px 12px; font-size: 14px; }
 input[type=range] { width: 100%; height: var(--tap); accent-color: var(--accent); }
@@ -99,10 +99,10 @@ input[type=range] { width: 100%; height: var(--tap); accent-color: var(--accent)
   .results { border-top: 0; overflow-y: auto; padding: 12px 16px calc(12px + var(--sab)); background: var(--bg); }
   .results .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); overflow: visible; }
   .results .thumb { width: auto; height: auto; aspect-ratio: 1; }
-  #prompt { min-height: 24vh; }
+  #prompt { min-height: 0; }
 }
 /* Phone in landscape: short screen, so shrink the prompt box. */
-@media (max-height: 500px) and (orientation: landscape) { #prompt { min-height: 90px; } .thumb { width: 60px; height: 60px; } }
+@media (max-height: 500px) and (orientation: landscape) { .thumb { width: 60px; height: 60px; } }
 
 /* ---- viewer ---- */
 /* Batch 10: a column - top bar, the picture (fills the space between), info + thumbnails at the bottom. */
@@ -193,10 +193,17 @@ input[type=range], .switch input { accent-color: var(--c-node-fg); }
 .picker { flex: 1; min-width: 0; justify-content: flex-start; border: 1px solid var(--c-border); background: var(--c-bg); padding: 0 12px; }
 /* "Image â€º Text to Image â€º Z-Image Turbo": the crumb gives way first (shrinks 4x
    faster, ellipsis), the preset name keeps at least ~6 characters. */
-.picker .crumb { color: var(--c-muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 4 auto; min-width: 0; }
+.picker .crumb { color: var(--c-muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 100%; }
 .picker .crumb:empty { display: none; }
-@media (max-width: 480px) { .picker .crumb-sec:has(+ .crumb-sub) { display: none; } }
-.picker .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 6ch; flex: 0 1 auto; }
+/* Batch 17: name first, in full; the grey "Text to Image" under it on a phone, beside it on a tablet */
+.picker .pb-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; line-height: 1.15; text-align: left; }
+.picker .pb-text .crumb { font-size: 11.5px; }
+.picker .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+@media (min-width: 700px) {
+  .picker .pb-text { flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 8px; }
+  .picker .pb-text .crumb { font-size: inherit; flex: 0 1 auto; }
+  .picker .pb-text .crumb::before { content: '· '; }
+}
 .picker .i-chevron-down { margin-left: auto; color: var(--c-muted); }
 .picker.open { border-color: var(--c-node-border); background: var(--c-selected); }
 .picker-scrim { position: fixed; inset: 0; z-index: 29; background: #000a; }
@@ -475,10 +482,6 @@ input[type=range].sl::-moz-range-thumb { width: 14px; height: 14px; border-radiu
 .sel-all { width: 24px; height: 24px; border: 1.5px solid #ffffffb3; background: transparent; }
 .sel-all.on { background: #fff; border-color: #fff; }
 .sel-all .i { background-color: #111; }
-.sel-menu-scrim { position: fixed; inset: 0; z-index: 72; }
-.sel-menu { position: fixed; z-index: 73; min-width: 210px; background: #2b2b2b; border: 1px solid var(--c-border); border-radius: var(--r-lg); padding: 6px 0; box-shadow: var(--c-shadow); display: grid; }
-.sel-menu-item { min-height: 44px; padding: 0 16px; text-align: left; background: transparent; border: 0; color: var(--c-fg); font: inherit; cursor: pointer; }
-.sel-menu-item:hover, .sel-menu-item:focus-visible { background: #ffffff14; }
 
 /* ---- batch 4 B: form locked during a run (ui/form-lock.js) ---- */
 .is-run-locked [data-run-lock="on"] { opacity: .5; cursor: default; }
@@ -492,7 +495,6 @@ input[type=range].sl::-moz-range-thumb { width: 14px; height: 14px; border-radiu
 .ctl.is-off .info-btn { pointer-events: auto; }
 .ctl > .label > span:first-child { flex: 0 1 auto; }
 .ref-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-#neg-row { align-items: center; gap: 6px; margin-top: -10px; } /* batch 15: sits right under the prompt box */
 .info-pop { position: fixed; z-index: 120; max-width: calc(100vw - 16px); background: var(--c-card, var(--raised)); color: var(--c-fg, var(--text)); border: 1px solid var(--c-border, var(--line)); border-radius: 10px; box-shadow: 0 10px 30px #0009; padding: 10px 12px; font-size: 14px; line-height: 1.45; }
 .info-pop-title { font-weight: 600; margin-bottom: 4px; }
 .info-pop-body { color: var(--c-node-fg, var(--text)); }
@@ -608,9 +610,13 @@ body.node-view-on #btn-import-media { display: none; }
 .df-msg { padding: 14px 8px; }
 
 /* ==== batch 8: + in the prompt box, picker search + hints, ratio grid ==== */
-.prompt-box { position: relative; display: block; }
-.prompt-box #prompt { width: 100%; padding-bottom: 52px; }
-.attach-btn { position: absolute; left: 8px; bottom: 10px; min-width: 36px; min-height: 36px; width: 36px; height: 36px; padding: 0; border-radius: var(--r-lg); background: var(--c-card); border: 1px solid var(--c-border); color: var(--c-fg); }
+.prompt-box { display: flex; flex-direction: column; background: var(--c-input); border: 1px solid transparent; border-radius: var(--r-lg); overflow: hidden; }
+.prompt-box:focus-within { border-color: var(--c-node-border); }
+.prompt-box #prompt { width: 100%; background: transparent; border: 0; border-radius: 0; outline: 0; }
+/* Batch 17: the + has its own strip under the text, so text never runs under it */
+.prompt-foot { display: flex; padding: 0 8px 8px; }
+.prompt-foot:not(:has(.attach-btn:not([hidden]))) { display: none; }
+.attach-btn { min-width: 36px; min-height: 36px; width: 36px; height: 36px; padding: 0; border-radius: var(--r-lg); background: var(--c-card); border: 1px solid var(--c-border); color: var(--c-fg); }
 .attach-btn:not(:disabled):hover { background: var(--c-selected); }
 .attach-btn.busy { opacity: .5; }
 .ref-buttons:not(.one):has(> :nth-child(2):last-child) { grid-template-columns: 1fr 1fr; }
@@ -922,9 +928,6 @@ body.node-view-on #btn-import-media { display: none; }
    Claude changed. Run stays the only blue element. */
 .i-mic{--svg:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%20stroke-width%3D%272%27%3E%3Cpath%20d%3D%27M12%2019v3M19%2010v2a7%207%200%200%201-14%200v-2%27/%3E%3Crect%20x%3D%279%27%20y%3D%272%27%20width%3D%276%27%20height%3D%2713%27%20rx%3D%273%27/%3E%3C/g%3E%3C/svg%3E")}
 .claude-logo { flex: none; }
-.claude-box { border: 1px solid #3a3b3f; background: #1f1f21; border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
-.claude-box:has(.cl-talk.listening) { border-color: #d97757; padding: 14px; }
-.claude-box:has(.cl-talk.listening) > .cl-head, .claude-box:has(.cl-talk.listening) > .cl-hint, .claude-box:has(.cl-talk.listening) > .cl-log { display: none; }
 .cl-head, .cl-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .cl-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
 .claude-sheet .cl-title { font-size: 14px; }
@@ -933,19 +936,10 @@ body.node-view-on #btn-import-media { display: none; }
 .cl-seg button.on { background: #3c3d42; color: #fff; }
 .cl-seg.wide button { flex: 1; height: 34px; font-size: 13px; }
 .cl-badge { font-size: 11px; color: #9a9aa0; background: #262729; border-radius: 7px; padding: 5px 9px; font-weight: 600; white-space: nowrap; }
-.cl-row { display: flex; gap: 8px; align-items: flex-end; }
 .cl-field { flex: 1; min-width: 0; }
-.cl-input { width: 100%; box-sizing: border-box; resize: none; border: 0; border-radius: 10px; background: #2c2d31; color: #fff; font: 14px Inter, system-ui, sans-serif; padding: 10px; line-height: 1.4; }
-.cl-mic { width: 48px; height: 48px; border-radius: 24px; border: 0; background: #3c3d42; color: #fff; display: flex; align-items: center; justify-content: center; flex: none; cursor: pointer; }
-.cl-mic[hidden] { display: none; }
-.cl-mic.small { width: 40px; height: 40px; }
-.cl-mic .i { width: 20px; height: 20px; }
-.cl-mic.send { background: #d97757; color: #171718; }
-.cl-mic:disabled { opacity: .5; }
 .cl-talk.busy .cl-input { opacity: .6; }
 .cl-hint { font-size: 11px; color: #9a9aa0; line-height: 1.4; }
 .cl-listen { display: flex; flex-direction: column; gap: 14px; }
-.cl-listen[hidden], .cl-row[hidden] { display: none; }
 .cl-listen-head { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .cl-bars { display: flex; align-items: center; justify-content: center; gap: 5px; height: 44px; }
 .cl-bars i { width: 4px; height: 12px; border-radius: 2px; background: #d97757; animation: cl-bar .9s ease-in-out infinite alternate; }
@@ -958,28 +952,17 @@ body.node-view-on #btn-import-media { display: none; }
 .cl-cancel { height: 44px; border: 1px solid #3a3b3f; background: transparent; }
 .cl-stop { width: 64px; height: 64px; border-radius: 32px; border: 0; background: #d97757; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .cl-square { width: 20px; height: 20px; border-radius: 3px; background: #171718; display: block; }
-.cl-log:empty { display: none; }
-.cl-log { display: flex; flex-direction: column; gap: 8px; }
 .cl-you { align-self: flex-end; max-width: 85%; background: #3c3d42; border-radius: 12px 12px 4px 12px; padding: 8px 10px; font-size: 13px; line-height: 1.4; white-space: pre-wrap; }
-.cl-reply, .cl-built { display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; }
-.cl-built { border-top: 1px solid #2c2d31; padding-top: 8px; }
-.cl-reply-head { display: flex; align-items: center; gap: 6px; font-weight: 600; }
-.cl-changes { color: #c9c9cd; }
 .cl-text { color: #e8e8ea; white-space: pre-wrap; }
-.cl-ok { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #c9c9cd; }
-.cl-ok .i { color: #8fd19e; }
-.cl-reply-foot, .cl-built-btns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cl-undo, .cl-built-btns .btn { min-height: 34px; height: 34px; border: 1px solid #3a3b3f; background: transparent; font-size: 13px; padding: 0 12px; }
 .cl-cost { font-size: 11px; color: #9a9aa0; margin-left: auto; }
 .cl-cost.right { text-align: right; }
 .cl-wait { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #c9c9cd; }
 .cl-wait .claude-logo { animation: cl-spin 2.4s linear infinite; }
 @keyframes cl-spin { to { transform: rotate(360deg); } }
 .cl-error { font-size: 13px; color: #f2b8a6; background: #3a2620; border-radius: 10px; padding: 8px 10px; }
-.cl-mem .link { color: #c9c9cd; padding: 0; min-height: 0; text-decoration: underline; }
 /* what Claude changed: an orange dot by the label, an orange outline on the control */
-.claude-changed > .label::after, #neg-row.claude-changed .switch::after { content: ''; width: 7px; height: 7px; border-radius: 4px; background: #d97757; display: inline-block; margin-left: 6px; vertical-align: middle; }
-.claude-changed textarea, textarea.claude-changed, .claude-changed .aspect-btn, .claude-changed .dd-btn, .claude-changed .stepper, .claude-changed .seed, .claude-changed .slider-box, .claude-changed .seg, #preset-btn.claude-changed, #refs.claude-changed .ref { box-shadow: inset 0 0 0 1px #d97757; }
+.claude-changed > .label > span:first-child::after { content: ''; width: 7px; height: 7px; border-radius: 4px; background: #d97757; display: inline-block; margin-left: 6px; vertical-align: middle; }
+.claude-changed .prompt-box, .claude-changed #negative, .claude-changed .ctl textarea, .claude-changed .aspect-btn, .claude-changed .dd-btn, .claude-changed .stepper, .claude-changed .slider-box, .claude-changed .seg, #preset-btn.claude-changed, #refs.claude-changed .ref { box-shadow: inset 0 0 0 1px #d97757; }
 /* sheets: Fix this result, Files, Variations */
 .claude-sheet { gap: 12px; padding: 14px 14px calc(20px + var(--sab, 0px)); border-radius: 20px 20px 0 0; border-top-color: #3a3b3f; max-height: 85vh; grid-template-columns: minmax(0, 1fr); }
 .settings-sheet { grid-template-columns: minmax(0, 1fr); }
@@ -993,8 +976,6 @@ body.node-view-on #btn-import-media { display: none; }
 .cl-pick { position: relative; width: 56px; height: 56px; }
 .cl-pick img { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: #2a2b2e; display: block; }
 .cl-pick b { position: absolute; bottom: 3px; left: 3px; width: 18px; height: 18px; border-radius: 9px; background: #fff; color: #171718; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-.cl-answer { background: #1f1f21; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-.cl-answer[hidden] { display: none; }
 .cl-jobs { display: flex; flex-direction: column; gap: 6px; }
 .cl-job { display: flex; align-items: center; gap: 10px; background: #1f1f21; border: 1px solid #2c2d31; border-radius: 12px; padding: 10px; }
 .cl-n { width: 26px; height: 26px; border-radius: 13px; background: #262729; color: #fff; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; }
@@ -1030,3 +1011,54 @@ body.node-view-on #btn-import-media { display: none; }
 .st-saved { flex: 1; height: 42px; border-radius: 10px; background: #1f1f21; display: flex; align-items: center; padding: 0 12px; gap: 8px; font-size: 14px; color: #c9c9cd; }
 .st-saved .i { color: #8fd19e; }
 .st-ask { margin: -8px 0 0; font-size: 12px; color: #f2b8a6; }
+
+/* ==== batch 17: prompt + negative prompt look alike; self-sizing boxes; ⋮ menus ==== */
+#prompt, #negative { resize: none; min-height: 0; }
+#negative { width: 100%; font-size: 15px; line-height: 1.45; }
+.field-head { min-height: 34px; }
+.field-head .field-more { margin-left: auto; width: 34px; height: 34px; min-height: 34px; border-radius: var(--r-md); border: 0; background: transparent; color: var(--c-node-fg); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.field-head .field-more:hover, .field-head .field-more[aria-expanded="true"] { background: var(--c-selected); color: var(--c-fg); }
+.prompt-field, .neg-field { gap: 4px; }
+.neg-field { margin-top: -6px; }
+.neg-add { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; min-height: 36px; margin-top: -8px; padding: 0 4px; border: 0; background: transparent; color: var(--c-node-fg); font: inherit; font-size: 13px; cursor: pointer; }
+.neg-add:hover { color: var(--c-fg); }
+.neg-add[hidden], .neg-field[hidden] { display: none; }
+/* Batch 17: Seed's outline wraps the whole row (lock, number, shuffle) cleanly, like Batch's */
+.claude-changed .seed { box-shadow: none; outline: 1px solid #d97757; outline-offset: 2px; border-radius: var(--r-lg); }
+
+/* ==== batch 17: Claude sheets (Write prompt, Ask Claude, Fix, Files), the input bar, the floating button ==== */
+.i-maximize-2{--svg:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7'/%3E%3C/svg%3E")}
+.cl-grab { width: 40px; height: 4px; border-radius: 2px; background: #3a3b3f; justify-self: center; }
+.cl-out { display: flex; flex-direction: column; gap: 8px; max-height: 45vh; overflow-y: auto; font-size: 14px; line-height: 1.5; }
+.cl-out[hidden], .cl-listen[hidden], .cl-pill[hidden] { display: none; }
+.cl-you { align-self: flex-end; max-width: 85%; background: #3c3d42; border-radius: 12px 12px 4px 12px; padding: 8px 10px; font-size: 13px; }
+.cl-text { color: #e8e8ea; white-space: pre-wrap; }
+.cl-pill { display: flex; align-items: flex-end; gap: 4px; background: #2c2d31; border: 1px solid transparent; border-radius: 22px; padding: 5px 5px 5px 14px; }
+.cl-pill:focus-within { border-color: var(--c-node-border); }
+.cl-field { flex: 1; min-width: 0; display: flex; }
+.cl-input { flex: 1; width: 100%; min-height: 32px; max-height: 120px; box-sizing: border-box; resize: none; border: 0 !important; outline: 0 !important; background: transparent; color: #fff; font: 15px/1.4 Inter, system-ui, sans-serif; padding: 6px 0; }
+.cl-mic, .cl-send { flex: none; width: 34px; height: 34px; min-height: 34px; border-radius: 17px; border: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.cl-mic { background: transparent; color: #c9c9cd; }
+.cl-mic:hover:not(:disabled) { background: #3c3d42; color: #fff; }
+.cl-mic[hidden] { display: none; }
+.cl-send { background: #3c3d42; color: #8b8b90; }
+.cl-send.on { background: #d97757; color: #171718; }
+.cl-send:disabled { cursor: default; }
+.cl-mic .i, .cl-send .i { width: 18px; height: 18px; }
+.cl-talk.busy .cl-input { opacity: .6; }
+/* the floating Ask Claude button: bottom right on every screen, above the Run bar on the form */
+.claude-fab { position: fixed; z-index: 60; right: calc(14px + var(--sar, 0px)); bottom: calc(84px + var(--sab, 0px)); width: 52px; height: 52px; border-radius: 26px; border: 1px solid #d97757; background: #2a2b2e; display: flex; align-items: center; justify-content: center; padding: 0; box-shadow: 0 8px 24px #000c; cursor: pointer; }
+.claude-fab[hidden] { display: none; }
+.claude-fab:hover { background: #333438; }
+body.history-on .claude-fab, body.node-view-on .claude-fab { bottom: calc(16px + var(--sab, 0px)); }
+body.viewer-open .claude-fab { bottom: calc(120px + var(--sab, 0px)); }
+.undo-toast { position: fixed; z-index: 100; left: 50%; bottom: calc(96px + var(--sab, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 14px; background: var(--c-card); border: 1px solid var(--c-border); border-radius: 999px; padding: 6px 6px 6px 18px; white-space: nowrap; font-size: 14px; box-shadow: var(--c-shadow); }
+.undo-toast button { min-height: 34px; height: 34px; padding: 0 14px; border: 0; border-radius: 17px; background: var(--c-selected); color: var(--c-fg); font: 600 13px Inter, system-ui, sans-serif; cursor: pointer; }
+/* Expand: the prompt full screen */
+.prompt-editor { background: var(--c-bg); }
+.prompt-editor .pe-done { margin-left: auto; min-height: 36px; height: 36px; padding: 0 16px; }
+.prompt-editor .pe-text { flex: 1; min-height: 0; margin: 12px; width: auto; resize: none; font-size: 16px; line-height: 1.5; padding: 14px; }
+/* the Run button while a run is going: "1 of 4", always one line */
+#run-label { white-space: nowrap; }
+/* not over the full-screen prompt editor, where it would cover the text */
+body:has(.prompt-editor:not([hidden])) .claude-fab { display: none; }

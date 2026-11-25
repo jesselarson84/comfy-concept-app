@@ -34,7 +34,7 @@ import { VideoPlayer } from './ui/video-player.js';
 import { OutputPicker } from './ui/output-picker.js';
 import { PresetChooser } from './ui/preset-chooser.js';
 import { ImportSheet, presetsFor } from './ui/import-sheet.js';
-import { afterBack } from './ui/overlay.js';
+import { afterBack, Overlay, overlayTop } from './ui/overlay.js';
 import { DriveFolderSheet, rememberFolder, PHONE } from './ui/drive-folder.js';
 import { RunLock, runProgress } from './lib/run-lock.js';
 import { lockControls } from './ui/form-lock.js';
@@ -47,12 +47,22 @@ import { withUpscale, pickUpscaleModel, RESOLUTIONS } from './lib/resolution.js'
 import { ProjectChip, ProjectSheet, loadProjects, projectLabel, getCurrentProject } from './ui/projects.js';
 import { PcCard } from './ui/pc-card.js';
 import { BatchSheet, rowsOf } from './ui/batch-sheet.js';
-import { ClaudeBox, AskSheet, VariationsSheet, downscale, wantsVariations, claudeLogo } from './ui/claude.js';
-import { SettingsSheet } from './ui/settings-sheet.js';
+import { ClaudeSheet, AskSheet, VariationsSheet, downscale, wantsVariations, claudeLogo } from './ui/claude.js';
+import { ActionMenu } from './ui/action-menu.js';
+import { speechSupport } from './lib/speech.js';
+import { SettingsSheet, resetOnClose } from './ui/settings-sheet.js';
 import { aspectLabel } from './lib/aspect.js';
 
 const comfy = new ComfyClient();
 const queue = new JobQueue(comfy);
+// Batch 17: "Reset to defaults when the app closes" (Settings). sessionStorage lives
+// through reloads and switching apps but not through closing the app, so a fresh
+// open (and only that) starts the form over on the default preset (Z-Image Turbo).
+if (resetOnClose() && !sessionStorage.getItem('conceptAlive')) {
+  localStorage.removeItem('conceptPanel.v1');
+  localStorage.removeItem('preset');
+}
+try { sessionStorage.setItem('conceptAlive', '1'); } catch { /* private mode */ }
 const panel = new PromptPanel();
 const refs = new ReferenceSlots($('#refs'), comfy);
 const fileInputs = new FileInputs($('#file-inputs'), comfy);
@@ -612,6 +622,7 @@ $('#btn-cancel').addEventListener('click', async () => { lock.cancel(); await qu
 $('#btn-clear').addEventListener('click', () => queue.clearFinished());
 
 // ---- thumbnails ------------------------------------------------------------
+let wasLocked = false;
 function paintThumbs() {
   const live = () => queue.items.filter((x) => !x.deleted); // deleted from the viewer's trash
   renderThumbs($('#thumbs'), live(), (it) => {
@@ -621,6 +632,9 @@ function paintThumbs() {
     viewer.open(live, done.indexOf(it));
   }, modelThumbs);
   const locked = isLocked();
+  // Batch 17: Claude's orange marks stay until the run finishes.
+  if (wasLocked && !locked) markChanged([]);
+  wasLocked = locked;
   setKeepAwake(locked); // Android app: screen stays on while a run is going
   $('#btn-cancel').hidden = !locked;
   const run = $('#btn-generate');
@@ -630,7 +644,7 @@ function paintThumbs() {
   // The whole form is read-only during a run (ui/form-lock.js).
   lockControls([$('#panel')], locked);
   const pr = runProgress(lock.run.length ? lock.run : queue.active);
-  $('#run-label').textContent = locked && pr.total ? `Running ${pr.current} of ${pr.total}` : 'Run';
+  $('#run-label').textContent = locked && pr.total ? `${pr.current} of ${pr.total}` : 'Run'; // batch 17: short, one line
   // Android: foreground service with "Running N of M"; vibrates when the run ends.
   setRunStatus({ current: pr.current, total: pr.total, running: locked && pr.total > 0, done: pr.done });
   $('#results-count').textContent = queue.items.length ? `${queue.items.filter((i) => i.image).length} / ${queue.items.length}` : '';
@@ -716,21 +730,22 @@ function resume() {
   queue.resync().then(() => paintThumbs());
 }
 
-// ---- Batch 16: Claude ----------------------------------------------------------
-// Off by default (Settings). Claude fills in the form and stops; the user presses
-// Run or + Batch. Changed fields get an orange dot; one Undo reverts everything a
-// reply changed. The chat is kept in memory until the app closes.
+// ---- Batch 16/17: Claude ----------------------------------------------------------
+// Off by default (Settings). One-shot: no chat memory. Prompt help lives in the
+// prompt's ⋮ (Write prompt… / Talk prompt): Claude fills in the form and stops;
+// the user presses Run. What it changed gets an orange dot / outline until the run
+// finishes (no summary, no Undo). Questions go through the floating Claude button
+// (answers only). Files and the viewer ask about pictures (always Opus).
 let claudeStatus = null;
-let claudeBox = null;
 const claudeOn = () => !!claudeStatus?.enabled;
 const settingsSheet = new SettingsSheet({ button: $('#btn-settings'), onChange: (st) => { claudeStatus = st; paintClaude(); } });
 const askSheet = new AskSheet();
 const variationsSheet = new VariationsSheet();
-function paintClaude() {
-  const host = $('#claude-host');
-  host.hidden = !claudeOn();
-  if (claudeOn() && !claudeBox) claudeBox = new ClaudeBox(host, { ask: askFromBox, apply: applyClaude, defaultModel: () => claudeStatus?.defaultModel || 'haiku' });
-}
+const claudeSheet = new ClaudeSheet({ defaultModel: () => claudeStatus?.defaultModel || 'haiku' });
+// The floating Ask Claude button: bottom right on every screen while Use Claude is on.
+const claudeFab = h('button.claude-fab', { type: 'button', 'aria-label': 'Ask Claude a question', title: 'Ask Claude', dataset: { act: 'ask-claude-fab' }, hidden: true, onclick: () => openQuestion() }, claudeLogo(24));
+document.body.append(claudeFab);
+function paintClaude() { claudeFab.hidden = !claudeOn(); }
 async function loadClaude() { try { claudeStatus = await api.getClaude(); } catch { claudeStatus = null; } paintClaude(); }
 
 /** The form as Claude sees it (get_form). */
@@ -751,10 +766,26 @@ async function claudeAsk(body) {
     throw e;
   }
 }
-function askFromBox({ text, model, memory }) {
-  if (isLocked()) throw new Error('Wait for the run to finish first');
-  // "6 takes, vary the light": variations into the batch (always Opus)
-  return claudeAsk({ mode: wantsVariations(text) ? 'variations' : 'prompt', model, text, memory, form: formForClaude() });
+
+/** Prompt help (the prompt's ⋮): Write prompt… or Talk prompt (listening at once). */
+function openPromptHelp({ listen = false } = {}) {
+  if (!claudeOn()) return;
+  if (isLocked()) return busy();
+  claudeSheet.open({
+    mode: 'prompt', listen,
+    onAsk: (text, model) => {
+      if (isLocked()) throw new Error('Wait for the run to finish first');
+      // "6 takes, vary the light": variations into the batch (always Opus)
+      return claudeAsk({ mode: wantsVariations(text) ? 'variations' : 'prompt', model, text, form: formForClaude() });
+    },
+    onApplied: (r) => applyClaude(r),
+  });
+}
+
+/** The floating button: a question about Comfy, answered only (the form never changes). */
+function openQuestion() {
+  if (!claudeOn()) return;
+  claudeSheet.open({ mode: 'question', onAsk: (text, model) => claudeAsk({ mode: 'question', model, text, form: formForClaude() }) });
 }
 
 /** Viewer "Fix this result" (one picture) and Files (several, in tap order). */
@@ -769,21 +800,66 @@ function openAsk(mode, items) {
       if (isLocked()) throw new Error('Wait for the run to finish first');
       // long side about 1024 px: enough to judge hands and texture, small enough to be cheap
       const pictures = await Promise.all(list.map(async (it) => ({ ...(await downscale(it.image)), image: it.image, meta: { ...it.meta, historyId: it.historyId } })));
-      return claudeAsk({ mode, text, form: formForClaude(), pictures, memory: claudeBox?.memory.slice() || [] });
+      return claudeAsk({ mode, text, form: formForClaude(), pictures });
     },
-    // Claude changed the form: back to the form, the reply (with Undo) in the Claude box.
+    // Claude changed the form: back to the form the normal way (batch 17: close Files /
+    // the viewer with their own Back entries, so no stale Back step is left behind).
     onDone: async (text, r) => {
       if (!viewer.root.hidden) { viewer.close(); await afterBack(); }
-      if (historyView.on) { await leaveHistory(); await afterBack(); }
+      if (historyView.on) { historyView.close(); await afterBack(); }
       if (nodeView.on) nodeView.hide();
-      paintClaude();
-      await claudeBox.show(text, r);
-      claudeBox.root.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+      await applyClaude(r);
+      // only the form scrolls: the app frame (and the top bar) never moves
+      if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
     },
   });
 }
 
-/** Orange dot / outline on what the last reply changed (cleared by Undo or the next reply). */
+// ---- Batch 17: the ⋮ menus of the prompt and the negative prompt -----------------
+const fieldMenu = new ActionMenu();
+/** A short "Prompt cleared · Undo" message at the bottom. */
+function undoToast(text, undo) {
+  document.querySelector('.undo-toast')?.remove();
+  const el = h('div.undo-toast', { role: 'status' }, h('span', {}, text),
+    h('button', { type: 'button', dataset: { act: 'undo-clear' }, onclick: () => { el.remove(); undo(); } }, 'Undo'));
+  document.body.append(el);
+  setTimeout(() => el.remove(), 6000);
+}
+function clearField(which) {
+  if (isLocked()) return busy();
+  if (which === 'prompt') { const old = panel.clearPrompt(); undoToast('Prompt cleared', () => panel.setPrompt(old)); }
+  else { const old = panel.clearNegative(); undoToast('Negative prompt cleared', () => panel.setNegative(old)); }
+}
+// Expand: the prompt full screen for comfortable editing (Back or Done returns).
+const promptEditor = new Overlay('prompt-editor', 'Prompt');
+const editorText = h('textarea.pe-text', { 'aria-label': 'Prompt', placeholder: 'Describe the concept…', enterkeyhint: 'done' });
+editorText.addEventListener('input', () => panel.setPrompt(editorText.value));
+promptEditor.root.append(overlayTop('Prompt', () => promptEditor.close(),
+  h('button.btn.cl-strong.pe-done', { type: 'button', dataset: { act: 'done' }, onclick: () => promptEditor.close() }, 'Done')), editorText);
+function openEditor() {
+  if (isLocked()) return busy();
+  editorText.value = panel.state.prompt;
+  promptEditor.show();
+  setTimeout(() => editorText.focus(), 50);
+}
+$('#prompt-more').addEventListener('click', (e) => fieldMenu.open(e.currentTarget, [
+  { items: [
+    { act: 'write-prompt', icon: claudeLogo(18), label: 'Write prompt…', sub: 'Claude fills in the prompt and settings', hidden: !claudeOn(), fn: () => openPromptHelp() },
+    { act: 'talk-prompt', icon: 'i-mic', label: 'Talk prompt', sub: 'Say it; Claude fills it in', hidden: !claudeOn() || !speechSupport(), fn: () => openPromptHelp({ listen: true }) },
+  ] },
+  { items: [
+    { act: 'expand', icon: 'i-maximize-2', label: 'Expand', fn: () => openEditor() },
+    { act: 'clear-prompt', icon: 'i-trash-2', label: 'Clear prompt', hidden: !panel.state.prompt, fn: () => clearField('prompt') },
+  ] },
+]));
+$('#neg-more').addEventListener('click', (e) => fieldMenu.open(e.currentTarget, [
+  { items: [
+    { act: 'clear-negative', icon: 'i-trash-2', label: 'Clear negative prompt', hidden: !panel.state.negative, fn: () => clearField('negative') },
+    { act: 'remove-negative', icon: 'i-x', label: 'Remove', sub: 'Turns the negative prompt off', fn: () => (isLocked() ? busy() : panel.setNegOn(false)) },
+  ] },
+]));
+
+/** Orange dot / outline on what the last reply changed (cleared when the run finishes or by the next reply). */
 function markChanged(keys) {
   for (const el of document.querySelectorAll('.claude-changed')) el.classList.remove('claude-changed');
   const sel = { preset: '#preset-btn', prompt: '.prompt-field', negative: '#neg-row', aspect: '#aspect-field', res: '#aspect-field', batch: '#batch-field', seed: '#seed-field', refs: '#refs' };
@@ -811,21 +887,6 @@ function claudePreset(a) {
   picker.setItems(workflows);
   return { preset, pictureNodes };
 }
-// Save a Claude one-off as a real preset (node view's Save as preset, with this graph).
-const saveClaudePreset = new SavePresetSheet({
-  getGraph: async () => {
-    const g = structuredClone(current?.workflow || {});
-    for (const [id, n] of Object.entries(g)) if (n.class_type === 'LoadImage' && refs.values[id]) n.inputs.image = refs.values[id];
-    return g;
-  },
-  target: () => (current ? { ...current, label: current.label, group: 'My presets' } : null),
-  save: async ({ name, group, subgroup, workflow }) => {
-    const g = await api.saveGraphPreset({ name, group, subgroup, workflow, from: current?.id });
-    await loadWorkflows(g.id, { remember: true });
-    return g;
-  },
-});
-
 /** Labels for what panel.applyChanges changed. */
 function changeLabels(keys, ch = {}, values = {}) {
   const s = panel.state;
@@ -841,18 +902,16 @@ function changeLabels(keys, ch = {}, values = {}) {
   });
 }
 
-/** Apply a reply's actions to the form (and batch). -> { changed, undo, extra } */
+/** Apply a reply's actions to the form (and batch); marks what changed. -> { changed } */
 async function applyClaude(r) {
   const acts = r.actions || [];
-  if (!acts.length) { markChanged([]); return { changed: [] }; }
+  if (!acts.length) return { changed: [] };
   if (isLocked()) { toast('A run is going: Claude\'s changes were not applied', 6000); return { changed: [] }; }
   if (editing) endEdit(true);
-  const prev = { preset: current?.id, panel: panel.snapshot(), refs: { ...refs.values } };
-  const changed = [], marks = new Set(), extra = [];
-  let addedJobs = [], built = null;
+  const changed = [], marks = new Set();
   for (const a of acts) {
     if (a.type === 'graph') {
-      built = claudePreset(a);
+      const built = claudePreset(a);
       if (!built) continue;
       selectPreset(built.preset.id, { remember: false });
       marks.add('preset');
@@ -860,13 +919,6 @@ async function applyClaude(r) {
       for (const { node, n } of built.pictureNodes) { const pic = a.pictures?.find((p) => p.n === n); if (pic) await refs.useImage(node, pic.image); }
       if (built.pictureNodes.length) marks.add('refs');
       if (a.prompt) { const k = panel.applyChanges({ prompt: a.prompt }); k.forEach((x) => marks.add(x)); }
-      extra.push(h('div.cl-built', {},
-        h('span.cl-reply-head', {}, claudeLogo(14), 'Built a one-off workflow'),
-        a.roles?.length ? h('span.cl-changes', {}, a.roles.map((role, i) => `${i + 1} · ${role}`).join('   ')) : null,
-        h('span.cl-ok', {}, h('i.i.i-check'), 'Checked against your ComfyUI: every node and model is installed'),
-        h('div.cl-built-btns', {},
-          h('button.btn', { type: 'button', dataset: { act: 'save-claude-preset' }, onclick: () => saveClaudePreset.open() }, 'Save as preset…'),
-          h('button.btn', { type: 'button', dataset: { act: 'open-node-view' }, onclick: () => nodeView.show() }, 'Open in node view'))));
     }
     if (a.type === 'form') {
       const ch = a.changes || {};
@@ -893,24 +945,12 @@ async function applyClaude(r) {
       if (n) { changed.push(`${n} ${n === 1 ? 'picture' : 'pictures'} loaded`); marks.add('refs'); }
     }
     if (a.type === 'variations') {
-      addedJobs = await addVariations(a, r);
-      if (addedJobs.length) changed.push(`${addedJobs.length} jobs added to the batch (not started)`);
+      const added = await addVariations(a, r);
+      if (added.length) changed.push(`${added.length} jobs added to the batch (not started)`);
     }
   }
   markChanged(marks);
-  const undo = async () => {
-    if (isLocked()) return busy();
-    for (const j of addedJobs) { try { await api.removeScheduled(j.id); } catch { /* already started: it stays */ } }
-    if (addedJobs.length) { batchSheet.refresh(); variationsSheet.close(); }
-    if (prev.preset && prev.preset !== current?.id && workflows.some((w) => w.id === prev.preset)) selectPreset(prev.preset, { remember: false });
-    panel.restore(prev.panel);
-    refs.values = Object.fromEntries(Object.entries(prev.refs).filter(([, v]) => v));
-    refs.render(refs.slots); paintMask();
-    if (built) { workflows = workflows.filter((w) => w.id !== built.preset.id); picker.setItems(workflows); }
-    markChanged([]);
-    toast('Undone');
-  };
-  return { changed, undo, extra };
+  return { changed };
 }
 
 /** N variations -> N batch jobs (built like + Batch), added NOT started; the Variations sheet. */
@@ -979,4 +1019,4 @@ async function start() {
 start();
 // For tests and poking around from DevTools.
 window.conceptApp = { savePreset, maskSlot, modelThumbs, historyView, isLegacyPreset, choosePreset, comfy, queue, panel, refs, fileInputs, viewer, picker, selectPreset, loadWorkflows,
-  lock, resume, connBanner, claude: { get box() { return claudeBox; }, get status() { return claudeStatus; }, settingsSheet, askSheet, variationsSheet, applyClaude, loadClaude }, nodeView, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, importSheet, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };
+  lock, resume, connBanner, claude: { get status() { return claudeStatus; }, sheet: claudeSheet, fab: claudeFab, settingsSheet, askSheet, variationsSheet, applyClaude, loadClaude }, promptEditor, nodeView, modelViewer, audioPlayer, videoPlayer, fileSheet, outputPicker, presetChooser, importSheet, openFile, useAsReference, saveToDrive, referencePresets, get workflows() { return workflows; }, get current() { return current; } };

@@ -55,9 +55,11 @@ test('saved preset "fast-concept" opens FLUX.2 Klein 4B Text to Image; no saved 
   for (const st of [oldLocalStorage('fast-concept'), {}]) {
     const { ctx, page } = await openWith(st);
     try {
-      assert.equal(await page.evaluate(() => window.conceptApp.current.id), 'ai:klein-4b-t2i');
-      assert.match(await page.getAttribute('#preset-btn', 'title'), /FLUX\.2 Klein 4B Text to Image/);
-      assert.equal(await page.textContent('#preset-crumb'), 'Image › Text to Image ›');
+      // an old "fast-concept" pick maps to Klein 4B; a fresh client opens on Z-Image Turbo (batch 17)
+      const want = st.preset ? 'ai:klein-4b-t2i' : 'ai:z-image-turbo';
+      assert.equal(await page.evaluate(() => window.conceptApp.current.id), want);
+      if (st.preset) assert.match(await page.getAttribute('#preset-btn', 'title'), /FLUX\.2 Klein 4B Text to Image/);
+      assert.equal(await page.textContent('#preset-crumb'), 'Text to Image');
     } finally { await ctx.close(); }
   }
 });

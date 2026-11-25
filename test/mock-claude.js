@@ -16,7 +16,7 @@
 //   LOOP         get_form forever (the server's step cap stops it)
 //
 // GET /mock/requests -> every request body (+ headers); POST /mock/reset.
-// x-api-key "sk-ant-bad-…" -> 401 authentication_error.
+// key (x-api-key or Authorization: Bearer) "sk-ant-bad-…" -> 401 authentication_error.
 import http from 'node:http';
 import { readBody } from '../server/multipart.js';
 
@@ -92,7 +92,8 @@ export function createMockClaude() {
     if (url.pathname !== '/v1/messages' || req.method !== 'POST') return json(404, { type: 'error', error: { type: 'not_found_error', message: 'Not found' } });
     let body;
     try { body = JSON.parse((await readBody(req, 50 * 1024 * 1024)).toString('utf8')); } catch { return json(400, { type: 'error', error: { type: 'invalid_request_error', message: 'Bad JSON' } }); }
-    const key = req.headers['x-api-key'] || '';
+    // The key comes as x-api-key (older SDKs, the stand-in) or Authorization: Bearer (SDK 1.x).
+    const key = req.headers['x-api-key'] || String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     requests.push({ body, headers: { 'x-api-key': key ? 'present' : '', 'anthropic-beta': req.headers['anthropic-beta'] || '', 'anthropic-version': req.headers['anthropic-version'] || '' } });
     if (!key) return json(401, { type: 'error', error: { type: 'authentication_error', message: 'x-api-key header is required' } });
     if (/^sk-ant-bad/.test(key)) return json(401, { type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } });

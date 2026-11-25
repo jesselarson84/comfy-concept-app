@@ -45,7 +45,7 @@ test('run lock: Run stays disabled for the whole run, Cancel stays active, no pr
   assert.equal(await page.isDisabled('#preset-btn'), true, 'preset switching is blocked');
   assert.equal(await page.isVisible('#btn-cancel'), true);
   assert.equal(await page.isEnabled('#btn-cancel'), true);
-  await page.waitForFunction(() => /^Running \d of 3$/.test(document.querySelector('#run-label').textContent));
+  await page.waitForFunction(() => /^\d of 3$/.test(document.querySelector('#run-label').textContent));
   await shot('run-locked');
   // a forced tap and Ctrl+Enter queue nothing extra
   await page.click('#btn-generate', { force: true });

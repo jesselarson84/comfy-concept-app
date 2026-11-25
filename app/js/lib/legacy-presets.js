@@ -14,7 +14,8 @@
 // Shared by the browser and the server (no DOM, no Node APIs).
 // -----------------------------------------------------------------------------
 
-export const DEFAULT_PRESET = 'ai:klein-4b-t2i';
+// Batch 17: a fresh client (and Reset on close) opens on Z-Image Turbo.
+export const DEFAULT_PRESET = 'ai:z-image-turbo';
 
 export const LEGACY_PRESETS = Object.freeze({
   'fast-concept': { to: 'ai:klein-4b-t2i', label: 'Fast concept', toLabel: 'FLUX.2 Klein 4B Text to Image' },

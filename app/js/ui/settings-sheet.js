@@ -1,5 +1,6 @@
 // settings-sheet.js - batch 16: the app's Settings (gear in the top bar), mockup
-// "Settings". Today it holds Claude only:
+// "Settings". Batch 17: General · Reset to defaults when the app closes (this
+// device, off by default). Then Claude:
 //   Use Claude (off by default; off = every Claude button hidden and nothing sent;
 //   turning it on with no key asks for the key first) · this month's spend bar ·
 //   Monthly limit ($) · Prompt box starts on Haiku / Sonnet / Opus · API key
@@ -7,6 +8,10 @@
 import { h, toast } from './dom.js';
 import * as api from '../api.js';
 import { claudeLogo, MODEL_NAMES } from './claude.js';
+
+/** Batch 17: "Reset to defaults when the app closes" (this device only). */
+export const RESET_KEY = 'conceptResetOnClose';
+export const resetOnClose = () => localStorage.getItem(RESET_KEY) === '1';
 
 const money = (n) => `$${(Number(n) || 0).toFixed(2)}`;
 /** "2026-12-01" -> "Dec 1" */
@@ -76,9 +81,13 @@ export class SettingsSheet {
       keyRow = h('div.st-keyrow', {}, input, h('button.btn.cl-strong', { type: 'button', dataset: { act: 'save-key' }, onclick: go }, 'Save'),
         st.hasKey ? h('button.btn', { type: 'button', onclick: () => { this.replacing = false; this.paint(); } }, 'Cancel') : null);
     }
+    const reset = h('input', { type: 'checkbox', role: 'switch', id: 'st-reset', checked: resetOnClose(), 'aria-label': 'Reset to defaults when the app closes',
+      onchange: () => { localStorage.setItem(RESET_KEY, reset.checked ? '1' : '0'); toast(reset.checked ? 'The form resets when you close the app' : 'The form is kept when you close the app'); } });
     this.body.replaceChildren(...[
+      h('span.st-section', {}, h('i.i.i-settings'), 'General'),
+      h('label.st-switch', {}, h('span.st-sw-t', {}, h('b', {}, 'Reset to defaults when the app closes'), h('small', {}, 'Opening the app fresh starts on Z-Image Turbo with an empty prompt and default settings. Switching apps and coming back keeps everything.')), reset),
       h('span.st-section', {}, claudeLogo(14), 'Claude'),
-      h('label.st-switch', {}, h('span.st-sw-t', {}, h('b', {}, 'Use Claude'), h('small', {}, 'Off: the Claude box and every Ask Claude button are hidden, and nothing is sent.')), sw),
+      h('label.st-switch', {}, h('span.st-sw-t', {}, h('b', {}, 'Use Claude'), h('small', {}, 'Off: every Claude button is hidden, and nothing is sent.')), sw),
       this.pendingEnable ? h('p.st-ask', { role: 'alert' }, 'Add your API key below to turn Claude on.') : null,
       h('div.st-row', {}, h('span.st-lbl', {}, 'This month'),
         h('div.st-bar', {}, h('i', { style: { width: `${pct}%` } })),
@@ -86,7 +95,7 @@ export class SettingsSheet {
         st.limitReached ? h('p.st-ask', {}, 'The limit is reached: Claude is paused until then.') : null),
       h('div.st-row', {}, h('label.st-lbl', { for: 'st-limit' }, 'Monthly limit'),
         h('div.st-limit', {}, h('span.muted', {}, '$'), limit, h('small.muted', {}, 'Claude stops answering until next month once this is reached.'))),
-      h('div.st-row', {}, h('span.st-lbl', {}, 'Prompt box starts on'), seg, h('small.muted', {}, 'Fixing a picture, merging, variations and building always use Opus.')),
+      h('div.st-row', {}, h('span.st-lbl', {}, 'Claude starts on'), seg, h('small.muted', {}, 'Fixing a picture, merging, variations and building always use Opus.')),
       h('div.st-row', {}, h('span.st-lbl', {}, 'API key'), keyRow,
         h('small.muted', {}, 'Make it in its own Workspace at platform.claude.com and give that Workspace a limit too, as a backstop.')),
     ].filter(Boolean));
