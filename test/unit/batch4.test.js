@@ -251,13 +251,13 @@ test('banner: resume() hides it and starts a fresh grace period', () => {
 
 // ---- D. an info text for every control every bundled workflow exposes -------------
 
-test('info: every control of every bundled AI preset (23 models + 18 workflows) has a plain-language text', async () => {
+test('info: every control of every bundled AI preset (23 models + 17 workflows) has a plain-language text', async () => {
   const st = await startStack({ folderWorkflows: false });
   try {
     const list = (await (await fetch(st.base + '/api/workflows')).json()).workflows.filter((w) => w.id.startsWith('ai:'));
     const files = fs.readdirSync(path.join(st.wfDir, 'ai')).filter((f) => f.endsWith('.json'));
-    assert.equal(files.length, 41);
-    assert.equal(list.length, 41, 'all 41 presets are listed');
+    assert.equal(files.length, 40);
+    assert.equal(list.length, 40, 'all 40 presets are listed');
     const missing = [];
     for (const w of list) {
       assert.ok(w.ok, `${w.id}: ${w.error}`);

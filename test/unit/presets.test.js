@@ -28,7 +28,7 @@ const BATCH7 = ['wf-photo-texture', 'wf-pbr-maps', 'wf-pbr-chord', 'wf-depth-nor
 // Batch 8: Photo to 3D Model (3D Assets) and three Sound workflows.
 const BATCH8 = ['wf-photo-to-3d', 'wf-voice-line-swap', 'wf-voice-line-sfx', 'wf-sfx-set'];
 // batch 14: the helper models (FLUX.1 Fill, two ControlNets, DWPose)
-const BATCH14 = ['flux1-fill-inpaint', 'flux1-fill-outpaint', 'wf-concept-pose', 'wf-concept-flux', 'wf-concept-qwen'];
+const BATCH14 = ['flux1-fill-inpaint', 'flux1-fill-outpaint', 'wf-concept-pose', 'wf-concept-flux'];
 
 test('every shipped AI preset validates: 17 manifest entries (MoGe out, Qwen Edit 2511 + Klein Inpaint in) + Chatterbox + VibeVoice, prefixes under concept-app/', () => {
   const ids = fs.readdirSync(AI_DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).sort();

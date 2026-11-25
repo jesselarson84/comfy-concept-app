@@ -17,7 +17,7 @@ const WF = ids.filter((id) => id.startsWith('wf-'));
 test('kinds: every preset is a model or a workflow; workflows live in task sections, models in output sections', () => {
   assert.deepEqual(KINDS, ['model', 'workflow']);
   assert.deepEqual(WORKFLOW_GROUPS, ['Textures', 'Concept', 'VFX', '3D Assets', 'Sound']);
-  assert.equal(WF.length, 18); // batch 14: Concept Looks Pose / FLUX.1 Dev / Qwen-Image
+  assert.equal(WF.length, 17); // batch 14: Concept Looks Pose / FLUX.1 Dev
   for (const id of ids) {
     const p = load(id);
     assert.ok(p.ok, `${id}: ${p.error}`);
@@ -39,7 +39,7 @@ test('the seven workflows: sections, outputs, what the user fills in', () => {
     // batch 8
     'wf-photo-to-3d': '3D Assets', 'wf-voice-line-swap': 'Sound', 'wf-voice-line-sfx': 'Sound', 'wf-sfx-set': 'Sound',
     // batch 14
-    'wf-concept-pose': 'Concept', 'wf-concept-flux': 'Concept', 'wf-concept-qwen': 'Concept',
+    'wf-concept-pose': 'Concept', 'wf-concept-flux': 'Concept',
   });
   const OUT = { 'wf-photo-to-3d': '3d', 'wf-voice-line-swap': 'audio', 'wf-voice-line-sfx': 'audio', 'wf-sfx-set': 'audio' };
   for (const id of WF) {
@@ -113,7 +113,7 @@ test('ComfyUI menus: AI Models (sub sections like the app) and AI Workflows; UI 
   assert.ok(apiFiles['api/wf-make-seamless.json']['1'], 'API graph written for the pack');
   assert.ok(e('Video/Wan 2.2 5B Text⁄Image to Video'), 'a "/" inside a name is not a folder');
   assert.ok(e('3D/MoGe Image to Mesh'), 'pack-only entry kept in AI Models');
-  assert.equal(manifest.entries.filter((x) => x.menu === 'workflows').length, 18);
+  assert.equal(manifest.entries.filter((x) => x.menu === 'workflows').length, 17);
   // the committed manifest is what the sync script makes from today's presets
   assert.deepEqual(pack, manifest, 'run: node scripts/sync-comfy-menu.mjs');
   for (const [f, wf] of Object.entries(apiFiles)) assert.deepEqual(JSON.parse(fs.readFileSync(path.join(ROOT, 'comfyui/ComfyUI-AIWorkflowMenu/web/workflows', f), 'utf8')), wf, f);

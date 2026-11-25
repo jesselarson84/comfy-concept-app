@@ -1,5 +1,5 @@
 // Batch 14: the helper models in the app - FLUX.1 Fill (inpaint + outpaint), Concept
-// Looks with FLUX.1 Dev / Qwen-Image ControlNets ("Guide by" sets several switches),
+// Looks with the FLUX.1 Dev ControlNet ("Guide by" sets several switches),
 // Concept Looks (Pose) with DWPose, Depth Anything 3 in Concept Looks (Depth), and
 // SAM 2 "Select" in the mask editor.
 import { test } from 'node:test';
@@ -43,8 +43,10 @@ test('FLUX.1 Fill: inpaint (crop & stitch, mask) and outpaint (pad) presets', ()
   for (const p of [ip, op]) assert.doesNotMatch(JSON.stringify(p.manifest), /colour/i, 'US spelling');
 });
 
-test('Concept Looks with FLUX.1 Dev / Qwen-Image: Guide by Edges / Depth / Depth pass / Pose', () => {
-  for (const [id, cn] of [['wf-concept-flux', 'FLUX.1-dev-ControlNet-Union-Pro-2.0.safetensors'], ['wf-concept-qwen', 'Qwen-Image-InstantX-ControlNet-Union.safetensors']]) {
+test('Concept Looks with FLUX.1 Dev: Guide by Edges / Depth / Depth pass / Pose', () => {
+  // (Concept Looks with Qwen-Image + InstantX was left out: black pictures on the 2080 Ti, no bf16)
+  assert.ok(!fs.existsSync(path.join(ROOT, 'workflows/ai/wf-concept-qwen.json')));
+  for (const [id, cn] of [['wf-concept-flux', 'FLUX.1-dev-ControlNet-Union-Pro-2.0.safetensors']]) {
     const p = load(id);
     assert.equal(p.manifest.group, 'Concept');
     assert.equal(of(p.workflow, 'ControlNetLoader')[0][1].inputs.control_net_name, cn);
